@@ -4,7 +4,10 @@
  */
 
 /** SLA deadline configuration per lead source in minutes from creation. */
-export const SLA_DEADLINES: Record<string, { deadlineMinutes: number; atRiskOffsetMinutes: number }> = {
+export const SLA_DEADLINES: Record<
+  string,
+  { deadlineMinutes: number; atRiskOffsetMinutes: number }
+> = {
   netgsm_call: { deadlineMinutes: 5, atRiskOffsetMinutes: 2 },
   whatsapp_call: { deadlineMinutes: 5, atRiskOffsetMinutes: 2 },
   whatsapp: { deadlineMinutes: 30, atRiskOffsetMinutes: 5 },
@@ -70,13 +73,7 @@ export const CHATWOOT_LEAD_SOURCE_LABELS = new Set<string>([
 ]);
 
 /** Valid message_from channel values. */
-export const MESSAGE_FROM_VALUES = [
-  'whatsapp',
-  'instagram',
-  'netgsm',
-  'manual',
-  'form',
-] as const;
+export const MESSAGE_FROM_VALUES = ['whatsapp', 'instagram', 'netgsm', 'manual', 'form'] as const;
 
 /** Valid special_state values for leads. */
 export const SPECIAL_STATES = ['univotelli', 'ogrenci-degil'] as const;
@@ -96,6 +93,30 @@ export const LOSS_REASONS = [
   'other',
 ] as const;
 
+/** Auto-archive default when loss_reason is unset on terminal leads. */
+export const AUTO_LOSS_REASON = 'sure-asildi' as const;
+
+/** Manual archive outcome values. */
+export const ARCHIVE_REASONS = ['won', 'lost'] as const;
+
+/** Loss reasons shown in manual archive modal (excludes auto-only sure-asildi). */
+export const MANUAL_LOSS_REASONS = LOSS_REASONS;
+
+/** Filter fields on archived_leads list API. */
+export const ARCHIVED_FILTERABLE_COLUMNS: ReadonlySet<string> = new Set([
+  'archive_reason',
+  'lead_source',
+  'assigned_to',
+  'archived_at',
+]);
+
+/** Sortable columns for archived lead list. */
+export const ARCHIVED_SORTABLE_COLUMNS: ReadonlySet<string> = new Set([
+  'archived_at',
+  'created_at',
+  'lead_name',
+]);
+
 /** Valid dorm_awaiting array element values. */
 export const DORM_AWAITING_VALUES = [
   'kyk-sonuc-bekliyor',
@@ -107,7 +128,13 @@ export const DORM_AWAITING_VALUES = [
 export const CHATWOOT_DORM_AWAITING_LABELS = new Set<string>(DORM_AWAITING_VALUES);
 
 /** Valid student_stage values for leads. */
-export const STUDENT_STAGES = ['pre-sinav', 'yerlesti', 'yeni-giris', 'erasmus', 'unknown'] as const;
+export const STUDENT_STAGES = [
+  'pre-sinav',
+  'yerlesti',
+  'yeni-giris',
+  'erasmus',
+  'unknown',
+] as const;
 
 /** Chatwoot student_stage labels. */
 export const CHATWOOT_STUDENT_STAGE_LABELS = new Set<string>([
@@ -227,6 +254,9 @@ export const LEAD_LIST_FILTER_FIELDS = [
   ...LEAD_DETAILS_FILTER_FIELDS,
 ] as const;
 
+/** Days in terminal funnel status before nightly auto-archive (see archive_single_lead SQL). */
+export const AUTO_ARCHIVE_CUTOFF_DAYS = 80;
+
 /** Terminal funnel statuses excluded from SLA updates and active lead counts. */
 export const TERMINAL_FUNNEL_STATUSES = [
   'sozlesme-imzalandi',
@@ -244,7 +274,17 @@ export const CHATWOOT_LABEL_IS_ORGANIC: Readonly<Record<string, boolean>> = {
 
 /** Target for a Chatwoot label → CRM field mapping entry. */
 export type LabelFieldTarget =
-  | { table: 'leads'; field: 'funnel_status' | 'student_stage' | 'persona_type' | 'special_state' | 'message_from' | 'lead_source' | 'is_organic' }
+  | {
+      table: 'leads';
+      field:
+        | 'funnel_status'
+        | 'student_stage'
+        | 'persona_type'
+        | 'special_state'
+        | 'message_from'
+        | 'lead_source'
+        | 'is_organic';
+    }
   | { table: 'lead_details'; field: 'uni_year' | 'dorm_awaiting' }
   | { table: 'source_details'; field: 'referral_domain' }
   | { table: 'none' };

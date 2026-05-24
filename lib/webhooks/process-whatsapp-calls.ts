@@ -40,6 +40,7 @@ export async function processWhatsAppCalls(body: unknown): Promise<void> {
   );
 
   await createLeadFromWebhook({
+    identifierKind: 'phone',
     rawPhone: call.from,
     leadSource: 'whatsapp_call',
     messageFrom: 'whatsapp',

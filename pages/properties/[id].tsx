@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { KvList } from '@/components/ui/kv-list';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { PropertyRow } from '@/types/domain';
 
 /**
@@ -33,41 +35,37 @@ export default function PropertyDetailPage() {
 
   if (!property && !error) {
     return (
-      <AppShell>
-        <p>Loading...</p>
+      <AppShell title="Property">
+        <Skeleton className="h-32 w-full max-w-md" />
       </AppShell>
     );
   }
 
   if (error || !property) {
     return (
-      <AppShell>
-        <p className="error">{error || 'Property not found'}</p>
+      <AppShell title="Property">
+        <p className="text-sm text-brand-red">{error || 'Property not found'}</p>
       </AppShell>
     );
   }
 
   return (
-    <AppShell>
-      <h1>{property.hotel_name}</h1>
-      <dl className="kv">
-        <dt>District</dt>
-        <dd>{property.district ?? '—'}</dd>
-        <dt>Address</dt>
-        <dd>{property.address ?? '—'}</dd>
-        <dt>Gender</dt>
-        <dd>{property.serviced_gender ?? '—'}</dd>
-        <dt>Status</dt>
-        <dd>{property.status}</dd>
-        <dt>Beds</dt>
-        <dd>{property.total_beds ?? '—'}</dd>
-        <dt>Schools</dt>
-        <dd>{property.serviced_schools?.join(', ') || '—'}</dd>
-        <dt>Non-students</dt>
-        <dd>{property.accepts_non_students ? 'Yes' : 'No'}</dd>
-      </dl>
-      <p>
-        <Link href="/properties">Back to properties</Link>
+    <AppShell title={property.hotel_name}>
+      <KvList
+        items={[
+          { term: 'District', value: property.district ?? '—' },
+          { term: 'Address', value: property.address ?? '—' },
+          { term: 'Gender', value: property.serviced_gender ?? '—' },
+          { term: 'Status', value: property.status },
+          { term: 'Beds', value: property.total_beds ?? '—' },
+          { term: 'Schools', value: property.serviced_schools?.join(', ') || '—' },
+          { term: 'Non-students', value: property.accepts_non_students ? 'Yes' : 'No' },
+        ]}
+      />
+      <p className="mt-4">
+        <Link href="/properties" className="text-brand-blue hover:underline">
+          Back to properties
+        </Link>
       </p>
     </AppShell>
   );

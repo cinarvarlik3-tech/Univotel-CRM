@@ -1,22 +1,25 @@
 /**
  * Cloudflare Workers waitUntil helper with local dev fallback.
- * Allows webhook handlers to return 200 before async processing completes.
+ * Used for campaign workers and cron paths that return before long-running work finishes.
  */
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 /**
- * Runs async work after HTTP response is sent (Workers) or awaits in local dev.
+ * Runs async work via Workers ctx.waitUntil when available; otherwise fire-and-forget.
  * @param promise - Async processing promise.
  */
 export function runAfterResponse(promise: Promise<unknown>): void {
-  const ctx = (globalThis as Record<string | symbol, unknown>)[
-    Symbol.for('__cf_waitUntil')
-  ] as ((p: Promise<unknown>) => void) | undefined;
-
-  if (typeof ctx === 'function') {
-    ctx(promise);
-  } else {
-    promise.catch((err) => {
-      console.error('[wait-until] async processing failed:', err);
-    });
+  try {
+    const { ctx } = getCloudflareContext();
+    if (typeof ctx.waitUntil === 'function') {
+      ctx.waitUntil(promise);
+      return;
+    }
+  } catch {
+    // Not running inside OpenNext Cloudflare request context (e.g. local dev).
   }
+
+  void promise.catch((err) => {
+    console.error('[wait-until] async processing failed:', err);
+  });
 }

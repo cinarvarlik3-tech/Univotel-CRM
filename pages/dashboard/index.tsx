@@ -3,7 +3,9 @@
  */
 import { AppShell } from '@/components/layout/AppShell';
 import { AnalyticsDashboard } from '@/components/analytics/AnalyticsDashboard';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
+import { isManagerOrAbove } from '@/lib/auth/roles';
 import { useAnalytics } from '@/hooks/useAnalytics';
 
 /**
@@ -12,27 +14,27 @@ import { useAnalytics } from '@/hooks/useAnalytics';
  */
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth();
-  const isManager = user?.role === 'manager';
+  const isManager = isManagerOrAbove(user?.role);
   const { data, error, isLoading } = useAnalytics(isManager === true);
 
   if (authLoading) {
     return (
-      <AppShell>
-        <p>Loading...</p>
+      <AppShell title="Analytics">
+        <Skeleton className="h-64 w-full" />
       </AppShell>
     );
   }
 
   return (
-    <AppShell>
-      <h1>Dashboard</h1>
-
+    <AppShell title="Analytics">
       {!isManager && (
-        <p className="error">Manager access only. Contact an administrator for analytics.</p>
+        <p className="text-sm text-brand-red">
+          Manager access only. Contact an administrator for analytics.
+        </p>
       )}
 
-      {isManager && isLoading && <p>Loading analytics...</p>}
-      {isManager && error && <p className="error">Failed to load analytics</p>}
+      {isManager && isLoading && <Skeleton className="h-64 w-full" />}
+      {isManager && error && <p className="text-sm text-brand-red">Failed to load analytics</p>}
       {isManager && data && <AnalyticsDashboard data={data} />}
     </AppShell>
   );

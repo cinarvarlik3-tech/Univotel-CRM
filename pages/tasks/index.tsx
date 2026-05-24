@@ -43,9 +43,8 @@ export default function TasksPage() {
   }
 
   return (
-    <AppShell>
-      <h1>Tasks</h1>
-      {error && <p className="error">{error}</p>}
+    <AppShell title="Tasks">
+      {error && <p className="mb-4 text-sm text-brand-red">{error}</p>}
 
       <TaskCreateForm onCreated={loadTasks} />
       <TaskTable tasks={tasks} onComplete={completeTask} onNotesUpdated={loadTasks} />

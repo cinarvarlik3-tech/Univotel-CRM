@@ -41,8 +41,7 @@ export default function NewLeadPage() {
   }
 
   return (
-    <AppShell>
-      <h1>New Lead</h1>
+    <AppShell title="New Lead">
       <LeadForm onSubmit={handleSubmit} />
     </AppShell>
   );

@@ -49,4 +49,10 @@ describe('normalizePhone', () => {
     expect(result.failed).toBe(true);
     expect(result.phone).toBe('invalid');
   });
+
+  it('preserves original formatting when normalization fails', () => {
+    const result = normalizePhone(' 0532 999 xx  ');
+    expect(result.failed).toBe(true);
+    expect(result.phone).toBe(' 0532 999 xx  ');
+  });
 });

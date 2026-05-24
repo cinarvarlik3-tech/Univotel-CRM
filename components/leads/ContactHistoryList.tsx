@@ -16,49 +16,47 @@ function MetadataBlock({ metadata }: { metadata: Record<string, unknown> | null 
   if (!metadata || Object.keys(metadata).length === 0) return null;
 
   return (
-    <pre
-      style={{
-        fontSize: 11,
-        background: '#f8fafc',
-        padding: 8,
-        marginTop: 4,
-        overflow: 'auto',
-      }}
-    >
+    <pre className="mt-1.5 overflow-auto rounded-lg bg-muted p-2 text-[11px] text-text-primary">
       {JSON.stringify(metadata, null, 2)}
     </pre>
   );
 }
 
 /**
- * Renders contact history entries in reverse chronological order.
+ * Renders contact history as a vertical timeline.
  * @param props - Array of contact history entries.
- * @returns List of history items.
+ * @returns Timeline list element.
  */
 export function ContactHistoryList({ entries }: ContactHistoryListProps) {
   if (entries.length === 0) {
-    return <p>No contact history.</p>;
+    return <p className="text-sm text-text-secondary">No contact history yet.</p>;
   }
 
   return (
-    <ul>
+    <ol className="relative space-y-0 border-l border-border-default pl-4">
       {entries.map((entry) => (
-        <li key={entry.id} style={{ marginBottom: 8 }}>
-          <strong>{entry.interaction_type}</strong>
+        <li key={entry.id} className="relative pb-5 last:pb-0">
+          <span className="absolute -left-[5px] top-1.5 size-2 rounded-full bg-brand-blue-mid" />
+          <time className="block text-[11px] text-text-tertiary">
+            {new Date(entry.created_at).toLocaleString('tr-TR')}
+          </time>
+          <p className="mt-0.5 text-sm font-medium text-text-primary">{entry.interaction_type}</p>
           {entry.interaction_source && (
-            <span style={{ color: '#64748b' }}> ({entry.interaction_source})</span>
+            <p className="text-xs text-text-secondary">{entry.interaction_source}</p>
           )}
-          {' — '}
-          {new Date(entry.created_at).toLocaleString('tr-TR')}
-          {entry.notes && <div>{entry.notes}</div>}
+          {entry.notes && (
+            <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-text-primary">
+              {entry.notes}
+            </p>
+          )}
           {entry.status_changed && entry.previous_status && (
-            <div>
+            <p className="mt-1 text-xs text-text-secondary">
               {entry.previous_status} → {entry.funnel_status_at_time}
-            </div>
+            </p>
           )}
           <MetadataBlock metadata={entry.metadata} />
         </li>
       ))}
-    </ul>
+    </ol>
   );
 }

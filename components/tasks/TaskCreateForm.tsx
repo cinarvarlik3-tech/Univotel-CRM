@@ -3,9 +3,12 @@
  */
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FormField } from '@/components/ui/form-field';
+import { FormSelect } from '@/components/ui/form-select';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { TASK_TYPES } from '@/lib/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useSalespeople } from '@/hooks/useSalespeople';
@@ -80,65 +83,62 @@ export function TaskCreateForm({ onCreated }: TaskCreateFormProps) {
   }
 
   return (
-    <div className="card">
-      <h3>New task</h3>
-      <form onSubmit={handleSubmit}>
-        <Input
-          label="Lead UUID *"
-          id="lead_uuid"
-          value={leadUuid}
-          onChange={(e) => setLeadUuid(e.target.value)}
-          required
-        />
-        <Select
-          label="Task type"
-          id="task_type"
-          value={taskType}
-          onChange={(e) => setTaskType(e.target.value)}
-        >
-          {TASK_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </Select>
-        <Input
-          label="Due *"
-          id="due_when"
-          type="datetime-local"
-          value={dueWhen}
-          onChange={(e) => setDueWhen(e.target.value)}
-          required
-        />
-        <label htmlFor="task_notes">
-          <div>Notes</div>
-          <textarea
-            id="task_notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
+    <Card className="mb-4">
+      <CardHeader>
+        <CardTitle>New task</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <FormField label="Lead UUID *" htmlFor="lead_uuid">
+            <Input
+              id="lead_uuid"
+              value={leadUuid}
+              onChange={(e) => setLeadUuid(e.target.value)}
+              required
+            />
+          </FormField>
+          <FormSelect
+            label="Task type"
+            id="task_type"
+            value={taskType}
+            onValueChange={setTaskType}
+            options={TASK_TYPES.map((t) => ({ value: t, label: t }))}
           />
-        </label>
-        {user?.role === 'manager' && salespeople && (
-          <Select
-            label="Assign to (optional)"
-            id="assigned_to"
-            value={assignedTo}
-            onChange={(e) => setAssignedTo(e.target.value)}
-          >
-            <option value="">Self / default</option>
-            {salespeople.map((sp) => (
-              <option key={sp.id} value={sp.id}>
-                {sp.full_name}
-              </option>
-            ))}
-          </Select>
-        )}
-        {error && <p className="error">{error}</p>}
-        <Button type="submit" disabled={saving}>
-          {saving ? 'Creating...' : 'Create task'}
-        </Button>
-      </form>
-    </div>
+          <FormField label="Due *" htmlFor="due_when">
+            <Input
+              id="due_when"
+              type="datetime-local"
+              value={dueWhen}
+              onChange={(e) => setDueWhen(e.target.value)}
+              required
+            />
+          </FormField>
+          <FormField label="Notes" htmlFor="task_notes">
+            <Textarea
+              id="task_notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+            />
+          </FormField>
+          {user?.role === 'manager' && salespeople && (
+            <FormSelect
+              label="Assign to (optional)"
+              id="assigned_to"
+              value={assignedTo || '__none__'}
+              onValueChange={(v) => setAssignedTo(v === '__none__' ? '' : v)}
+              options={[
+                { value: '__none__', label: 'Self / default' },
+                ...salespeople.map((sp) => ({ value: sp.id, label: sp.full_name })),
+              ]}
+            />
+          )}
+          {error && <p className="text-xs text-brand-red">{error}</p>}
+          <Button type="submit" disabled={saving}>
+            {saving ? 'Creating...' : 'Create task'}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

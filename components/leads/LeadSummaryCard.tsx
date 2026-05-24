@@ -1,6 +1,10 @@
 /**
  * Read-only summary card for lead detail page.
  */
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { KvList } from '@/components/ui/kv-list';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { displayLeadPhone, displayParentPhone } from '@/lib/ui/display-phone';
 import type { LeadWithDetails } from '@/types/domain';
 
 interface LeadSummaryCardProps {
@@ -13,64 +17,50 @@ interface LeadSummaryCardProps {
  * @returns Summary card element.
  */
 export function LeadSummaryCard({ lead }: LeadSummaryCardProps) {
-  const assignee =
-    lead.salespeople?.full_name ?? lead.assignee_name ?? 'Unassigned';
+  const assignee = lead.salespeople?.full_name ?? lead.assignee_name ?? 'Unassigned';
+
+  const items = [
+    { term: 'Phone', value: displayLeadPhone(lead) },
+    ...(lead.parent_phone
+      ? [{ term: 'Parent phone', value: displayParentPhone(lead.parent_phone) }]
+      : []),
+    { term: 'Source', value: lead.lead_source },
+    { term: 'Channel', value: lead.message_from ?? '—' },
+    { term: 'Language', value: lead.language },
+    { term: 'Lead score', value: String(lead.lead_score ?? 0) },
+    {
+      term: 'Organic',
+      value: lead.is_organic == null ? '—' : lead.is_organic ? 'Yes' : 'No',
+    },
+    {
+      term: 'Assignee',
+      value: `${assignee}${lead.salespeople?.email ? ` (${lead.salespeople.email})` : ''}`,
+    },
+    {
+      term: 'SLA',
+      value: (
+        <span className="inline-flex items-center gap-2">
+          <StatusBadge status={lead.sla_status} type="sla" />
+          {lead.sla_deadline && new Date(lead.sla_deadline).toLocaleString('tr-TR')}
+        </span>
+      ),
+    },
+    { term: 'Funnel', value: <StatusBadge status={lead.funnel_status} type="funnel" /> },
+    ...(lead.loss_reason ? [{ term: 'Loss reason', value: lead.loss_reason }] : []),
+    { term: 'Student stage', value: lead.student_stage },
+    { term: 'Persona', value: lead.persona_type ?? '—' },
+    { term: 'Special state', value: lead.special_state ?? '—' },
+    ...(lead.notes ? [{ term: 'Notes', value: lead.notes }] : []),
+  ];
 
   return (
-    <div className="card">
-      <h3>Summary</h3>
-      <dl className="kv">
-        <dt>Phone</dt>
-        <dd>{lead.lead_phone}</dd>
-        {lead.parent_phone && (
-          <>
-            <dt>Parent phone</dt>
-            <dd>{lead.parent_phone}</dd>
-          </>
-        )}
-        <dt>Source</dt>
-        <dd>{lead.lead_source}</dd>
-        <dt>Channel</dt>
-        <dd>{lead.message_from ?? '—'}</dd>
-        <dt>Language</dt>
-        <dd>{lead.language}</dd>
-        <dt>Lead score</dt>
-        <dd>{lead.lead_score ?? 0}</dd>
-        <dt>Organic</dt>
-        <dd>{lead.is_organic == null ? '—' : lead.is_organic ? 'Yes' : 'No'}</dd>
-        <dt>Assignee</dt>
-        <dd>
-          {assignee}
-          {lead.salespeople?.email ? ` (${lead.salespeople.email})` : ''}
-        </dd>
-        <dt>SLA</dt>
-        <dd>
-          <span className={`badge badge-${lead.sla_status}`}>{lead.sla_status}</span>
-          {lead.sla_deadline
-            ? ` — ${new Date(lead.sla_deadline).toLocaleString('tr-TR')}`
-            : ''}
-        </dd>
-        <dt>Funnel</dt>
-        <dd>{lead.funnel_status}</dd>
-        {lead.loss_reason && (
-          <>
-            <dt>Loss reason</dt>
-            <dd>{lead.loss_reason}</dd>
-          </>
-        )}
-        <dt>Student stage</dt>
-        <dd>{lead.student_stage}</dd>
-        <dt>Persona</dt>
-        <dd>{lead.persona_type ?? '—'}</dd>
-        <dt>Special state</dt>
-        <dd>{lead.special_state ?? '—'}</dd>
-        {lead.notes && (
-          <>
-            <dt>Notes</dt>
-            <dd>{lead.notes}</dd>
-          </>
-        )}
-      </dl>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Summary</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <KvList items={items} />
+      </CardContent>
+    </Card>
   );
 }

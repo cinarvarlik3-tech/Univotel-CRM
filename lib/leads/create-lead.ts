@@ -4,17 +4,32 @@
  */
 import { RETRY_DELAYS_MS } from '@/lib/constants';
 import { assignLead, incrementActiveLeadCount } from '@/lib/leads/assign';
+import type { LeadContactIdentifierKind } from '@/lib/leads/contact-identifier';
 import { findExistingLead, recordDuplicateSubmission } from '@/lib/leads/deduplicate';
+import { normalizeInstagramHandle } from '@/lib/leads/normalize-instagram-handle';
 import { normalizePhone } from '@/lib/leads/normalize-phone';
 import { calculateSlaDeadline } from '@/lib/leads/sla';
 import type { SourceDetails } from '@/lib/leads/source-details';
+import {
+  buildCollectedDataRow,
+  persistCollectedData,
+  sourceDetailsToBuildInput,
+} from '@/lib/attribution/build-collected-data';
+import { incrementDniLeadCount } from '@/lib/dni/list-active-numbers';
+import { enrichFromGA4Immediate } from '@/lib/ga4/enrich-from-ga4';
+import { runAfterResponse } from '@/lib/webhooks/wait-until';
 import { createServiceClient } from '@/lib/supabase/service';
+import { sendManagerNotification } from '@/lib/notifications/send-manager-alert';
 import { sendTelegramToManagers } from '@/lib/telegram';
 import type { Json } from '@/types/database';
 
 /** Input for creating a lead from webhook or manual entry. */
 export interface CreateLeadInput {
-  rawPhone: string;
+  /** Required when identifierKind is phone. */
+  rawPhone?: string;
+  /** Required when identifierKind is instagram. */
+  instagramHandle?: string;
+  identifierKind: LeadContactIdentifierKind;
   leadName?: string | null;
   leadSource: string;
   messageFrom?: string | null;
@@ -72,13 +87,38 @@ export async function createLeadFromWebhook(input: CreateLeadInput): Promise<Cre
  * @returns Created or duplicate result.
  */
 async function executeCreateLead(input: CreateLeadInput): Promise<CreateLeadResult> {
-  const { phone, failed } = normalizePhone(input.rawPhone);
+  const identifierKind = input.identifierKind;
+  let leadPhone: string;
+  let normalizationFailed: boolean;
+  let rawIdentifier: string | null = null;
+
+  if (identifierKind === 'instagram') {
+    const rawHandle = input.instagramHandle?.trim();
+    if (!rawHandle) {
+      throw new Error('instagramHandle is required when identifierKind is instagram');
+    }
+    const { handle, failed } = normalizeInstagramHandle(rawHandle);
+    leadPhone = handle;
+    normalizationFailed = failed;
+    rawIdentifier = failed ? rawHandle : null;
+  } else {
+    const rawPhone = input.rawPhone?.trim();
+    if (!rawPhone) {
+      throw new Error('rawPhone is required when identifierKind is phone');
+    }
+    const { phone, failed } = normalizePhone(rawPhone);
+    leadPhone = phone;
+    normalizationFailed = failed || input.sourceDetails.normalization_failed;
+    rawIdentifier = normalizationFailed ? rawPhone : null;
+  }
+
   const sourceDetails: SourceDetails = {
     ...input.sourceDetails,
-    normalization_failed: failed || input.sourceDetails.normalization_failed,
+    normalization_failed: normalizationFailed,
+    raw_phone: rawIdentifier ?? input.sourceDetails.raw_phone ?? null,
   };
 
-  const existing = await findExistingLead(phone);
+  const existing = await findExistingLead(leadPhone, identifierKind);
   if (existing) {
     await recordDuplicateSubmission(existing.uuid, input.interactionSource, {
       ...input.metadata,
@@ -102,7 +142,7 @@ async function executeCreateLead(input: CreateLeadInput): Promise<CreateLeadResu
       lead_source: input.leadSource,
       message_from: input.messageFrom ?? input.interactionSource,
       lead_name: input.leadName ?? null,
-      lead_phone: phone,
+      lead_phone: leadPhone,
       language: input.language ?? 'tr',
       is_organic: input.isOrganic ?? null,
       source_details: sourceDetails as unknown as Json,
@@ -138,12 +178,27 @@ async function executeCreateLead(input: CreateLeadInput): Promise<CreateLeadResu
     throw new Error(`Contact history insert failed: ${historyError.message}`);
   }
 
+  const collectedRow = await buildCollectedDataRow(
+    sourceDetailsToBuildInput(lead.uuid, sourceDetails),
+  );
+  await persistCollectedData(collectedRow, normalizationFailed ? rawIdentifier : null);
+
+  if (sourceDetails.channel === 'netgsm_call' && sourceDetails.called_number) {
+    await incrementDniLeadCount(sourceDetails.called_number);
+  }
+
+  if (collectedRow.ref_code) {
+    runAfterResponse(enrichFromGA4Immediate(lead.uuid));
+  }
+
   if (assignedTo) {
     await incrementActiveLeadCount(assignedTo);
   } else {
-    await sendTelegramToManagers(
-      `[CRM] Unassigned lead created.\nPhone: ${phone}\nSource: ${input.leadSource}\nNo agents available in assignment pool.`,
-    );
+    await sendManagerNotification({
+      alertType: 'unassigned_lead',
+      leadUuid: lead.uuid,
+      message: `[CRM] Unassigned lead created.\nContact: ${leadPhone}\nSource: ${input.leadSource}\nNo agents available in assignment pool.`,
+    });
 
     await client.from('contact_history').insert({
       lead_uuid: lead.uuid,

@@ -1,7 +1,20 @@
 /**
  * source_details JSONB builder functions.
  * All webhook sources write the same schema with null for missing values.
+ * Keys must match collected_data column names for Phase 4 parity.
  */
+
+/** computed source_confidence values stored in source_details. */
+export type SourceConfidence = 'full' | 'lossy' | 'inferred' | 'unknown';
+
+/** computed path_lost_at values stored in source_details. */
+export type PathLostAt =
+  | 'full'
+  | 'lost_after_click'
+  | 'lost_at_channel'
+  | 'lost_at_source'
+  | 'lost_at_session'
+  | 'unknown';
 
 /** Standardized source_details JSONB shape stored on leads. */
 export interface SourceDetails {
@@ -18,10 +31,55 @@ export interface SourceDetails {
   utm_source: string | null;
   utm_medium: string | null;
   utm_campaign: string | null;
-  is_organic: boolean | null;
+  utm_content: string | null;
+  landing_page: string | null;
   referral_domain: string | null;
+  session_start: string | null;
+  session_duration: number | null;
+  click_event: string | null;
+  ga4_session_id: string | null;
+  source_confidence: SourceConfidence | null;
+  path_lost_at: PathLostAt | null;
+  ga4_enriched: boolean | null;
+  ga4_enriched_at: string | null;
+  ga4_fetch_attempts: number | null;
+  is_organic: boolean | null;
   normalization_failed: boolean;
+  /** Original phone string when normalization_failed is true (legacy field). */
+  raw_phone: string | null;
 }
+
+/** Human-readable labels for source_details keys in the UI. */
+export const SOURCE_DETAILS_LABELS: Record<keyof SourceDetails, string> = {
+  channel: 'Channel',
+  external_id: 'External ID',
+  called_number: 'Called number',
+  call_duration: 'Call duration',
+  ref_code: 'Ref code',
+  ad_id: 'Ad ID',
+  campaign_id: 'Campaign ID',
+  adset_id: 'Ad set ID',
+  placement: 'Placement',
+  chatwoot_url: 'Chatwoot',
+  utm_source: 'UTM source',
+  utm_medium: 'UTM medium',
+  utm_campaign: 'UTM campaign',
+  utm_content: 'UTM content',
+  landing_page: 'Landing page',
+  referral_domain: 'Referral domain',
+  session_start: 'Session start',
+  session_duration: 'Session duration (s)',
+  click_event: 'Click event',
+  ga4_session_id: 'GA4 session ID',
+  source_confidence: 'Source confidence',
+  path_lost_at: 'Path lost at',
+  ga4_enriched: 'GA4 enriched',
+  ga4_enriched_at: 'GA4 enriched at',
+  ga4_fetch_attempts: 'GA4 fetch attempts',
+  is_organic: 'Organic',
+  normalization_failed: 'Normalization failed',
+  raw_phone: 'Original phone',
+};
 
 /** All required keys for source_details validation. */
 export const SOURCE_DETAILS_KEYS: (keyof SourceDetails)[] = [
@@ -38,9 +96,21 @@ export const SOURCE_DETAILS_KEYS: (keyof SourceDetails)[] = [
   'utm_source',
   'utm_medium',
   'utm_campaign',
-  'is_organic',
+  'utm_content',
+  'landing_page',
   'referral_domain',
+  'session_start',
+  'session_duration',
+  'click_event',
+  'ga4_session_id',
+  'source_confidence',
+  'path_lost_at',
+  'ga4_enriched',
+  'ga4_enriched_at',
+  'ga4_fetch_attempts',
+  'is_organic',
   'normalization_failed',
+  'raw_phone',
 ];
 
 /**
@@ -63,9 +133,21 @@ function baseSourceDetails(overrides: Partial<SourceDetails>): SourceDetails {
     utm_source: null,
     utm_medium: null,
     utm_campaign: null,
-    is_organic: null,
+    utm_content: null,
+    landing_page: null,
     referral_domain: null,
+    session_start: null,
+    session_duration: null,
+    click_event: null,
+    ga4_session_id: null,
+    source_confidence: null,
+    path_lost_at: null,
+    ga4_enriched: null,
+    ga4_enriched_at: null,
+    ga4_fetch_attempts: null,
+    is_organic: null,
     normalization_failed: false,
+    raw_phone: null,
     ...overrides,
   };
 }
@@ -128,7 +210,7 @@ export function buildWhatsAppCallSourceDetails(
 }
 
 /**
- * Builds source_details from a NetGSM webhook payload (stub).
+ * Builds source_details from a NetGSM webhook payload.
  * @param payload - Parsed NetGSM payload fields.
  * @param normalizationFailed - Whether phone normalization failed.
  * @returns SourceDetails object.

@@ -1,6 +1,15 @@
 /**
  * Manager analytics dashboard — renders materialized view aggregates.
  */
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import type { AnalyticsPayload } from '@/types/domain';
 
 interface AnalyticsDashboardProps {
@@ -24,102 +33,124 @@ function formatRate(rate: number | null): string {
  */
 export function AnalyticsDashboard({ data }: AnalyticsDashboardProps) {
   return (
-    <div className="card-grid">
-      <div className="card">
-        <h3>Leads by source</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Source</th>
-              <th>Leads</th>
-              <th>Won</th>
-              <th>Conversion</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.leadsBySource.map((row) => (
-              <tr key={row.lead_source ?? 'unknown'}>
-                <td>{row.lead_source}</td>
-                <td>{row.lead_count}</td>
-                <td>{row.won_count}</td>
-                <td>{formatRate(row.conversion_rate)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <Card>
+        <CardHeader>
+          <CardTitle>Leads by source</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow className="h-[34px] hover:bg-transparent">
+                <TableHead>Source</TableHead>
+                <TableHead>Leads</TableHead>
+                <TableHead>Won</TableHead>
+                <TableHead>Lost</TableHead>
+                <TableHead>Conversion</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.leadsBySource.map((row) => (
+                <TableRow key={row.lead_source ?? 'unknown'}>
+                  <TableCell>{row.lead_source}</TableCell>
+                  <TableCell>{row.lead_count}</TableCell>
+                  <TableCell>{row.won_count}</TableCell>
+                  <TableCell>{row.lost_count ?? '—'}</TableCell>
+                  <TableCell>{formatRate(row.conversion_rate)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
-      <div className="card">
-        <h3>Funnel distribution</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Status</th>
-              <th>Count</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.funnelDistribution.map((row) => (
-              <tr key={row.funnel_status ?? 'unknown'}>
-                <td>{row.funnel_status}</td>
-                <td>{row.lead_count}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Funnel distribution</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow className="h-[34px] hover:bg-transparent">
+                <TableHead>Status</TableHead>
+                <TableHead>Count</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.funnelDistribution.map((row) => (
+                <TableRow key={row.funnel_status ?? 'unknown'}>
+                  <TableCell>{row.funnel_status}</TableCell>
+                  <TableCell>{row.lead_count}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
-      <div className="card">
-        <h3>Agent performance</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Agent</th>
-              <th>Assigned</th>
-              <th>Won</th>
-              <th>Avg response (min)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.agentPerformance.map((row) => (
-              <tr key={row.salesperson_id ?? row.full_name ?? 'unknown'}>
-                <td>{row.full_name}</td>
-                <td>{row.assigned_count}</td>
-                <td>{row.won_count}</td>
-                <td>
-                  {row.avg_response_minutes != null
-                    ? Number(row.avg_response_minutes).toFixed(1)
-                    : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Agent performance</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow className="h-[34px] hover:bg-transparent">
+                <TableHead>Agent</TableHead>
+                <TableHead>Assigned</TableHead>
+                <TableHead>Won</TableHead>
+                <TableHead>Lost</TableHead>
+                <TableHead>Conversion</TableHead>
+                <TableHead>Avg response (min)</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.agentPerformance.map((row) => (
+                <TableRow key={row.salesperson_id ?? row.full_name ?? 'unknown'}>
+                  <TableCell>{row.full_name}</TableCell>
+                  <TableCell>{row.assigned_count}</TableCell>
+                  <TableCell>{row.won_count}</TableCell>
+                  <TableCell>{row.lost_count ?? '—'}</TableCell>
+                  <TableCell>{formatRate(row.conversion_rate ?? null)}</TableCell>
+                  <TableCell>
+                    {row.avg_response_minutes != null
+                      ? Number(row.avg_response_minutes).toFixed(1)
+                      : '—'}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
-      <div className="card">
-        <h3>SLA breach rate</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Source</th>
-              <th>Breaches</th>
-              <th>Total</th>
-              <th>Rate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.slaBreachRate.map((row) => (
-              <tr key={row.lead_source ?? 'unknown'}>
-                <td>{row.lead_source}</td>
-                <td>{row.breach_count}</td>
-                <td>{row.total_count}</td>
-                <td>{formatRate(row.breach_rate)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>SLA breach rate</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow className="h-[34px] hover:bg-transparent">
+                <TableHead>Source</TableHead>
+                <TableHead>Breaches</TableHead>
+                <TableHead>Total</TableHead>
+                <TableHead>Rate</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.slaBreachRate.map((row) => (
+                <TableRow key={row.lead_source ?? 'unknown'}>
+                  <TableCell>{row.lead_source}</TableCell>
+                  <TableCell>{row.breach_count}</TableCell>
+                  <TableCell>{row.total_count}</TableCell>
+                  <TableCell>{formatRate(row.breach_rate)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

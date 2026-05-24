@@ -1,6 +1,8 @@
 node_modules/
 .next/
 .open-next/
+.dev.vars
+.wrangler/
 .wrangler/
 dist/
 coverage/
@@ -11,3 +13,5 @@ coverage/
 .DS_Store
 next-env.d.ts
 supabase/.temp/
+readable_database.sql
+tsconfig.tsbuildinfo

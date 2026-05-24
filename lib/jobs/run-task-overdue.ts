@@ -1,30 +1,41 @@
 /**
- * Task overdue alert job logic — flags late tasks and sends Telegram notifications.
+ * Task overdue alert job logic — throttled Telegram alerts for late tasks.
  */
+import { insertNotificationRow } from '@/lib/jobs/notifications-db';
+import { isThrottled } from '@/lib/notifications/throttle';
+import { sendManagerNotification } from '@/lib/notifications/send-manager-alert';
 import { createServiceClient } from '@/lib/supabase/service';
-import { sendTelegramToManagers, sendTelegramToSalesperson } from '@/lib/telegram';
+import { sendTelegramToSalesperson } from '@/lib/telegram';
 
 /**
- * Marks overdue tasks as late and sends Telegram alerts.
- * @returns Count of tasks alerted.
+ * Marks newly overdue tasks as late, then sends throttled salesperson and manager alerts.
+ * @returns Count of salesperson alert attempts (including throttled).
  */
 export async function runTaskOverdueAlerts(): Promise<number> {
   const client = createServiceClient();
   const now = new Date().toISOString();
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
-  const { data: newlyOverdueRaw, error } = await client
+  await client
     .from('tasks')
-    .select('id, task_type, due_when, assigned_to, lead_uuid, salespeople:assigned_to(telegram_chat_id, full_name)')
+    .update({ is_late: true })
     .eq('is_completed', false)
     .eq('is_late', false)
     .lt('due_when', now);
+
+  const { data: overdueTasksRaw, error } = await client
+    .from('tasks')
+    .select(
+      'id, task_type, due_when, assigned_to, lead_uuid, salespeople:assigned_to(telegram_chat_id, full_name)',
+    )
+    .eq('is_completed', false)
+    .eq('is_late', true);
 
   if (error) {
     throw new Error(`Failed to query overdue tasks: ${error.message}`);
   }
 
-  const newlyOverdue = (newlyOverdueRaw ?? []) as Array<{
+  const overdueTasks = (overdueTasksRaw ?? []) as Array<{
     id: string;
     task_type: string;
     due_when: string;
@@ -33,24 +44,45 @@ export async function runTaskOverdueAlerts(): Promise<number> {
     salespeople: { telegram_chat_id?: string; full_name?: string } | null;
   }>;
 
-  let alerted = 0;
+  let attempted = 0;
 
-  for (const task of newlyOverdue) {
-    await client.from('tasks').update({ is_late: true }).eq('id', task.id);
-
-    const sp = task.salespeople;
+  for (const task of overdueTasks) {
     const message = `[CRM] Overdue task: ${task.task_type}\nDue: ${task.due_when}\nLead: ${task.lead_uuid}`;
+    const throttled = await isThrottled({
+      alertType: 'task_overdue',
+      taskId: task.id,
+      leadUuid: task.lead_uuid,
+    });
 
-    if (sp?.telegram_chat_id) {
-      await sendTelegramToSalesperson(sp.telegram_chat_id, message);
+    if (!throttled) {
+      const sp = task.salespeople;
+      const sentTo: string[] = [];
+
+      if (sp?.telegram_chat_id) {
+        await sendTelegramToSalesperson(sp.telegram_chat_id, message);
+        sentTo.push(sp.telegram_chat_id);
+      }
+
+      await insertNotificationRow({
+        alertType: 'task_overdue',
+        message,
+        sentTo,
+        taskId: task.id,
+        leadUuid: task.lead_uuid,
+      });
+
+      attempted++;
     }
 
     if (task.due_when < oneHourAgo) {
-      await sendTelegramToManagers(`[CRM] Task overdue 1hr+ — escalated to managers.\n${message}`);
+      await sendManagerNotification({
+        alertType: 'task_overdue',
+        taskId: task.id,
+        leadUuid: task.lead_uuid,
+        message: `[CRM] Task overdue 1hr+ — escalated to managers.\n${message}`,
+      });
     }
-
-    alerted++;
   }
 
-  return alerted;
+  return attempted;
 }

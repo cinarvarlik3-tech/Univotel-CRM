@@ -1,11 +1,7 @@
 /**
  * Builds URL query strings for GET /api/leads from UI filter state.
  */
-import {
-  DEFAULT_PAGE_LIMIT,
-  LEAD_LIST_FILTER_FIELDS,
-  SORTABLE_COLUMNS,
-} from '@/lib/constants';
+import { DEFAULT_PAGE_LIMIT, LEAD_LIST_FILTER_FIELDS, SORTABLE_COLUMNS } from '@/lib/constants';
 
 const UI_FILTER_FIELDS = new Set<string>(LEAD_LIST_FILTER_FIELDS);
 
@@ -26,6 +22,8 @@ export interface LeadListQueryInput {
   filters?: Record<string, string>;
   dateFilters?: DateRangeFilter[];
   scoreMin?: string;
+  /** When true, API returns only leads assigned to the current user. */
+  mine?: boolean;
 }
 
 /**
@@ -39,8 +37,7 @@ export function buildLeadsQueryString(input: LeadListQueryInput): string {
   const limit = input.limit ?? DEFAULT_PAGE_LIMIT;
   params.set('limit', String(limit));
 
-  const sort =
-    input.sort && SORTABLE_COLUMNS.has(input.sort) ? input.sort : 'created_at';
+  const sort = input.sort && SORTABLE_COLUMNS.has(input.sort) ? input.sort : 'created_at';
   params.set('sort', sort);
 
   if (input.cursor) {
@@ -73,6 +70,10 @@ export function buildLeadsQueryString(input: LeadListQueryInput): string {
 
   if (input.scoreMin) {
     params.set('filter[lead_score][gte]', input.scoreMin);
+  }
+
+  if (input.mine) {
+    params.set('mine', '1');
   }
 
   const qs = params.toString();

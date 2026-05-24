@@ -2,14 +2,17 @@
  * Form for editing lead contact fields on the leads table (parent_phone).
  */
 import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FormField } from '@/components/ui/form-field';
+import { Input } from '@/components/ui/input';
 import type { LeadWithDetails } from '@/types/domain';
 
 interface LeadContactFieldsFormProps {
   lead: LeadWithDetails;
   leadId: string;
   onSaved: () => void;
+  embedded?: boolean;
 }
 
 /**
@@ -17,7 +20,12 @@ interface LeadContactFieldsFormProps {
  * @param props - Lead data and callbacks.
  * @returns Contact fields form card.
  */
-export function LeadContactFieldsForm({ lead, leadId, onSaved }: LeadContactFieldsFormProps) {
+export function LeadContactFieldsForm({
+  lead,
+  leadId,
+  onSaved,
+  embedded,
+}: LeadContactFieldsFormProps) {
   const [parentPhone, setParentPhone] = useState(lead.parent_phone ?? '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -47,19 +55,32 @@ export function LeadContactFieldsForm({ lead, leadId, onSaved }: LeadContactFiel
     onSaved();
   }
 
-  return (
-    <div className="card">
-      <h3>Contact</h3>
-      <Input
-        label="Parent phone"
-        id="parent_phone"
-        value={parentPhone}
-        onChange={(e) => setParentPhone(e.target.value)}
-      />
-      {error && <p className="error">{error}</p>}
+  const formBody = (
+    <>
+      <FormField label="Parent phone" htmlFor="parent_phone">
+        <Input
+          id="parent_phone"
+          value={parentPhone}
+          onChange={(e) => setParentPhone(e.target.value)}
+        />
+      </FormField>
+      {error && <p className="text-xs text-brand-red">{error}</p>}
       <Button type="button" onClick={handleSave} disabled={saving}>
         {saving ? 'Saving...' : 'Save contact'}
       </Button>
-    </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex flex-col gap-4">{formBody}</div>;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Contact</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">{formBody}</CardContent>
+    </Card>
   );
 }

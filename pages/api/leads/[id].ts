@@ -7,6 +7,7 @@ import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
 import { FUNNEL_STATUSES, LANGUAGES, LOSS_REASONS, SPECIAL_STATES } from '@/lib/constants';
 import { normalizePhone } from '@/lib/leads/normalize-phone';
+import { updateLeadRecord } from '@/lib/leads/update-lead';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 const UpdateLeadSchema = z
@@ -23,8 +24,7 @@ const UpdateLeadSchema = z
     lead_score: z.number().int().min(0).max(100).optional(),
   })
   .refine(
-    (data) =>
-      data.funnel_status !== 'ziyaret-ama-almayacak' || data.loss_reason !== undefined,
+    (data) => data.funnel_status !== 'ziyaret-ama-almayacak' || data.loss_reason !== undefined,
     { message: 'loss_reason required for ziyaret-ama-almayacak status', path: ['loss_reason'] },
   );
 
@@ -43,6 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .select('*, lead_details(*), salespeople:assigned_to(full_name, email)')
       .eq('uuid', id)
       .eq('is_deleted', false)
+      .eq('is_archived', false)
       .maybeSingle();
 
     if (error) return sendError(res, 'Failed to fetch lead', 500);
@@ -60,8 +61,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const updates = { ...parsed.data };
 
     if (updates.parent_phone !== undefined && updates.parent_phone !== null) {
-      const { phone } = normalizePhone(updates.parent_phone);
-      updates.parent_phone = phone;
+      const original = updates.parent_phone;
+      const { phone, failed } = normalizePhone(original);
+      updates.parent_phone = failed ? original : phone;
     }
 
     if (updates.assigned_to !== undefined && session.role !== 'manager') {
@@ -70,21 +72,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const { data: existing } = await supabase
       .from('leads')
-      .select('funnel_status')
+      .select('funnel_status, assigned_to, is_archived')
       .eq('uuid', id)
       .maybeSingle();
 
-    const { data: updated, error } = await supabase
-      .from('leads')
-      .update(updates)
-      .eq('uuid', id)
-      .select('*')
-      .maybeSingle();
+    if (!existing) return sendError(res, 'Lead not found', 404);
+    if (existing.is_archived) return sendError(res, 'Lead is archived', 409);
 
-    if (error) return sendError(res, 'Failed to update lead', 500);
-    if (!updated) return sendError(res, 'Lead not found', 404);
+    let updated: Record<string, unknown>;
+    try {
+      const result = await updateLeadRecord(id, updates as Record<string, unknown>, existing);
+      updated = result.lead;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Update failed';
+      return sendError(res, message, 500);
+    }
 
-    if (updates.funnel_status && updates.funnel_status !== existing?.funnel_status) {
+    if (updates.funnel_status && updates.funnel_status !== existing.funnel_status) {
       await supabase.from('contact_history').insert({
         lead_uuid: id,
         interaction_type: 'status_change',

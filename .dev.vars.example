@@ -1,0 +1,26 @@
+# Copy to .dev.vars for `pnpm cf:preview` / `wrangler dev` (gitignored).
+# Production: `wrangler secret put <NAME>` for each secret below.
+
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+CHATWOOT_WEBHOOK_SECRET=your-chatwoot-secret
+CHATWOOT_BASE_URL=https://marketinguni.app
+CHATWOOT_API_TOKEN=your-chatwoot-personal-access-token
+CHATWOOT_ACCOUNT_ID=1
+CHATWOOT_SYNC_ENABLED=true
+CHATWOOT_ASSIGNEE_SYNC_ENABLED=true
+CHATWOOT_LABEL_SYNC_ENABLED=true
+WHATSAPP_WEBHOOK_SECRET=your-meta-app-secret
+WHATSAPP_PHONE_NUMBER_ID=your-meta-phone-number-id
+WHATSAPP_API_TOKEN=your-meta-system-user-token
+NETGSM_STATIC_TOKEN=your-netgsm-token
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+TELEGRAM_MANAGER_CHAT_IDS=123456789,987654321
+TELEGRAM_WEBHOOK_SECRET=your-telegram-webhook-secret-min-16-chars
+# Phase 1: https://univotel-crm.<account>.workers.dev
+# Phase 2: https://panel.marketinguni.app
+NEXT_PUBLIC_APP_URL=https://univotel-crm.YOUR_SUBDOMAIN.workers.dev
+CRON_SECRET=your-cron-secret-min-32-characters-long
+GOOGLE_SERVICE_ACCOUNT_JSON=
+GA4_PROPERTY_ID=

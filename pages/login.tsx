@@ -3,8 +3,12 @@
  */
 import { useState } from 'react';
 import { useRouter } from 'next/router';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import Head from 'next/head';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { FormField } from '@/components/ui/form-field';
+import { Input } from '@/components/ui/input';
+import { UnivotelLogo } from '@/components/layout/UnivotelLogo';
 import { createBrowserSupabase } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -39,30 +43,47 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="container" style={{ marginTop: 64 }}>
-      <h1>Univotel CRM</h1>
-      <form onSubmit={handleSubmit}>
-        <Input
-          label="Email"
-          id="email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <Input
-          label="Password"
-          id="password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        {error && <p className="error">{error}</p>}
-        <Button type="submit" disabled={loading}>
-          {loading ? 'Signing in...' : 'Sign In'}
-        </Button>
-      </form>
-    </div>
+    <>
+      <Head>
+        <title>Sign in — Univotel CRM</title>
+      </Head>
+      <div className="flex min-h-screen items-center justify-center bg-surface-page p-4">
+        <Card className="w-full max-w-sm">
+          <CardHeader className="items-center text-center">
+            <UnivotelLogo size={48} className="mb-2" />
+            <CardTitle className="font-heading text-[22px]">Univotel CRM</CardTitle>
+            <CardDescription>Sign in to manage leads and tasks</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <FormField label="Email" htmlFor="email">
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                />
+              </FormField>
+              <FormField label="Password" htmlFor="password">
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                />
+              </FormField>
+              {error && <p className="text-xs text-brand-red">{error}</p>}
+              <Button type="submit" disabled={loading} className="w-full">
+                {loading ? 'Signing in...' : 'Sign In'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </>
   );
 }

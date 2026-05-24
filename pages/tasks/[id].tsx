@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { KvList } from '@/components/ui/kv-list';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { TaskRow } from '@/types/domain';
 
 /**
@@ -33,39 +35,42 @@ export default function TaskDetailPage() {
 
   if (!task && !error) {
     return (
-      <AppShell>
-        <p>Loading...</p>
+      <AppShell title="Task">
+        <Skeleton className="h-32 w-full max-w-md" />
       </AppShell>
     );
   }
 
   if (error || !task) {
     return (
-      <AppShell>
-        <p className="error">{error || 'Task not found'}</p>
+      <AppShell title="Task">
+        <p className="text-sm text-brand-red">{error || 'Task not found'}</p>
       </AppShell>
     );
   }
 
   return (
-    <AppShell>
-      <h1>Task: {task.task_type}</h1>
-      <dl className="kv">
-        <dt>Due</dt>
-        <dd>{new Date(task.due_when).toLocaleString('tr-TR')}</dd>
-        <dt>Completed</dt>
-        <dd>{task.is_completed ? 'Yes' : 'No'}</dd>
-        <dt>Late</dt>
-        <dd>{task.is_late ? 'Yes' : 'No'}</dd>
-        <dt>Notes</dt>
-        <dd>{task.notes ?? '—'}</dd>
-        <dt>Lead</dt>
-        <dd>
-          <Link href={`/leads/${task.lead_uuid}`}>{task.lead_uuid}</Link>
-        </dd>
-      </dl>
-      <p>
-        <Link href="/tasks">Back to tasks</Link>
+    <AppShell title={`Task: ${task.task_type}`}>
+      <KvList
+        items={[
+          { term: 'Due', value: new Date(task.due_when).toLocaleString('tr-TR') },
+          { term: 'Completed', value: task.is_completed ? 'Yes' : 'No' },
+          { term: 'Late', value: task.is_late ? 'Yes' : 'No' },
+          { term: 'Notes', value: task.notes ?? '—' },
+          {
+            term: 'Lead',
+            value: (
+              <Link href={`/leads/${task.lead_uuid}`} className="text-brand-blue hover:underline">
+                {task.lead_uuid}
+              </Link>
+            ),
+          },
+        ]}
+      />
+      <p className="mt-4">
+        <Link href="/tasks" className="text-brand-blue hover:underline">
+          Back to tasks
+        </Link>
       </p>
     </AppShell>
   );

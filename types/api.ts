@@ -90,3 +90,27 @@ export interface LeadListQuery {
 
 /** Analytics API response payload. */
 export type AnalyticsResponse = AnalyticsPayload;
+
+/** Manual archive request body. */
+export interface ArchiveLeadRequest {
+  archive_reason: 'won' | 'lost';
+  loss_reason?: string;
+}
+
+/** Archived lead list response. */
+export interface ArchivedLeadListResponse {
+  archivedLeads: import('@/types/domain').ArchivedLeadRow[];
+  nextCursor: string | null;
+}
+
+/** Archived lead detail response. */
+export interface ArchivedLeadDetailResponse {
+  lead: import('@/types/domain').ArchivedLeadRow;
+  contactHistory: import('@/types/domain').ContactHistoryEntry[];
+  leadDetails: import('@/types/domain').LeadDetailRow | null;
+}
+
+/** Unarchive response. */
+export interface UnarchiveLeadResponse {
+  uuid: string;
+}

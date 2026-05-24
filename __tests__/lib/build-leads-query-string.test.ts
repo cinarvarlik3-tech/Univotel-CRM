@@ -49,4 +49,9 @@ describe('buildLeadsQueryString', () => {
     expect(qs).toContain('filter%5Bcreated_at%5D%5Bgte%5D=2026-01-01');
     expect(qs).toContain('filter%5Bcreated_at%5D%5Blte%5D=2026-12-31');
   });
+
+  it('includes mine flag when enabled', () => {
+    const qs = buildLeadsQueryString({ mine: true });
+    expect(qs).toContain('mine=1');
+  });
 });

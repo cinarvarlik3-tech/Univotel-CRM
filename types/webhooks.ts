@@ -4,25 +4,52 @@
  */
 import { z } from 'zod';
 
+const ChatwootPhoneHolderSchema = z.object({
+  id: z.number().optional(),
+  phone_number: z.string().nullable().optional(),
+  name: z.string().optional(),
+  identifier: z.string().optional(),
+  additional_attributes: z.record(z.unknown()).optional(),
+});
+
+const ChatwootAssigneeSchema = z
+  .object({
+    id: z.number(),
+    name: z.string().optional(),
+    email: z.string().nullable().optional(),
+  })
+  .nullable()
+  .optional();
+
 const ChatwootMetaSchema = z
   .object({
-    sender: z
+    sender: ChatwootPhoneHolderSchema.optional(),
+    assignee: ChatwootAssigneeSchema,
+    assignee_type: z.string().optional(),
+  })
+  .optional();
+
+const ChatwootConversationSchema = z
+  .object({
+    id: z.number().optional(),
+    meta: z
       .object({
-        phone_number: z.string().nullable().optional(),
-        name: z.string().optional(),
+        assignee: ChatwootAssigneeSchema,
       })
       .optional(),
   })
   .optional();
-
-const ChatwootConversationSchema = z.object({ id: z.number().optional() }).optional();
 
 /** Shared fields on conversation_created and message_created payloads. */
 const ChatwootInboundMessageSchema = z.object({
   id: z.number(),
   channel: z.string().optional(),
   meta: ChatwootMetaSchema,
+  contact: ChatwootPhoneHolderSchema.optional(),
+  sender: ChatwootPhoneHolderSchema.optional(),
+  message_type: z.string().optional(),
   message: z.object({ id: z.number().optional() }).optional(),
+  messages: z.array(z.object({ id: z.number().optional() })).optional(),
   conversation: ChatwootConversationSchema,
   additional_attributes: z.record(z.unknown()).optional(),
   inbox_id: z.number().optional(),
@@ -45,6 +72,8 @@ export const ChatwootConversationUpdatedSchema = z.object({
   event: z.literal('conversation_updated'),
   id: z.number(),
   meta: ChatwootMetaSchema,
+  contact: ChatwootPhoneHolderSchema.optional(),
+  sender: ChatwootPhoneHolderSchema.optional(),
   conversation: ChatwootConversationSchema,
   changed_attributes: z.array(z.record(ChangedAttributeValueSchema)),
   channel: z.string().optional(),
@@ -62,7 +91,27 @@ export type ChatwootConversationCreated = z.infer<typeof ChatwootConversationCre
 export type ChatwootMessageCreated = z.infer<typeof ChatwootMessageCreatedSchema>;
 export type ChatwootConversationUpdated = z.infer<typeof ChatwootConversationUpdatedSchema>;
 
-export const WhatsAppCallPayloadSchema = z.object({
+const WhatsAppCallSchema = z.object({
+  id: z.string().optional(),
+  from: z.string(),
+  timestamp: z.union([z.string(), z.number()]).optional(),
+  duration: z.number().optional(),
+  status: z.string().optional(),
+});
+
+const WhatsAppStatusSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  timestamp: z.union([z.string(), z.number()]).optional(),
+  recipient_id: z.string().optional(),
+});
+
+const WhatsAppChangeValueSchema = z.object({
+  calls: z.array(WhatsAppCallSchema).optional(),
+  statuses: z.array(WhatsAppStatusSchema).optional(),
+});
+
+export const WhatsAppWebhookPayloadSchema = z.object({
   object: z.string().optional(),
   entry: z
     .array(
@@ -70,19 +119,7 @@ export const WhatsAppCallPayloadSchema = z.object({
         changes: z
           .array(
             z.object({
-              value: z.object({
-                calls: z
-                  .array(
-                    z.object({
-                      id: z.string().optional(),
-                      from: z.string(),
-                      timestamp: z.union([z.string(), z.number()]).optional(),
-                      duration: z.number().optional(),
-                      status: z.string().optional(),
-                    }),
-                  )
-                  .optional(),
-              }),
+              value: WhatsAppChangeValueSchema,
             }),
           )
           .optional(),
@@ -91,14 +128,14 @@ export const WhatsAppCallPayloadSchema = z.object({
     .optional(),
 });
 
-export type WhatsAppCallPayload = z.infer<typeof WhatsAppCallPayloadSchema>;
+export type WhatsAppWebhookPayload = z.infer<typeof WhatsAppWebhookPayloadSchema>;
 
-export const NetGsmPayloadSchema = z.object({
-  token: z.string(),
-  arayan_no: z.string().optional(),
-  aranan_no: z.string().optional(),
-  arama_id: z.string().optional(),
-  sure: z.union([z.string(), z.number()]).optional(),
-});
+/** @deprecated Use WhatsAppWebhookPayloadSchema — kept for call-only tests. */
+export const WhatsAppCallPayloadSchema = WhatsAppWebhookPayloadSchema;
+
+export type WhatsAppCallPayload = WhatsAppWebhookPayload;
+
+/** NetGSM accepts many field aliases; validate loosely then normalize. */
+export const NetGsmPayloadSchema = z.record(z.unknown());
 
 export type NetGsmPayload = z.infer<typeof NetGsmPayloadSchema>;

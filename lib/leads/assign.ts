@@ -76,9 +76,7 @@ export async function assignLead(params: {
   ) as SalespersonCandidate[];
 
   if (params.language) {
-    const languageMatches = pool.filter((agent) =>
-      agent.languages.includes(params.language!),
-    );
+    const languageMatches = pool.filter((agent) => agent.languages.includes(params.language!));
     if (languageMatches.length > 0) {
       pool = languageMatches;
     }
@@ -127,5 +125,21 @@ export async function incrementActiveLeadCount(salespersonId: string): Promise<v
 
   if (error) {
     throw new Error(`Failed to increment active lead count: ${error.message}`);
+  }
+}
+
+/**
+ * Decrements active lead counter when a lead is reassigned away from an agent.
+ * @param salespersonId - UUID of the previous assignee.
+ */
+export async function decrementActiveLeadCount(salespersonId: string): Promise<void> {
+  const client = createServiceClient();
+
+  const { error } = await client.rpc('decrement_active_lead_count', {
+    agent_id: salespersonId,
+  });
+
+  if (error) {
+    throw new Error(`Failed to decrement active lead count: ${error.message}`);
   }
 }

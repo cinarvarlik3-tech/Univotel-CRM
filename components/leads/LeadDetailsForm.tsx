@@ -2,9 +2,12 @@
  * Form for editing lead_details profile fields via PATCH /api/lead-details.
  */
 import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { FormField } from '@/components/ui/form-field';
+import { FormSelect } from '@/components/ui/form-select';
+import { Input } from '@/components/ui/input';
 import { DORM_AWAITING_VALUES, UNI_YEARS } from '@/lib/constants';
 import { useProperties } from '@/hooks/useProperties';
 import type { LeadDetailRow } from '@/types/domain';
@@ -13,6 +16,7 @@ interface LeadDetailsFormProps {
   leadId: string;
   details: LeadDetailRow | null;
   onSaved: () => void;
+  embedded?: boolean;
 }
 
 /**
@@ -20,7 +24,7 @@ interface LeadDetailsFormProps {
  * @param props - Lead UUID and current details row.
  * @returns Lead details form card.
  */
-export function LeadDetailsForm({ leadId, details, onSaved }: LeadDetailsFormProps) {
+export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDetailsFormProps) {
   const { data: properties } = useProperties();
   const d = details;
 
@@ -114,149 +118,177 @@ export function LeadDetailsForm({ leadId, details, onSaved }: LeadDetailsFormPro
     onSaved();
   }
 
-  return (
-    <div className="card">
-      <h3>Student details</h3>
-      <p style={{ fontSize: 12, color: '#64748b' }}>
-        Gender and nationality may be hidden per KVKK if you are not the assignee.
-      </p>
-
-      {details?.rec_hotel && (
-        <p>
+  const formBody = (
+    <>
+      {!embedded && details?.rec_hotel && (
+        <p className="text-sm text-text-primary">
           <strong>Recommended hotel (auto):</strong> {details.rec_hotel}
         </p>
       )}
+      {embedded && (
+        <p className="text-xs text-text-secondary">
+          Gender and nationality may be hidden per KVKK if you are not the assignee.
+        </p>
+      )}
 
-      <Input
-        label="University"
-        id="university"
-        value={university}
-        onChange={(e) => setUniversity(e.target.value)}
-      />
-      <Input
-        label="Budget min"
-        id="budget_min"
-        type="number"
-        value={budgetMin}
-        onChange={(e) => setBudgetMin(e.target.value)}
-      />
-      <Input
-        label="Budget max"
-        id="budget_max"
-        type="number"
-        value={budgetMax}
-        onChange={(e) => setBudgetMax(e.target.value)}
-      />
-      <Input
-        label="Move-in date"
-        id="move_in"
-        type="date"
-        value={moveIn}
-        onChange={(e) => setMoveIn(e.target.value)}
-      />
-      <Select
+      <div className="grid grid-cols-2 gap-3">
+        <FormField label="University" htmlFor="university" className="col-span-2">
+          <Input
+            id="university"
+            value={university}
+            onChange={(e) => setUniversity(e.target.value)}
+          />
+        </FormField>
+        <FormField label="Budget min" htmlFor="budget_min">
+          <Input
+            id="budget_min"
+            type="number"
+            value={budgetMin}
+            onChange={(e) => setBudgetMin(e.target.value)}
+          />
+        </FormField>
+        <FormField label="Budget max" htmlFor="budget_max">
+          <Input
+            id="budget_max"
+            type="number"
+            value={budgetMax}
+            onChange={(e) => setBudgetMax(e.target.value)}
+          />
+        </FormField>
+        <FormField label="Move-in date" htmlFor="move_in" className="col-span-2">
+          <Input
+            id="move_in"
+            type="date"
+            value={moveIn}
+            onChange={(e) => setMoveIn(e.target.value)}
+          />
+        </FormField>
+      </div>
+
+      <FormSelect
         label="Uni year"
         id="uni_year"
-        value={uniYear}
-        onChange={(e) => setUniYear(e.target.value)}
-      >
-        <option value="">—</option>
-        {UNI_YEARS.map((y) => (
-          <option key={y} value={y}>
-            {y}
-          </option>
-        ))}
-      </Select>
-      <Input
-        label="Parent name"
-        id="parent_name"
-        value={parentName}
-        onChange={(e) => setParentName(e.target.value)}
+        value={uniYear || '__none__'}
+        onValueChange={(v) => setUniYear(v === '__none__' ? '' : v)}
+        options={[
+          { value: '__none__', label: '—' },
+          ...UNI_YEARS.map((y) => ({ value: y, label: y })),
+        ]}
       />
-      <Input
-        label="Preferred district"
-        id="preferred_district"
-        value={preferredDistrict}
-        onChange={(e) => setPreferredDistrict(e.target.value)}
-      />
+      <FormField label="Parent name" htmlFor="parent_name">
+        <Input
+          id="parent_name"
+          value={parentName}
+          onChange={(e) => setParentName(e.target.value)}
+        />
+      </FormField>
+      <FormField label="Preferred district" htmlFor="preferred_district">
+        <Input
+          id="preferred_district"
+          value={preferredDistrict}
+          onChange={(e) => setPreferredDistrict(e.target.value)}
+        />
+      </FormField>
 
       {properties && properties.length > 0 && (
-        <fieldset>
-          <legend>Interested hotels</legend>
+        <fieldset className="space-y-2 rounded-lg border border-border-default p-4">
+          <legend className="px-1 text-sm font-medium text-text-primary">Interested hotels</legend>
           {properties.map((p) => (
-            <label key={p.id} style={{ display: 'block' }}>
-              <input
-                type="checkbox"
+            <div key={p.id} className="flex items-center gap-2">
+              <Checkbox
+                id={`hotel_${p.id}`}
                 checked={interestedHotels.includes(p.hotel_name)}
-                onChange={() => toggleHotel(p.hotel_name)}
-              />{' '}
-              {p.hotel_name}
-            </label>
+                onCheckedChange={() => toggleHotel(p.hotel_name)}
+              />
+              <label htmlFor={`hotel_${p.id}`} className="text-sm text-text-primary">
+                {p.hotel_name}
+              </label>
+            </div>
           ))}
         </fieldset>
       )}
 
-      <Input
-        label="Room types (comma-separated)"
-        id="room_type"
-        value={roomTypes}
-        onChange={(e) => setRoomTypes(e.target.value)}
-      />
+      <FormField label="Room types (comma-separated)" htmlFor="room_type">
+        <Input id="room_type" value={roomTypes} onChange={(e) => setRoomTypes(e.target.value)} />
+      </FormField>
 
-      <fieldset>
-        <legend>Dorm awaiting</legend>
+      <fieldset className="space-y-2 rounded-lg border border-border-default p-4">
+        <legend className="px-1 text-sm font-medium text-text-primary">Dorm awaiting</legend>
         {DORM_AWAITING_VALUES.map((v) => (
-          <label key={v} style={{ display: 'block' }}>
-            <input
-              type="checkbox"
+          <div key={v} className="flex items-center gap-2">
+            <Checkbox
+              id={`dorm_${v}`}
               checked={dormAwaiting.includes(v)}
-              onChange={() => toggleDorm(v)}
-            />{' '}
-            {v}
-          </label>
+              onCheckedChange={() => toggleDorm(v)}
+            />
+            <label htmlFor={`dorm_${v}`} className="text-sm text-text-primary">
+              {v}
+            </label>
+          </div>
         ))}
       </fieldset>
 
-      <Select
+      <FormSelect
         label="Student gender"
         id="student_gender"
-        value={studentGender}
-        onChange={(e) => setStudentGender(e.target.value)}
-      >
-        <option value="">—</option>
-        <option value="male">male</option>
-        <option value="female">female</option>
-        <option value="other">other</option>
-      </Select>
-      <Input
-        label="Nationality"
-        id="nationality"
-        value={nationality}
-        onChange={(e) => setNationality(e.target.value)}
+        value={studentGender || '__none__'}
+        onValueChange={(v) => setStudentGender(v === '__none__' ? '' : v)}
+        options={[
+          { value: '__none__', label: '—' },
+          { value: 'male', label: 'male' },
+          { value: 'female', label: 'female' },
+          { value: 'other', label: 'other' },
+        ]}
       />
+      <FormField label="Nationality" htmlFor="nationality">
+        <Input
+          id="nationality"
+          value={nationality}
+          onChange={(e) => setNationality(e.target.value)}
+        />
+      </FormField>
 
-      <label style={{ display: 'block' }}>
-        <input
-          type="checkbox"
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="kvkk_opt_in"
           checked={kvkkOptIn}
-          onChange={(e) => setKvkkOptIn(e.target.checked)}
-        />{' '}
-        KVKK opt-in
-      </label>
-      <label style={{ display: 'block' }}>
-        <input
-          type="checkbox"
+          onCheckedChange={(checked) => setKvkkOptIn(checked === true)}
+        />
+        <label htmlFor="kvkk_opt_in" className="text-sm text-text-primary">
+          KVKK opt-in
+        </label>
+      </div>
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="marketing_opt_in"
           checked={marketingOptIn}
-          onChange={(e) => setMarketingOptIn(e.target.checked)}
-        />{' '}
-        Marketing opt-in
-      </label>
+          onCheckedChange={(checked) => setMarketingOptIn(checked === true)}
+        />
+        <label htmlFor="marketing_opt_in" className="text-sm text-text-primary">
+          Marketing opt-in
+        </label>
+      </div>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="text-xs text-brand-red">{error}</p>}
       <Button type="button" onClick={handleSave} disabled={saving}>
         {saving ? 'Saving...' : 'Save details'}
       </Button>
-    </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex flex-col gap-4">{formBody}</div>;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Student details</CardTitle>
+        <CardDescription>
+          Gender and nationality may be hidden per KVKK if you are not the assignee.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">{formBody}</CardContent>
+    </Card>
   );
 }
-

@@ -2,9 +2,11 @@
  * Manual lead creation form component.
  */
 import { useState } from 'react';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/button';
+import { FormField } from '@/components/ui/form-field';
+import { FormSelect } from '@/components/ui/form-select';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { LANGUAGES } from '@/lib/constants';
 
 interface LeadFormProps {
@@ -58,57 +60,48 @@ export function LeadForm({ onSubmit }: LeadFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      <Input
-        label="Name"
-        id="lead_name"
-        value={leadName}
-        onChange={(e) => setLeadName(e.target.value)}
-      />
-      <Input
-        label="Phone *"
-        id="lead_phone"
-        value={leadPhone}
-        onChange={(e) => setLeadPhone(e.target.value)}
-        required
-      />
-      <Select
+    <form onSubmit={handleSubmit} className="flex max-w-md flex-col gap-4">
+      <FormField label="Name" htmlFor="lead_name">
+        <Input id="lead_name" value={leadName} onChange={(e) => setLeadName(e.target.value)} />
+      </FormField>
+      <FormField label="Phone *" htmlFor="lead_phone">
+        <Input
+          id="lead_phone"
+          value={leadPhone}
+          onChange={(e) => setLeadPhone(e.target.value)}
+          required
+        />
+      </FormField>
+      <FormSelect
         label="Language"
         id="language"
         value={language}
-        onChange={(e) => setLanguage(e.target.value)}
-      >
-        {LANGUAGES.map((l) => (
-          <option key={l} value={l}>
-            {l}
-          </option>
-        ))}
-      </Select>
-      <Input
-        label="University"
-        id="university"
-        value={university}
-        onChange={(e) => setUniversity(e.target.value)}
+        onValueChange={setLanguage}
+        options={LANGUAGES.map((l) => ({ value: l, label: l }))}
       />
-      <Input
-        label="Budget min"
-        id="budget_min"
-        type="number"
-        value={budgetMin}
-        onChange={(e) => setBudgetMin(e.target.value)}
-      />
-      <Input
-        label="Budget max"
-        id="budget_max"
-        type="number"
-        value={budgetMax}
-        onChange={(e) => setBudgetMax(e.target.value)}
-      />
-      <label htmlFor="notes">
-        <div>Notes</div>
-        <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
-      </label>
-      {error && <p className="error">{error}</p>}
+      <FormField label="University" htmlFor="university">
+        <Input id="university" value={university} onChange={(e) => setUniversity(e.target.value)} />
+      </FormField>
+      <FormField label="Budget min" htmlFor="budget_min">
+        <Input
+          id="budget_min"
+          type="number"
+          value={budgetMin}
+          onChange={(e) => setBudgetMin(e.target.value)}
+        />
+      </FormField>
+      <FormField label="Budget max" htmlFor="budget_max">
+        <Input
+          id="budget_max"
+          type="number"
+          value={budgetMax}
+          onChange={(e) => setBudgetMax(e.target.value)}
+        />
+      </FormField>
+      <FormField label="Notes" htmlFor="notes">
+        <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
+      </FormField>
+      {error && <p className="text-xs text-brand-red">{error}</p>}
       <Button type="submit" disabled={submitting}>
         {submitting ? 'Creating...' : 'Create Lead'}
       </Button>

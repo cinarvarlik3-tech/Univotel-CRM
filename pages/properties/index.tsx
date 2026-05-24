@@ -3,6 +3,7 @@
  */
 import { AppShell } from '@/components/layout/AppShell';
 import { PropertyTable } from '@/components/properties/PropertyTable';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useProperties } from '@/hooks/useProperties';
 
 /**
@@ -13,10 +14,9 @@ export default function PropertiesPage() {
   const { data, error, isLoading } = useProperties();
 
   return (
-    <AppShell>
-      <h1>Properties</h1>
-      {isLoading && <p>Loading...</p>}
-      {error && <p className="error">Failed to load properties</p>}
+    <AppShell title="Properties">
+      {isLoading && <Skeleton className="h-64 w-full" />}
+      {error && <p className="text-sm text-brand-red">Failed to load properties</p>}
       {data && <PropertyTable properties={data} />}
     </AppShell>
   );

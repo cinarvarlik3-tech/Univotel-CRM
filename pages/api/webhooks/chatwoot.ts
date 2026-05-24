@@ -1,35 +1,31 @@
 /**
- * Chatwoot webhook endpoint — verify signature, return 200, process async.
- * Routes conversation_updated to label sync inside processChatwoot.
- * Enable conversation_updated in Chatwoot: Settings → Integrations → Webhooks.
+ * Chatwoot webhook endpoint — HMAC verify, idempotent async processing.
  */
-import type { NextApiRequest, NextApiResponse } from 'next';
+import { createWebhookHandler } from '@/lib/webhooks/create-webhook-handler';
+import { chatwootIdempotencyKey } from '@/lib/webhooks/idempotency-key';
 import { processChatwoot } from '@/lib/webhooks/process-chatwoot';
-import { runAfterResponse } from '@/lib/webhooks/wait-until';
-import { getRawBodyString, verifyChatwootSignature } from '@/lib/webhooks/verify';
+import { verifyChatwootSignature } from '@/lib/webhooks/verify';
+import { ChatwootPayloadSchema } from '@/types/webhooks';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    res.status(405).end();
-    return;
-  }
+const handler = createWebhookHandler({
+  source: 'chatwoot',
+  verify: (rawBody, req) =>
+    verifyChatwootSignature(
+      rawBody,
+      req.headers['x-chatwoot-signature'] as string | undefined,
+      req.headers['x-chatwoot-timestamp'] as string | undefined,
+    ),
+  getIdempotencyKey: (parsed, req) => {
+    const result = ChatwootPayloadSchema.safeParse(parsed);
+    if (!result.success) return `chatwoot_invalid_${Date.now()}`;
+    return chatwootIdempotencyKey(result.data, req);
+  },
+  process: (parsed) => processChatwoot(parsed),
+});
 
-  const rawBody = getRawBodyString(req.body);
-  const signature = req.headers['x-chatwoot-signature'] as string | undefined;
-  const timestamp = req.headers['x-chatwoot-timestamp'] as string | undefined;
-
-  const valid = await verifyChatwootSignature(rawBody, signature, timestamp);
-  if (!valid) {
-    res.status(401).end();
-    return;
-  }
-
-  res.status(200).end();
-
-  const body = typeof req.body === 'object' ? req.body : JSON.parse(rawBody);
-  runAfterResponse(processChatwoot(body));
-}
-
+export default handler;
 export const config = {
-  api: { bodyParser: true },
+  api: {
+    bodyParser: false,
+  },
 };

@@ -3,8 +3,11 @@
  */
 import { useState } from 'react';
 import { ContactHistoryList } from '@/components/leads/ContactHistoryList';
-import { Button } from '@/components/ui/Button';
-import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FormField } from '@/components/ui/form-field';
+import { FormSelect } from '@/components/ui/form-select';
+import { Textarea } from '@/components/ui/textarea';
 import { INTERACTION_TYPES } from '@/lib/constants';
 import type { ContactHistoryEntry } from '@/types/domain';
 
@@ -12,6 +15,7 @@ interface ContactHistorySectionProps {
   leadId: string;
   entries: ContactHistoryEntry[];
   onAdded: () => void;
+  embedded?: boolean;
 }
 
 /**
@@ -19,7 +23,12 @@ interface ContactHistorySectionProps {
  * @param props - Lead ID, entries, and refresh callback.
  * @returns Contact history section card.
  */
-export function ContactHistorySection({ leadId, entries, onAdded }: ContactHistorySectionProps) {
+export function ContactHistorySection({
+  leadId,
+  entries,
+  onAdded,
+  embedded,
+}: ContactHistorySectionProps) {
   const [note, setNote] = useState('');
   const [interactionType, setInteractionType] = useState('message_sent');
   const [error, setError] = useState('');
@@ -52,29 +61,47 @@ export function ContactHistorySection({ leadId, entries, onAdded }: ContactHisto
     onAdded();
   }
 
-  return (
-    <div className="card">
-      <h3>Contact history</h3>
+  const content = (
+    <>
       <ContactHistoryList entries={entries} />
 
-      <h4>Add note</h4>
-      <Select
-        label="Interaction type"
-        id="interaction_type"
-        value={interactionType}
-        onChange={(e) => setInteractionType(e.target.value)}
-      >
-        {INTERACTION_TYPES.map((t) => (
-          <option key={t} value={t}>
-            {t}
-          </option>
-        ))}
-      </Select>
-      <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
-      {error && <p className="error">{error}</p>}
-      <Button type="button" onClick={handleAddNote} disabled={saving}>
-        {saving ? 'Adding...' : 'Add note'}
-      </Button>
-    </div>
+      <div className="space-y-4 border-t border-border-default pt-4">
+        <h4 className="text-[11px] font-medium uppercase tracking-wide text-text-tertiary">
+          Add note
+        </h4>
+        <FormSelect
+          label="Interaction type"
+          id="interaction_type"
+          value={interactionType}
+          onValueChange={setInteractionType}
+          options={INTERACTION_TYPES.map((t) => ({ value: t, label: t }))}
+        />
+        <FormField label="Note" htmlFor="contact_note">
+          <Textarea
+            id="contact_note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+          />
+        </FormField>
+        {error && <p className="text-xs text-brand-red">{error}</p>}
+        <Button type="button" onClick={handleAddNote} disabled={saving}>
+          {saving ? 'Adding...' : 'Add note'}
+        </Button>
+      </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex flex-col gap-4">{content}</div>;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Contact history</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">{content}</CardContent>
+    </Card>
   );
 }

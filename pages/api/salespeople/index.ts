@@ -4,6 +4,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
+import { isManagerOrAbove } from '@/lib/auth/roles';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -14,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const supabase = createServerSupabase(req, res);
 
-  if (session.role === 'manager') {
+  if (isManagerOrAbove(session.role)) {
     const { data, error } = await supabase.from('salespeople').select('*').order('full_name');
     if (error) return sendError(res, 'Failed to fetch salespeople', 500);
     return sendSuccess(res, data ?? []);

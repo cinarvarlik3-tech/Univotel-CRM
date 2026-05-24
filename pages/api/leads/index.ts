@@ -4,15 +4,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
-import { getSessionUser } from '@/lib/auth/get-session-user';
+import { getSessionUser, type SessionUser } from '@/lib/auth/get-session-user';
 import { createLeadFromWebhook } from '@/lib/leads/create-lead';
 import { buildManualSourceDetails } from '@/lib/leads/source-details';
 import { applyEmbeddedFilters } from '@/lib/query/apply-embedded-filters';
-import {
-  applyFilters,
-  parseFilterParams,
-  validateFilters,
-} from '@/lib/query/filter-builder';
+import { applyFilters, parseFilterParams, validateFilters } from '@/lib/query/filter-builder';
 import { buildCursorResponse, parseCursorParams } from '@/lib/query/cursor';
 import { requiresLeadDetailsJoin, splitFilters } from '@/lib/query/split-filters';
 import { createServerSupabase } from '@/lib/supabase/server';
@@ -33,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!session) return sendError(res, 'Unauthorized', 401);
 
   if (req.method === 'GET') {
-    return handleGet(req, res);
+    return handleGet(req, res, session);
   }
 
   if (req.method === 'POST') {
@@ -43,9 +39,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   return sendError(res, 'Method not allowed', 405);
 }
 
-async function handleGet(req: NextApiRequest, res: NextApiResponse) {
+async function handleGet(req: NextApiRequest, res: NextApiResponse, session: SessionUser) {
   const supabase = createServerSupabase(req, res);
   const { cursor, limit } = parseCursorParams(req.query);
+  const mineOnly = req.query.mine === '1';
   const allFilters = parseFilterParams(req.query);
   const filterError = validateFilters(allFilters);
 
@@ -70,6 +67,7 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse) {
     .from('leads')
     .select(selectClause)
     .eq('is_deleted', false)
+    .eq('is_archived', false)
     .order(sortField, { ascending: false })
     .limit(limit + 1);
 
@@ -99,6 +97,10 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse) {
   query = applyFilters(query, leadFilters);
   query = applyEmbeddedFilters(query, 'lead_details', detailsFilters);
 
+  if (mineOnly) {
+    query = query.eq('assigned_to', session.userId);
+  }
+
   const { data, error } = await query;
 
   if (error) return sendError(res, 'Failed to fetch leads', 500);
@@ -122,6 +124,7 @@ async function handlePost(req: NextApiRequest, res: NextApiResponse, userId: str
   const sourceDetails = buildManualSourceDetails(false);
 
   const result = await createLeadFromWebhook({
+    identifierKind: 'phone',
     rawPhone: body.lead_phone,
     leadName: body.lead_name ?? null,
     leadSource: 'manual',

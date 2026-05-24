@@ -1,28 +1,32 @@
 /**
- * NetGSM webhook endpoint (stub processor).
+ * NetGSM / Netsantral webhook endpoint — static token + CDR lead ingestion.
  */
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { processNetGsm } from '@/lib/webhooks/process-netgsm';
-import { runAfterResponse } from '@/lib/webhooks/wait-until';
+import { createWebhookHandler } from '@/lib/webhooks/create-webhook-handler';
+import { netgsmIdempotencyKey } from '@/lib/webhooks/idempotency-key';
+import { processNetGsm, shouldSkipNetGsmLead } from '@/lib/webhooks/process-netgsm';
 import { verifyNetGsmToken } from '@/lib/webhooks/verify';
+import { normalizeNetGsmPayload } from '@/lib/webhooks/normalize-netgsm-payload';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    res.status(405).end();
-    return;
-  }
+const handler = createWebhookHandler({
+  source: 'netgsm',
+  verify: async (rawBody) => {
+    try {
+      const parsed = JSON.parse(rawBody) as Record<string, unknown>;
+      const { token } = normalizeNetGsmPayload(parsed);
+      if (!token) return true;
+      return verifyNetGsmToken(token);
+    } catch {
+      return false;
+    }
+  },
+  getIdempotencyKey: (parsed) => netgsmIdempotencyKey(parsed),
+  shouldSkipProcessing: (parsed) => shouldSkipNetGsmLead(parsed),
+  process: (parsed) => processNetGsm(parsed),
+});
 
-  const body = req.body as { token?: string };
-  const valid = verifyNetGsmToken(body?.token);
-  if (!valid) {
-    res.status(401).end();
-    return;
-  }
-
-  res.status(200).end();
-  runAfterResponse(processNetGsm(body));
-}
-
+export default handler;
 export const config = {
-  api: { bodyParser: true },
+  api: {
+    bodyParser: false,
+  },
 };

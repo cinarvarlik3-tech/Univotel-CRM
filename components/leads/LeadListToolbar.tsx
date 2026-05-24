@@ -1,9 +1,18 @@
 /**
  * Toolbar for lead list filters, search, and sort controls.
  */
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
+import { IconFilter } from '@tabler/icons-react';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { FormField } from '@/components/ui/form-field';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   FUNNEL_STATUSES,
   LEAD_SOURCES,
@@ -14,6 +23,7 @@ import {
   UNI_YEARS,
 } from '@/lib/constants';
 import type { SalespersonOption } from '@/types/domain';
+import { useState } from 'react';
 
 /** Filter state for lead list queries. */
 export interface LeadListFilterState {
@@ -60,6 +70,8 @@ export function LeadListToolbar({
   salespeople,
   isManager,
 }: LeadListToolbarProps) {
+  const [showFilters, setShowFilters] = useState(false);
+
   function setFilter(field: string, value: string) {
     const filters = { ...state.filters };
     if (value) {
@@ -75,212 +87,285 @@ export function LeadListToolbar({
   }
 
   return (
-    <div className="toolbar">
-      <label>
-        Search (name or phone)
-        <Input
-          id="lead_search"
-          value={state.search}
-          onChange={(e) => onChange({ ...state, search: e.target.value })}
-          placeholder="Name or phone..."
-        />
-      </label>
+    <div className="mb-4 space-y-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <FormField label="Search" htmlFor="lead_search" className="min-w-[200px] flex-1">
+          <Input
+            id="lead_search"
+            value={state.search}
+            onChange={(e) => onChange({ ...state, search: e.target.value })}
+            placeholder="Name or phone..."
+          />
+        </FormField>
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <input
-          type="checkbox"
-          checked={state.fuzzy}
-          onChange={(e) => onChange({ ...state, fuzzy: e.target.checked })}
-        />
-        Fuzzy search
-      </label>
+        <Button type="button" variant="secondary" onClick={() => setShowFilters((v) => !v)}>
+          <IconFilter size={16} />
+          Filters
+        </Button>
 
-      <Select
-        label="Sort"
-        id="lead_sort"
-        value={state.sort}
-        onChange={(e) => onChange({ ...state, sort: e.target.value })}
-      >
-        {SORTABLE_COLUMN_OPTIONS.map((col) => (
-          <option key={col} value={col}>
-            {col}
-          </option>
-        ))}
-      </Select>
+        <Button type="button" onClick={onApply}>
+          Apply
+        </Button>
+      </div>
 
-      <Select
-        label="Funnel"
-        id="filter_funnel"
-        value={state.filters.funnel_status ?? ''}
-        onChange={(e) => setFilter('funnel_status', e.target.value)}
-      >
-        <option value="">All</option>
-        {FUNNEL_STATUSES.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </Select>
+      {showFilters && (
+        <div className="rounded-[10px] border border-border-default bg-surface-card p-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="col-span-full flex items-center gap-2">
+              <Checkbox
+                id="fuzzy_search"
+                checked={state.fuzzy}
+                onCheckedChange={(checked) => onChange({ ...state, fuzzy: checked === true })}
+              />
+              <label htmlFor="fuzzy_search" className="text-xs text-text-secondary">
+                Fuzzy search
+              </label>
+            </div>
 
-      <Select
-        label="SLA"
-        id="filter_sla"
-        value={state.filters.sla_status ?? ''}
-        onChange={(e) => setFilter('sla_status', e.target.value)}
-      >
-        <option value="">All</option>
-        <option value="on_time">on_time</option>
-        <option value="at_risk">at_risk</option>
-        <option value="breached">breached</option>
-      </Select>
+            <FormField label="Sort" htmlFor="lead_sort">
+              <Select value={state.sort} onValueChange={(v) => onChange({ ...state, sort: v })}>
+                <SelectTrigger id="lead_sort">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SORTABLE_COLUMN_OPTIONS.map((col) => (
+                    <SelectItem key={col} value={col}>
+                      {col}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
 
-      <Select
-        label="Source"
-        id="filter_source"
-        value={state.filters.lead_source ?? ''}
-        onChange={(e) => setFilter('lead_source', e.target.value)}
-      >
-        <option value="">All</option>
-        {LEAD_SOURCES.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </Select>
+            <FormField label="Funnel" htmlFor="filter_funnel">
+              <Select
+                value={state.filters.funnel_status ?? ''}
+                onValueChange={(v) => setFilter('funnel_status', v === 'all' ? '' : v)}
+              >
+                <SelectTrigger id="filter_funnel">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  {FUNNEL_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
 
-      <Select
-        label="Stage"
-        id="filter_stage"
-        value={state.filters.student_stage ?? ''}
-        onChange={(e) => setFilter('student_stage', e.target.value)}
-      >
-        <option value="">All</option>
-        {STUDENT_STAGES.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </Select>
+            <FormField label="SLA" htmlFor="filter_sla">
+              <Select
+                value={state.filters.sla_status ?? ''}
+                onValueChange={(v) => setFilter('sla_status', v === 'all' ? '' : v)}
+              >
+                <SelectTrigger id="filter_sla">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="on_time">on_time</SelectItem>
+                  <SelectItem value="at_risk">at_risk</SelectItem>
+                  <SelectItem value="breached">breached</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormField>
 
-      <Select
-        label="Persona"
-        id="filter_persona"
-        value={state.filters.persona_type ?? ''}
-        onChange={(e) => setFilter('persona_type', e.target.value)}
-      >
-        <option value="">All</option>
-        {PERSONA_TYPES.map((p) => (
-          <option key={p} value={p}>
-            {p}
-          </option>
-        ))}
-      </Select>
+            <FormField label="Source" htmlFor="filter_source">
+              <Select
+                value={state.filters.lead_source ?? ''}
+                onValueChange={(v) => setFilter('lead_source', v === 'all' ? '' : v)}
+              >
+                <SelectTrigger id="filter_source">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  {LEAD_SOURCES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
 
-      <Select
-        label="Language"
-        id="filter_language"
-        value={state.filters.language ?? ''}
-        onChange={(e) => setFilter('language', e.target.value)}
-      >
-        <option value="">All</option>
-        {LANGUAGES.map((l) => (
-          <option key={l} value={l}>
-            {l}
-          </option>
-        ))}
-      </Select>
+            <FormField label="Stage" htmlFor="filter_stage">
+              <Select
+                value={state.filters.student_stage ?? ''}
+                onValueChange={(v) => setFilter('student_stage', v === 'all' ? '' : v)}
+              >
+                <SelectTrigger id="filter_stage">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  {STUDENT_STAGES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
 
-      <Select
-        label="Organic"
-        id="filter_organic"
-        value={state.filters.is_organic ?? ''}
-        onChange={(e) => setFilter('is_organic', e.target.value)}
-      >
-        <option value="">All</option>
-        <option value="true">Yes</option>
-        <option value="false">No</option>
-      </Select>
+            <FormField label="Persona" htmlFor="filter_persona">
+              <Select
+                value={state.filters.persona_type ?? ''}
+                onValueChange={(v) => setFilter('persona_type', v === 'all' ? '' : v)}
+              >
+                <SelectTrigger id="filter_persona">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  {PERSONA_TYPES.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {p}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
 
-      <Input
-        label="Min score"
-        id="filter_score_min"
-        type="number"
-        value={state.scoreMin}
-        onChange={(e) => onChange({ ...state, scoreMin: e.target.value })}
-      />
+            <FormField label="Language" htmlFor="filter_language">
+              <Select
+                value={state.filters.language ?? ''}
+                onValueChange={(v) => setFilter('language', v === 'all' ? '' : v)}
+              >
+                <SelectTrigger id="filter_language">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  {LANGUAGES.map((l) => (
+                    <SelectItem key={l} value={l}>
+                      {l}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
 
-      <Input
-        label="University"
-        id="filter_university"
-        value={state.filters.university ?? ''}
-        onChange={(e) => setFilter('university', e.target.value)}
-      />
+            <FormField label="Organic" htmlFor="filter_organic">
+              <Select
+                value={state.filters.is_organic ?? ''}
+                onValueChange={(v) => setFilter('is_organic', v === 'all' ? '' : v)}
+              >
+                <SelectTrigger id="filter_organic">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="true">Yes</SelectItem>
+                  <SelectItem value="false">No</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormField>
 
-      <Select
-        label="Uni year"
-        id="filter_uni_year"
-        value={state.filters.uni_year ?? ''}
-        onChange={(e) => setFilter('uni_year', e.target.value)}
-      >
-        <option value="">All</option>
-        {UNI_YEARS.map((y) => (
-          <option key={y} value={y}>
-            {y}
-          </option>
-        ))}
-      </Select>
+            <FormField label="Min score" htmlFor="filter_score_min">
+              <Input
+                id="filter_score_min"
+                type="number"
+                value={state.scoreMin}
+                onChange={(e) => onChange({ ...state, scoreMin: e.target.value })}
+              />
+            </FormField>
 
-      <Input
-        label="Created from"
-        id="created_from"
-        type="date"
-        value={state.createdFrom}
-        onChange={(e) => onChange({ ...state, createdFrom: e.target.value })}
-      />
-      <Input
-        label="Created to"
-        id="created_to"
-        type="date"
-        value={state.createdTo}
-        onChange={(e) => onChange({ ...state, createdTo: e.target.value })}
-      />
-      <Input
-        label="SLA deadline from"
-        id="sla_from"
-        type="date"
-        value={state.slaFrom}
-        onChange={(e) => onChange({ ...state, slaFrom: e.target.value })}
-      />
-      <Input
-        label="SLA deadline to"
-        id="sla_to"
-        type="date"
-        value={state.slaTo}
-        onChange={(e) => onChange({ ...state, slaTo: e.target.value })}
-      />
+            <FormField label="University" htmlFor="filter_university">
+              <Input
+                id="filter_university"
+                value={state.filters.university ?? ''}
+                onChange={(e) => setFilter('university', e.target.value)}
+              />
+            </FormField>
 
-      {isManager && salespeople && (
-        <Select
-          label="Assignee"
-          id="filter_assigned"
-          value={state.filters.assigned_to ?? ''}
-          onChange={(e) => setFilter('assigned_to', e.target.value)}
-        >
-          <option value="">All</option>
-          {salespeople.map((sp) => (
-            <option key={sp.id} value={sp.id}>
-              {sp.full_name}
-            </option>
-          ))}
-        </Select>
+            <FormField label="Uni year" htmlFor="filter_uni_year">
+              <Select
+                value={state.filters.uni_year ?? ''}
+                onValueChange={(v) => setFilter('uni_year', v === 'all' ? '' : v)}
+              >
+                <SelectTrigger id="filter_uni_year">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  {UNI_YEARS.map((y) => (
+                    <SelectItem key={y} value={y}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+
+            <FormField label="Created from" htmlFor="created_from">
+              <Input
+                id="created_from"
+                type="date"
+                value={state.createdFrom}
+                onChange={(e) => onChange({ ...state, createdFrom: e.target.value })}
+              />
+            </FormField>
+
+            <FormField label="Created to" htmlFor="created_to">
+              <Input
+                id="created_to"
+                type="date"
+                value={state.createdTo}
+                onChange={(e) => onChange({ ...state, createdTo: e.target.value })}
+              />
+            </FormField>
+
+            <FormField label="SLA from" htmlFor="sla_from">
+              <Input
+                id="sla_from"
+                type="date"
+                value={state.slaFrom}
+                onChange={(e) => onChange({ ...state, slaFrom: e.target.value })}
+              />
+            </FormField>
+
+            <FormField label="SLA to" htmlFor="sla_to">
+              <Input
+                id="sla_to"
+                type="date"
+                value={state.slaTo}
+                onChange={(e) => onChange({ ...state, slaTo: e.target.value })}
+              />
+            </FormField>
+
+            {isManager && salespeople && (
+              <FormField label="Assignee" htmlFor="filter_assigned">
+                <Select
+                  value={state.filters.assigned_to ?? ''}
+                  onValueChange={(v) => setFilter('assigned_to', v === 'all' ? '' : v)}
+                >
+                  <SelectTrigger id="filter_assigned">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    {salespeople.map((sp) => (
+                      <SelectItem key={sp.id} value={sp.id}>
+                        {sp.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
+            )}
+          </div>
+
+          <div className="mt-3 flex gap-2">
+            <Button type="button" variant="secondary" onClick={clearFilters}>
+              Clear all
+            </Button>
+          </div>
+        </div>
       )}
-
-      <Button type="button" onClick={onApply}>
-        Apply
-      </Button>
-      <Button type="button" onClick={clearFilters}>
-        Clear
-      </Button>
     </div>
   );
 }

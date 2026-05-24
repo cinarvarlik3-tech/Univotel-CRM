@@ -15,12 +15,12 @@ async function fetcher<T>(url: string): Promise<T> {
 
 /**
  * Fetches paginated leads list via internal API.
- * @param params - Optional query string for filters/cursor.
+ * @param params - Optional query string for filters/cursor; pass null to skip fetch.
  * @returns SWR response with leads data.
  */
-export function useLeads(params = '') {
+export function useLeads(params: string | null = '') {
   return useSWR<{ leads: LeadRow[]; nextCursor: string | null }>(
-    `/api/leads${params}`,
+    params === null ? null : `/api/leads${params}`,
     fetcher,
   );
 }

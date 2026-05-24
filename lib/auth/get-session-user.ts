@@ -3,13 +3,14 @@
  * Loads salespeople row matching authenticated Supabase user.
  */
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { parseUserRole, type UserRole } from '@/lib/auth/roles';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 /** Authenticated session user with role and salesperson profile. */
 export interface SessionUser {
   userId: string;
   email: string;
-  role: 'salesperson' | 'manager';
+  role: UserRole;
   salesperson: {
     id: string;
     full_name: string;
@@ -52,10 +53,13 @@ export async function getSessionUser(
 
   if (spError || !salesperson) return null;
 
+  const role = parseUserRole(salesperson.role);
+  if (!role) return null;
+
   return {
     userId: user.id,
     email: user.email ?? salesperson.email,
-    role: salesperson.role as 'salesperson' | 'manager',
+    role,
     salesperson,
   };
 }

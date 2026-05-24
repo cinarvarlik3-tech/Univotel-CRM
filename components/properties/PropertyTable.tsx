@@ -2,6 +2,14 @@
  * Read-only properties inventory table.
  */
 import Link from 'next/link';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import type { PropertyRow } from '@/types/domain';
 
 interface PropertyTableProps {
@@ -15,35 +23,44 @@ interface PropertyTableProps {
  */
 export function PropertyTable({ properties }: PropertyTableProps) {
   if (properties.length === 0) {
-    return <p>No properties found.</p>;
+    return <p className="py-8 text-center text-sm text-text-secondary">No properties found.</p>;
   }
 
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>Hotel</th>
-          <th>District</th>
-          <th>Gender</th>
-          <th>Status</th>
-          <th>Beds</th>
-          <th>Schools</th>
-        </tr>
-      </thead>
-      <tbody>
-        {properties.map((p) => (
-          <tr key={p.id}>
-            <td>
-              <Link href={`/properties/${p.id}`}>{p.hotel_name}</Link>
-            </td>
-            <td>{p.district ?? '—'}</td>
-            <td>{p.serviced_gender ?? '—'}</td>
-            <td>{p.status}</td>
-            <td>{p.total_beds ?? '—'}</td>
-            <td>{p.serviced_schools?.join(', ') || '—'}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="overflow-hidden rounded-[10px] border border-border-default bg-surface-card">
+      <Table>
+        <TableHeader>
+          <TableRow className="h-[34px] hover:bg-transparent">
+            <TableHead>Hotel</TableHead>
+            <TableHead>District</TableHead>
+            <TableHead>Gender</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Beds</TableHead>
+            <TableHead>Schools</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {properties.map((p) => (
+            <TableRow key={p.id}>
+              <TableCell>
+                <Link
+                  href={`/properties/${p.id}`}
+                  className="font-medium text-brand-blue hover:underline"
+                >
+                  {p.hotel_name}
+                </Link>
+              </TableCell>
+              <TableCell className="text-text-secondary">{p.district ?? '—'}</TableCell>
+              <TableCell className="text-text-secondary">{p.serviced_gender ?? '—'}</TableCell>
+              <TableCell className="text-text-secondary">{p.status}</TableCell>
+              <TableCell className="text-text-secondary">{p.total_beds ?? '—'}</TableCell>
+              <TableCell className="text-text-secondary">
+                {p.serviced_schools?.join(', ') || '—'}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

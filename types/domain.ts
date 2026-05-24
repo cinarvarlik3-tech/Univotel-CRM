@@ -73,6 +73,40 @@ export interface SalespersonSummary {
   role: string;
 }
 
+/** Phase 4 collected_data attribution row. */
+export interface CollectedDataRow {
+  id: string;
+  lead_uuid: string;
+  channel: string;
+  external_id: string;
+  ref_code: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  utm_content: string | null;
+  landing_page: string | null;
+  referral_domain: string | null;
+  session_start: string | null;
+  session_duration: number | null;
+  click_event: string | null;
+  ga4_session_id: string | null;
+  ad_id: string | null;
+  campaign_id: string | null;
+  adset_id: string | null;
+  placement: string | null;
+  called_number: string | null;
+  call_duration: number | null;
+  chatwoot_url: string | null;
+  is_organic: boolean | null;
+  normalization_failed: boolean;
+  source_confidence: string;
+  path_lost_at: string;
+  ga4_enriched: boolean;
+  ga4_enriched_at: string | null;
+  ga4_fetch_attempts: number;
+  created_at: string;
+}
+
 /** Contact history entry for timeline display. */
 export interface ContactHistoryEntry {
   id: string;
@@ -113,12 +147,137 @@ export interface PropertyRow {
   google_sheet_id?: string | null;
 }
 
+/** Notification alert types stored in notifications.alert_type. */
+export type NotificationAlertType =
+  | 'sla_breach'
+  | 'task_overdue'
+  | 'unassigned_lead'
+  | 'webhook_failure'
+  | 'campaign_paused'
+  | 'campaign_failed';
+
+/** Notification row for manager alert inbox. */
+export interface NotificationRow {
+  id: string;
+  alert_type: NotificationAlertType;
+  lead_uuid: string | null;
+  task_id: string | null;
+  message: string;
+  sent_to: string[];
+  is_resolved: boolean;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  leads?: { lead_name: string | null; lead_phone: string } | null;
+}
+
+/** Campaign segment filter payload (same shape as lead list filters). */
+export interface CampaignSegment {
+  filters: Array<{ field: string; operator: string; value: string }>;
+}
+
+/** Campaign summary for list/detail views. */
+export interface CampaignRow {
+  id: string;
+  campaign_type: string;
+  status: string;
+  segment: CampaignSegment;
+  language: string | null;
+  template_id: string | null;
+  template_language: string | null;
+  template_variables: Record<string, string>;
+  send_delay_ms: number;
+  daily_send_count: number;
+  paused_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Campaign lead execution row. */
+export interface CampaignLeadRow {
+  id: string;
+  campaign_id: string;
+  lead_uuid: string;
+  status: string;
+  sent_at: string | null;
+  delivered_at: string | null;
+  read_at: string | null;
+  failed_reason: string | null;
+  skipped_reason: string | null;
+  wa_message_id: string | null;
+  leads?: { lead_name: string | null; lead_phone: string } | null;
+}
+
+/** Archived lead row for list and detail views. */
+export interface ArchivedLeadRow {
+  uuid: string;
+  archive_reason: 'won' | 'lost';
+  loss_reason: string | null;
+  archived_at: string;
+  archived_by: string;
+  lead_name: string | null;
+  lead_phone: string;
+  lead_source: string;
+  funnel_status: string;
+  student_stage: string;
+  persona_type?: string | null;
+  special_state?: string | null;
+  message_from?: string | null;
+  is_organic?: boolean | null;
+  assigned_to: string | null;
+  language: string;
+  source_details?: Record<string, unknown>;
+  parent_phone?: string | null;
+  lead_score?: number;
+  created_at: string;
+  last_contact_at?: string | null;
+  updated_at: string;
+  salespeople?: { full_name: string; email: string } | null;
+}
+
+/** Old lead row for historical Chatwoot import list. */
+export interface OldLeadRow {
+  uuid: string;
+  lead_name: string | null;
+  lead_phone: string;
+  lead_source: string;
+  message_from: string | null;
+  funnel_status: string;
+  student_stage: string;
+  created_at: string;
+  last_contact_at: string | null;
+  chatwoot_conversation_id: number | null;
+  salespeople?: { full_name: string; email: string } | null;
+  old_lead_details?: { university: string | null } | { university: string | null }[] | null;
+}
+
+/** Archive analytics summary payload. */
+export interface ArchiveSummaryPayload {
+  totals: { won: number; lost: number; total: number };
+  bySource: Array<{
+    lead_source: string | null;
+    won_count: number | null;
+    lost_count: number | null;
+    conversion_rate: number | null;
+  }>;
+  byAgent: Array<{
+    salesperson_id: string | null;
+    full_name: string | null;
+    won_count: number | null;
+    lost_count: number | null;
+    conversion_rate: number | null;
+  }>;
+}
+
 /** Analytics materialized view aggregates. */
 export interface AnalyticsPayload {
   leadsBySource: Array<{
     lead_source: string | null;
     lead_count: number | null;
+    active_count?: number | null;
     won_count: number | null;
+    lost_count?: number | null;
     conversion_rate: number | null;
   }>;
   funnelDistribution: Array<{
@@ -130,6 +289,8 @@ export interface AnalyticsPayload {
     full_name: string | null;
     assigned_count: number | null;
     won_count: number | null;
+    lost_count?: number | null;
+    conversion_rate?: number | null;
     avg_response_minutes: number | null;
   }>;
   slaBreachRate: Array<{

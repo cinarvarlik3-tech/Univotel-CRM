@@ -5,7 +5,10 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
+import { isManagerOrAbove } from '@/lib/auth/roles';
+import { hasLabelMappedDetailUpdates, pushLabelsToChatwoot } from '@/lib/chatwoot/sync-labels';
 import { DORM_AWAITING_VALUES, UNI_YEARS } from '@/lib/constants';
+import { isChatwootLabelSyncEnabled } from '@/lib/env';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 const UpdateLeadDetailsSchema = z.object({
@@ -33,7 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (typeof leadId !== 'string') return sendError(res, 'Invalid lead ID', 400);
 
   const supabase = createServerSupabase(req, res);
-  const detailsTable = session.role === 'manager' ? 'lead_details' : 'lead_details_safe';
+  const detailsTable = isManagerOrAbove(session.role) ? 'lead_details' : 'lead_details_safe';
 
   if (req.method === 'GET') {
     const { data, error } = await supabase
@@ -63,6 +66,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (error) return sendError(res, 'Failed to update lead details', 500);
     if (!data) return sendError(res, 'Lead details not found', 404);
+
+    if (isChatwootLabelSyncEnabled() && hasLabelMappedDetailUpdates(parsed.data)) {
+      await pushLabelsToChatwoot(leadId);
+    }
 
     return sendSuccess(res, data);
   }

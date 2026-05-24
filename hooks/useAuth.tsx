@@ -3,6 +3,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { createBrowserSupabase } from '@/lib/supabase/client';
+import { parseUserRole } from '@/lib/auth/roles';
 import type { SessionUser } from '@/lib/auth/get-session-user';
 
 interface AuthContextValue {
@@ -56,12 +57,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!salesperson) {
       setUser(null);
     } else {
-      setUser({
-        userId: authUser.id,
-        email: authUser.email ?? salesperson.email,
-        role: salesperson.role as 'salesperson' | 'manager',
-        salesperson,
-      });
+      const role = parseUserRole(salesperson.role);
+      if (!role) {
+        setUser(null);
+      } else {
+        setUser({
+          userId: authUser.id,
+          email: authUser.email ?? salesperson.email,
+          role,
+          salesperson,
+        });
+      }
     }
 
     setLoading(false);
@@ -69,6 +75,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refresh();
+
+    const supabase = createBrowserSupabase();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+        void refresh();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [refresh]);
 
   const logout = useCallback(async () => {

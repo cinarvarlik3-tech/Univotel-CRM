@@ -40,9 +40,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const { data: lead } = await supabase
       .from('leads')
-      .select('funnel_status')
+      .select('funnel_status, is_archived')
       .eq('uuid', leadId)
       .maybeSingle();
+
+    if (!lead) return sendError(res, 'Lead not found', 404);
+    if (lead.is_archived) return sendError(res, 'Lead is archived', 409);
 
     const { data, error } = await supabase
       .from('contact_history')

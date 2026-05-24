@@ -2,8 +2,9 @@
  * Form for updating funnel status and loss reason on a lead.
  */
 import { useState } from 'react';
-import { Button } from '@/components/ui/Button';
-import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FormSelect } from '@/components/ui/form-select';
 import { FUNNEL_STATUSES, LOSS_REASONS } from '@/lib/constants';
 import type { LeadWithDetails } from '@/types/domain';
 
@@ -11,6 +12,7 @@ interface LeadStatusFormProps {
   lead: LeadWithDetails;
   leadId: string;
   onSaved: () => void;
+  embedded?: boolean;
 }
 
 /**
@@ -18,7 +20,7 @@ interface LeadStatusFormProps {
  * @param props - Lead data and save callback.
  * @returns Status form card.
  */
-export function LeadStatusForm({ lead, leadId, onSaved }: LeadStatusFormProps) {
+export function LeadStatusForm({ lead, leadId, onSaved, embedded }: LeadStatusFormProps) {
   const [funnelStatus, setFunnelStatus] = useState(lead.funnel_status);
   const [lossReason, setLossReason] = useState(lead.loss_reason ?? '');
   const [error, setError] = useState('');
@@ -55,41 +57,42 @@ export function LeadStatusForm({ lead, leadId, onSaved }: LeadStatusFormProps) {
     onSaved();
   }
 
-  return (
-    <div className="card">
-      <h3>Update status</h3>
-      <Select
+  const formBody = (
+    <>
+      <FormSelect
         label="Funnel status"
         id="funnel_status"
         value={funnelStatus}
-        onChange={(e) => setFunnelStatus(e.target.value)}
-      >
-        {FUNNEL_STATUSES.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </Select>
+        onValueChange={setFunnelStatus}
+        options={FUNNEL_STATUSES.map((s) => ({ value: s, label: s }))}
+      />
       {funnelStatus === 'ziyaret-ama-almayacak' && (
-        <Select
+        <FormSelect
           label="Loss reason *"
           id="loss_reason"
           value={lossReason}
-          onChange={(e) => setLossReason(e.target.value)}
-          required
-        >
-          <option value="">Select reason...</option>
-          {LOSS_REASONS.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </Select>
+          onValueChange={setLossReason}
+          placeholder="Select reason..."
+          options={LOSS_REASONS.map((r) => ({ value: r, label: r }))}
+        />
       )}
-      {error && <p className="error">{error}</p>}
+      {error && <p className="text-xs text-brand-red">{error}</p>}
       <Button type="button" onClick={handleStatusUpdate} disabled={saving}>
         {saving ? 'Saving...' : 'Save status'}
       </Button>
-    </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex flex-col gap-4">{formBody}</div>;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Update status</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">{formBody}</CardContent>
+    </Card>
   );
 }

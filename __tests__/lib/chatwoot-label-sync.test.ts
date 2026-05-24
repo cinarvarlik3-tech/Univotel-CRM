@@ -67,4 +67,23 @@ describe('ChatwootConversationUpdatedSchema', () => {
     const parsed = ChatwootConversationUpdatedSchema.safeParse(payload);
     expect(parsed.success).toBe(true);
   });
+
+  it('accepts conversation_updated with label_list in changed_attributes', () => {
+    const payload = {
+      event: 'conversation_updated',
+      id: 52,
+      conversation: { id: 52 },
+      changed_attributes: [
+        {
+          label_list: {
+            current_value: ['ziyaret'],
+            previous_value: [],
+          },
+        },
+      ],
+    };
+
+    const parsed = ChatwootConversationUpdatedSchema.safeParse(payload);
+    expect(parsed.success).toBe(true);
+  });
 });

@@ -3,6 +3,7 @@
  * Handles lead creation (conversation_created / message_created) and
  * label-driven CRM updates (conversation_updated).
  */
+import { env } from '@/lib/env';
 import {
   CHATWOOT_DORM_AWAITING_LABELS,
   CHATWOOT_FUNNEL_LABELS,
@@ -19,8 +20,14 @@ import {
   getLabelFieldTargets,
   RETRY_DELAYS_MS,
 } from '@/lib/constants';
+import { persistChatwootConversationLink, shouldSkipInboundEcho } from '@/lib/chatwoot/sync-engine';
+import { isChatwootAssigneeSyncEnabled, isChatwootLabelSyncEnabled } from '@/lib/env';
+import type { LeadContactIdentifierKind } from '@/lib/leads/contact-identifier';
 import { createLeadFromWebhook } from '@/lib/leads/create-lead';
+import { mergeChatwootIntoExistingLead } from '@/lib/leads/merge-chatwoot-duplicate';
+import { applyChatwootAssigneeToLead, pushAssigneeToChatwoot } from '@/lib/leads/sync-assignee';
 import { buildChatwootSourceDetails } from '@/lib/leads/source-details';
+import { resolveInboundAssignee } from '@/lib/webhooks/extract-assignee';
 import { createServiceClient } from '@/lib/supabase/service';
 import { sendTelegramToManagers } from '@/lib/telegram';
 import {
@@ -35,6 +42,29 @@ type LeadsUpdate = Database['public']['Tables']['leads']['Update'];
 
 type InboundChatwootPayload = ChatwootConversationCreated | ChatwootMessageCreated;
 
+type ChatwootPhonePayload = {
+  channel?: string;
+  meta?: ChatwootConversationCreated['meta'];
+  contact?: {
+    phone_number?: string | null;
+    name?: string;
+    identifier?: string;
+    additional_attributes?: Record<string, unknown>;
+  };
+  sender?: {
+    phone_number?: string | null;
+    name?: string;
+    identifier?: string;
+    additional_attributes?: Record<string, unknown>;
+  };
+};
+
+/** Resolved contact identifier for lead creation. */
+type ResolvedChatwootContact = {
+  kind: LeadContactIdentifierKind;
+  raw: string;
+};
+
 /** Lead row fields loaded for label sync. */
 interface LeadSyncRow {
   uuid: string;
@@ -46,6 +76,8 @@ interface LeadSyncRow {
   lead_source: string;
   is_organic: boolean | null;
   source_details: Record<string, unknown> | null;
+  label_sync_source: string | null;
+  label_synced_at: string | null;
 }
 
 /** Record of a single field change for contact_history. */
@@ -108,13 +140,173 @@ export async function processChatwoot(body: unknown): Promise<void> {
   const payload = parsed.data;
 
   if (payload.event === 'conversation_updated') {
-    await withRetry(() => handleLeadUpdate(payload), 'label sync');
+    await withRetry(() => handleLeadUpdate(payload), 'conversation update');
     return;
   }
 
   if (payload.event === 'conversation_created' || payload.event === 'message_created') {
+    if (payload.event === 'message_created' && payload.message_type === 'outgoing') {
+      return;
+    }
     await handleLeadCreate(payload);
   }
+}
+
+/**
+ * Resolves a contact phone from Chatwoot meta, contact, or sender fields.
+ * @param payload - Chatwoot payload subset that may carry phone numbers.
+ * @returns Phone string or null.
+ */
+function extractChatwootPhone(payload: ChatwootPhonePayload): string | null {
+  const candidates = [
+    payload.meta?.sender?.phone_number,
+    payload.contact?.phone_number,
+    payload.sender?.phone_number,
+  ];
+
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Reads Instagram username from Chatwoot additional_attributes.
+ * @param attrs - Chatwoot contact additional_attributes object.
+ * @returns Username or null.
+ */
+function readInstagramUsername(attrs: Record<string, unknown> | undefined): string | null {
+  if (!attrs) return null;
+  const username = attrs.social_instagram_user_name;
+  if (typeof username === 'string' && username.trim().length > 0) {
+    return username.trim();
+  }
+  return null;
+}
+
+/**
+ * Resolves Instagram handle from Chatwoot contact, sender, or meta sender fields.
+ * @param payload - Chatwoot payload subset that may carry Instagram metadata.
+ * @returns Handle string or null.
+ */
+function extractChatwootInstagramHandle(payload: ChatwootPhonePayload): string | null {
+  const holders = [payload.contact, payload.sender, payload.meta?.sender];
+
+  for (const holder of holders) {
+    if (!holder) continue;
+
+    const fromAttrs = readInstagramUsername(holder.additional_attributes);
+    if (fromAttrs) return fromAttrs;
+
+    if (typeof holder.identifier === 'string' && holder.identifier.trim().length > 0) {
+      const identifier = holder.identifier.trim();
+      if (identifier !== 'sender_username') {
+        return identifier;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Returns true when the Chatwoot channel is Instagram.
+ * @param channel - Chatwoot channel string from payload.
+ */
+function isInstagramChannel(channel: string | undefined): boolean {
+  return (channel ?? '').toLowerCase().includes('instagram');
+}
+
+/**
+ * Resolves phone or Instagram handle for lead creation from a Chatwoot payload.
+ * @param payload - Inbound Chatwoot payload.
+ * @returns Contact kind and raw value, or null when neither is available.
+ */
+function resolveChatwootContact(payload: ChatwootPhonePayload): ResolvedChatwootContact | null {
+  const phone = extractChatwootPhone(payload);
+  if (phone) {
+    return { kind: 'phone', raw: phone };
+  }
+
+  if (isInstagramChannel(payload.channel)) {
+    const handle = extractChatwootInstagramHandle(payload);
+    if (handle) {
+      return { kind: 'instagram', raw: handle };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Resolves display name from Chatwoot meta, contact, or sender fields.
+ * @param payload - Chatwoot payload subset that may carry a name.
+ * @returns Name string or null.
+ */
+function extractChatwootLeadName(payload: ChatwootPhonePayload): string | null {
+  const candidates = [payload.meta?.sender?.name, payload.contact?.name, payload.sender?.name];
+
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Resolves Chatwoot message id from message object or first entry in messages[].
+ * @param payload - Inbound Chatwoot payload.
+ * @returns Message id or fallback string.
+ */
+function resolveChatwootMessageId(payload: InboundChatwootPayload): number | string {
+  if (payload.message?.id != null) {
+    return payload.message.id;
+  }
+
+  const withMessages = payload as InboundChatwootPayload & {
+    messages?: { id?: number }[];
+  };
+
+  const firstId = withMessages.messages?.[0]?.id;
+  return firstId ?? 'unknown';
+}
+
+function inboundPayloadFromConversationUpdated(
+  payload: ChatwootConversationUpdated,
+): InboundChatwootPayload {
+  return {
+    event: 'conversation_created',
+    id: payload.id,
+    channel: payload.channel,
+    meta: payload.meta,
+    contact: payload.contact,
+    sender: payload.sender,
+    conversation: payload.conversation,
+  };
+}
+
+/**
+ * Returns true when conversation_updated indicates the thread was reopened.
+ * @param changedAttributes - Chatwoot changed_attributes array.
+ */
+function conversationWasReopened(
+  changedAttributes: ChatwootConversationUpdated['changed_attributes'],
+): boolean {
+  for (const attr of changedAttributes) {
+    if (!('status' in attr)) continue;
+    const status = attr.status as { current_value?: unknown; previous_value?: unknown };
+    const current = String(status.current_value ?? '').toLowerCase();
+    const previous = String(status.previous_value ?? '').toLowerCase();
+    if (current === 'open' && previous !== 'open') {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -122,26 +314,26 @@ export async function processChatwoot(body: unknown): Promise<void> {
  * @param payload - Parsed inbound Chatwoot payload.
  */
 async function handleLeadCreate(payload: InboundChatwootPayload): Promise<void> {
-  const phone = payload.meta?.sender?.phone_number;
+  const contact = resolveChatwootContact(payload);
+  const conversationId = payload.conversation?.id ?? payload.id;
 
-  if (!phone) {
-    console.error('[chatwoot] missing phone number in payload');
+  if (!contact) {
+    console.error(
+      `[chatwoot] missing contact identifier event=${payload.event} conversation=${conversationId} channel=${payload.channel ?? 'n/a'} message_type=${payload.message_type ?? 'n/a'}`,
+    );
     return;
   }
 
-  const channelLower = (payload.channel ?? '').toLowerCase();
-  const isInstagram = channelLower.includes('instagram');
+  const isInstagram = isInstagramChannel(payload.channel);
   const channel = isInstagram ? 'instagram' : 'whatsapp';
   const leadSource = isInstagram ? 'instagram' : 'whatsapp';
 
-  const referral = payload.additional_attributes?.referral as
-    | Record<string, string>
-    | undefined;
+  const referral = payload.additional_attributes?.referral as Record<string, string> | undefined;
 
-  const externalId = `conv_${payload.id}_msg_${payload.message?.id ?? 'unknown'}`;
-  const chatwootUrl = payload.conversation?.id
-    ? `https://app.chatwoot.com/conversations/${payload.conversation.id}`
-    : null;
+  const messageId = resolveChatwootMessageId(payload);
+  const externalId = `conv_${conversationId}_msg_${messageId}`;
+  const baseUrl = env.CHATWOOT_BASE_URL.replace(/\/$/, '');
+  const chatwootUrl = `${baseUrl}/app/conversations/${conversationId}`;
 
   const sourceDetails = buildChatwootSourceDetails(
     {
@@ -162,17 +354,74 @@ async function handleLeadCreate(payload: InboundChatwootPayload): Promise<void> 
     false,
   );
 
-  await createLeadFromWebhook({
-    rawPhone: phone,
-    leadName: payload.meta?.sender?.name ?? null,
+  const result = await createLeadFromWebhook({
+    identifierKind: contact.kind,
+    rawPhone: contact.kind === 'phone' ? contact.raw : undefined,
+    instagramHandle: contact.kind === 'instagram' ? contact.raw : undefined,
+    leadName: extractChatwootLeadName(payload),
     leadSource,
     messageFrom: channel,
     language: 'tr',
     isOrganic: referral ? false : true,
     sourceDetails,
     interactionSource: channel,
-    metadata: { chatwoot_event: payload.event, payload_id: payload.id },
+    metadata: {
+      chatwoot_event: payload.event,
+      payload_id: payload.id,
+      conversation_id: conversationId,
+    },
   });
+
+  const leadUuid = result.type === 'created' ? result.uuid : result.existingUuid;
+
+  if (result.type === 'created') {
+    console.info(
+      `[chatwoot] lead created uuid=${result.uuid} event=${payload.event} conversation=${conversationId}`,
+    );
+  } else {
+    await mergeChatwootIntoExistingLead(result.existingUuid, sourceDetails, {
+      leadName: extractChatwootLeadName(payload),
+      messageFrom: channel,
+    });
+    console.info(
+      `[chatwoot] merged into existing lead=${result.existingUuid} conversation=${conversationId}`,
+    );
+  }
+
+  await persistChatwootConversationLink(
+    leadUuid,
+    conversationId,
+    payload.contact?.id ?? payload.sender?.id ?? null,
+  );
+
+  const inboundAgent = resolveInboundAssignee(payload);
+  if (inboundAgent) {
+    await tryInboundAssigneeSync(payload, leadUuid, conversationId);
+  } else if (result.type === 'created' && result.assignedTo) {
+    await pushAssigneeToChatwoot(leadUuid, result.assignedTo);
+  }
+}
+
+/**
+ * Syncs Chatwoot assignee to CRM when enabled and assignee is present on payload.
+ * @param payload - Inbound or updated Chatwoot payload.
+ * @param leadUuid - CRM lead UUID.
+ * @param conversationId - Chatwoot conversation id.
+ */
+async function tryInboundAssigneeSync(
+  payload: InboundChatwootPayload | ChatwootConversationUpdated,
+  leadUuid: string,
+  conversationId: number,
+): Promise<void> {
+  if (!isChatwootAssigneeSyncEnabled()) return;
+
+  const agent = resolveInboundAssignee(payload);
+  if (!agent) return;
+
+  const syncResult = await applyChatwootAssigneeToLead(leadUuid, agent, conversationId);
+  if (syncResult.type === 'updated') {
+    console.info(`[chatwoot] assignee synced lead=${leadUuid} conversation=${conversationId}`);
+  }
 }
 
 /**
@@ -190,22 +439,48 @@ function normalizeLabelArray(value: unknown): string[] {
  * @param changedAttributes - Chatwoot changed_attributes array.
  * @returns Added/removed labels or null if labels key absent.
  */
+function normalizeLabelsChangeValue(value: unknown): string[] {
+  const fromArray = normalizeLabelArray(value);
+  if (fromArray.length > 0) return fromArray;
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
+  }
+
+  return [];
+}
+
+/**
+ * Reads label diff from changed_attributes (Chatwoot uses label_list or labels).
+ * @param changedAttributes - Chatwoot changed_attributes array.
+ * @returns Added/removed labels or null if no label change entry.
+ */
 function extractLabelDiff(
   changedAttributes: ChatwootConversationUpdated['changed_attributes'],
 ): { added: string[]; removed: string[] } | null {
+  const labelKeys = ['label_list', 'labels'] as const;
+
   for (const attr of changedAttributes) {
-    if (!('labels' in attr)) continue;
+    for (const key of labelKeys) {
+      if (!(key in attr)) continue;
 
-    const labelsChange = attr.labels;
-    const current = normalizeLabelArray(labelsChange.current_value);
-    const previous = normalizeLabelArray(labelsChange.previous_value);
-    const currentSet = new Set(current);
-    const previousSet = new Set(previous);
+      const labelsChange = attr[key] as {
+        current_value?: unknown;
+        previous_value?: unknown;
+      };
+      const current = normalizeLabelsChangeValue(labelsChange.current_value);
+      const previous = normalizeLabelsChangeValue(labelsChange.previous_value);
+      const currentSet = new Set(current);
+      const previousSet = new Set(previous);
 
-    const added = current.filter((l) => !previousSet.has(l));
-    const removed = previous.filter((l) => !currentSet.has(l));
+      const added = current.filter((l) => !previousSet.has(l));
+      const removed = previous.filter((l) => !currentSet.has(l));
 
-    return { added, removed };
+      return { added, removed };
+    }
   }
 
   return null;
@@ -306,10 +581,7 @@ function getLeadsUpdateField(
  * @param field - Field name on leads.
  * @returns Current stored value.
  */
-function getLeadFieldValue(
-  lead: LeadSyncRow,
-  field: string,
-): string | boolean | null {
+function getLeadFieldValue(lead: LeadSyncRow, field: string): string | boolean | null {
   switch (field) {
     case 'funnel_status':
       return lead.funnel_status;
@@ -349,18 +621,32 @@ function resolveClearedValue(field: string): string | boolean | null {
  * @param conversationId - Chatwoot conversation id.
  * @returns Lead row or null.
  */
-async function findLeadByChatwootConversation(
-  conversationId: number,
-): Promise<LeadSyncRow | null> {
+async function findLeadByChatwootConversation(conversationId: number): Promise<LeadSyncRow | null> {
   const client = createServiceClient();
   const idStr = String(conversationId);
 
+  const selectCols =
+    'uuid, funnel_status, student_stage, persona_type, special_state, message_from, lead_source, is_organic, source_details, label_sync_source, label_synced_at';
+
+  const { data: byConvId, error: convError } = await client
+    .from('leads')
+    .select(selectCols)
+    .eq('is_deleted', false)
+    .eq('is_archived', false)
+    .eq('chatwoot_conversation_id', conversationId)
+    .maybeSingle();
+
+  if (convError) {
+    throw new Error(`Lead lookup by conversation id failed: ${convError.message}`);
+  }
+
+  if (byConvId) return byConvId as LeadSyncRow;
+
   const { data: exact, error: exactError } = await client
     .from('leads')
-    .select(
-      'uuid, funnel_status, student_stage, persona_type, special_state, message_from, lead_source, is_organic, source_details',
-    )
+    .select(selectCols)
     .eq('is_deleted', false)
+    .eq('is_archived', false)
     .eq('source_details->>external_id', idStr)
     .maybeSingle();
 
@@ -373,10 +659,9 @@ async function findLeadByChatwootConversation(
   const prefix = `conv_${idStr}_%`;
   const { data: prefixed, error: prefixError } = await client
     .from('leads')
-    .select(
-      'uuid, funnel_status, student_stage, persona_type, special_state, message_from, lead_source, is_organic, source_details',
-    )
+    .select(selectCols)
     .eq('is_deleted', false)
+    .eq('is_archived', false)
     .like('source_details->>external_id', prefix)
     .limit(1)
     .maybeSingle();
@@ -393,19 +678,62 @@ async function findLeadByChatwootConversation(
  * @param payload - Parsed conversation_updated payload.
  */
 export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Promise<void> {
+  const conversationId = payload.conversation?.id ?? payload.id;
+
+  const existingLead = await findLeadByChatwootConversation(conversationId);
+  if (existingLead) {
+    await persistChatwootConversationLink(
+      existingLead.uuid,
+      conversationId,
+      payload.contact?.id ?? payload.sender?.id ?? null,
+    );
+    await tryInboundAssigneeSync(payload, existingLead.uuid, conversationId);
+  }
+
   const labelDiff = extractLabelDiff(payload.changed_attributes);
-  if (!labelDiff) return;
+
+  if (!labelDiff) {
+    if (conversationWasReopened(payload.changed_attributes)) {
+      const existing = await findLeadByChatwootConversation(conversationId);
+      if (!existing) {
+        const contact = resolveChatwootContact(payload);
+        if (contact) {
+          console.info(`[chatwoot] creating lead on reopen conversation=${conversationId}`);
+          await handleLeadCreate(inboundPayloadFromConversationUpdated(payload));
+        } else {
+          console.warn(
+            `[chatwoot] reopen without contact identifier conversation=${conversationId} — cannot create lead`,
+          );
+        }
+      }
+    }
+    return;
+  }
 
   const { added, removed } = labelDiff;
   if (added.length === 0 && removed.length === 0) return;
 
-  const conversationId = payload.conversation?.id ?? payload.id;
-  const lead = await findLeadByChatwootConversation(conversationId);
+  let lead = await findLeadByChatwootConversation(conversationId);
 
   if (!lead) {
-    console.warn(
-      `[chatwoot] no lead for conversation ${conversationId} (external_id lookup)`,
-    );
+    const contact = resolveChatwootContact(payload);
+    if (contact) {
+      console.info(`[chatwoot] creating lead before label sync conversation=${conversationId}`);
+      await handleLeadCreate(inboundPayloadFromConversationUpdated(payload));
+      lead = await findLeadByChatwootConversation(conversationId);
+    }
+  }
+
+  if (!lead) {
+    console.warn(`[chatwoot] no lead for conversation ${conversationId} (external_id lookup)`);
+    return;
+  }
+
+  if (
+    isChatwootLabelSyncEnabled() &&
+    shouldSkipInboundEcho(lead.label_sync_source, lead.label_synced_at)
+  ) {
+    console.info(`[chatwoot] label sync skipped — CRM echo window lead=${lead.uuid}`);
     return;
   }
 
@@ -478,7 +806,8 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
       if (target.table === 'leads') {
         const value = resolveLabelValue(label, target.field);
         if (value === null && target.field !== 'is_organic') continue;
-        const prev = getLeadsUpdateField(leadsUpdates, target.field) ?? getLeadFieldValue(lead, target.field);
+        const prev =
+          getLeadsUpdateField(leadsUpdates, target.field) ?? getLeadFieldValue(lead, target.field);
         assignLeadsField(leadsUpdates, target.field, value);
         recordChange(target.field, prev, value);
       }
@@ -511,7 +840,8 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
 
       if (target.table === 'source_details' && target.field === 'referral_domain') {
         const mapped = resolveLabelValue(label, 'referral_domain');
-        const current = referralDomain ?? (lead.source_details?.referral_domain as string | null) ?? null;
+        const current =
+          referralDomain ?? (lead.source_details?.referral_domain as string | null) ?? null;
         if (mapped !== null && current !== mapped) continue;
         const prev = current;
         referralDomain = null;
@@ -521,7 +851,8 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
 
       if (target.table === 'leads') {
         const mapped = resolveLabelValue(label, target.field);
-        const current = getLeadsUpdateField(leadsUpdates, target.field) ?? getLeadFieldValue(lead, target.field);
+        const current =
+          getLeadsUpdateField(leadsUpdates, target.field) ?? getLeadFieldValue(lead, target.field);
         if (mapped !== null && current !== mapped) continue;
         const prev = current;
         const cleared = resolveClearedValue(target.field);
@@ -539,11 +870,31 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
       ? lead.message_from
       : 'whatsapp';
 
-  if (Object.keys(leadsUpdates).length > 0) {
-    const { error: leadError } = await client.from('leads').update(leadsUpdates).eq('uuid', lead.uuid);
+  const labelSyncMeta =
+    isChatwootLabelSyncEnabled() && fieldChanges.length > 0
+      ? {
+          label_sync_source: 'chatwoot' as const,
+          label_synced_at: new Date().toISOString(),
+        }
+      : {};
+
+  if (Object.keys(leadsUpdates).length > 0 || Object.keys(labelSyncMeta).length > 0) {
+    const { error: leadError } = await client
+      .from('leads')
+      .update({ ...leadsUpdates, ...labelSyncMeta })
+      .eq('uuid', lead.uuid);
 
     if (leadError) {
       throw new Error(`leads update failed: ${leadError.message}`);
+    }
+  } else if (Object.keys(labelSyncMeta).length > 0) {
+    const { error: metaError } = await client
+      .from('leads')
+      .update(labelSyncMeta)
+      .eq('uuid', lead.uuid);
+
+    if (metaError) {
+      throw new Error(`label sync meta update failed: ${metaError.message}`);
     }
   }
 
@@ -564,10 +915,9 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
   }
 
   if (dormAwaiting !== undefined) {
-    const { error: dormError } = await client.from('lead_details').upsert(
-      { lead_uuid: lead.uuid, dorm_awaiting: dormAwaiting },
-      { onConflict: 'lead_uuid' },
-    );
+    const { error: dormError } = await client
+      .from('lead_details')
+      .upsert({ lead_uuid: lead.uuid, dorm_awaiting: dormAwaiting }, { onConflict: 'lead_uuid' });
 
     if (dormError) {
       throw new Error(`lead_details dorm_awaiting upsert failed: ${dormError.message}`);
@@ -575,10 +925,12 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
   }
 
   if (detailsUpdates.uni_year !== undefined) {
-    const { error: uniError } = await client.from('lead_details').upsert(
-      { lead_uuid: lead.uuid, uni_year: detailsUpdates.uni_year },
-      { onConflict: 'lead_uuid' },
-    );
+    const { error: uniError } = await client
+      .from('lead_details')
+      .upsert(
+        { lead_uuid: lead.uuid, uni_year: detailsUpdates.uni_year },
+        { onConflict: 'lead_uuid' },
+      );
 
     if (uniError) {
       throw new Error(`lead_details uni_year upsert failed: ${uniError.message}`);
@@ -591,11 +943,8 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
       interaction_type: 'status_change',
       interaction_source: interactionSource,
       funnel_status_at_time:
-        change.field === 'funnel_status'
-          ? (change.current_value as string)
-          : lead.funnel_status,
-      previous_status:
-        change.field === 'funnel_status' ? (change.previous_value as string) : null,
+        change.field === 'funnel_status' ? (change.current_value as string) : lead.funnel_status,
+      previous_status: change.field === 'funnel_status' ? (change.previous_value as string) : null,
       status_changed: change.field === 'funnel_status',
       notes: `Chatwoot label sync: ${change.field} updated`,
       metadata: {

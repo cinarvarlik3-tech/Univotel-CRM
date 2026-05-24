@@ -33,5 +33,20 @@ export function normalizePhone(raw: string): NormalizeResult {
     return { phone: cleaned, failed: false };
   }
 
-  return { phone: raw.trim(), failed: true };
+  return { phone: raw, failed: true };
+}
+
+/**
+ * Converts normalized Turkish mobile (05xxxxxxxxx) to E.164 (+905xxxxxxxxx) for Meta API.
+ * @param normalized - Output from normalizePhone when failed is false.
+ * @returns E.164 string or null if format is invalid.
+ */
+export function toE164(normalized: string): string | null {
+  if (/^05\d{9}$/.test(normalized)) {
+    return `+90${normalized.slice(1)}`;
+  }
+  if (/^\+905\d{9}$/.test(normalized.replace(/\s/g, ''))) {
+    return normalized.replace(/\s/g, '');
+  }
+  return null;
 }
