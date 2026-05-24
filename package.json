@@ -17,7 +17,8 @@
     "gen:types": "tsx scripts/gen-types.ts",
     "db:migrate": "pnpm exec supabase db push",
     "db:seed": "pnpm exec supabase db seed",
-    "telegram:setup-webhook": "tsx scripts/setup-telegram-webhook.ts",
+    "import:old-leads": "tsx scripts/import-old-leads.ts",
+    "import:old-leads:write": "tsx scripts/import-old-leads.ts --write",
     "supabase": "supabase",
     "prepare": "husky"
   },

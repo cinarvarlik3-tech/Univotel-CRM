@@ -4,6 +4,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { IconChevronDown, IconPencil } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
+import { CollapsiblePanel } from '@/components/ui/collapsible-panel';
 import { cn } from '@/lib/utils';
 
 interface LeadSectionProps {
@@ -77,11 +78,9 @@ export function LeadSection({
         )}
       </div>
 
-      {expanded && (
-        <div className="mt-3 pl-5">
-          {editing ? <div className="space-y-4">{children}</div> : view}
-        </div>
-      )}
+      <CollapsiblePanel open={expanded} innerClassName="mt-3 pl-5">
+        {editing ? <div className="space-y-4">{children}</div> : view}
+      </CollapsiblePanel>
     </section>
   );
 }

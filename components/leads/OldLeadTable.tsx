@@ -10,10 +10,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { displayLeadContactIdentifier } from '@/lib/ui/display-phone';
+import { cn } from '@/lib/utils';
 import type { OldLeadRow } from '@/types/domain';
 
 interface OldLeadTableProps {
   leads: OldLeadRow[];
+  selectedId?: string;
+  onRowClick?: (uuid: string) => void;
 }
 
 /**
@@ -43,7 +46,7 @@ function assigneeLabel(lead: OldLeadRow): string {
  * @param props - Old lead rows.
  * @returns HTML table.
  */
-export function OldLeadTable({ leads }: OldLeadTableProps) {
+export function OldLeadTable({ leads, selectedId, onRowClick }: OldLeadTableProps) {
   if (leads.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-text-secondary">
@@ -68,26 +71,36 @@ export function OldLeadTable({ leads }: OldLeadTableProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {leads.map((lead) => (
-            <TableRow key={lead.uuid}>
-              <TableCell className="font-medium">{lead.lead_name ?? '—'}</TableCell>
-              <TableCell className="text-text-secondary">
-                {displayLeadContactIdentifier(lead)}
-              </TableCell>
-              <TableCell className="text-text-secondary">{lead.lead_source}</TableCell>
-              <TableCell className="text-text-secondary">{universityLabel(lead)}</TableCell>
-              <TableCell className="text-text-secondary">{lead.funnel_status}</TableCell>
-              <TableCell className="text-text-secondary">{assigneeLabel(lead)}</TableCell>
-              <TableCell className="text-text-secondary">
-                {new Date(lead.created_at).toLocaleString('tr-TR')}
-              </TableCell>
-              <TableCell className="text-text-secondary">
-                {lead.last_contact_at
-                  ? new Date(lead.last_contact_at).toLocaleString('tr-TR')
-                  : '—'}
-              </TableCell>
-            </TableRow>
-          ))}
+          {leads.map((lead) => {
+            const selected = selectedId === lead.uuid;
+            return (
+              <TableRow
+                key={lead.uuid}
+                data-state={selected ? 'selected' : undefined}
+                className={cn(onRowClick && 'cursor-pointer')}
+                onClick={() => onRowClick?.(lead.uuid)}
+              >
+                <TableCell className={cn('font-medium', selected && 'text-brand-blue')}>
+                  {lead.lead_name ?? '—'}
+                </TableCell>
+                <TableCell className="text-text-secondary">
+                  {displayLeadContactIdentifier(lead)}
+                </TableCell>
+                <TableCell className="text-text-secondary">{lead.lead_source}</TableCell>
+                <TableCell className="text-text-secondary">{universityLabel(lead)}</TableCell>
+                <TableCell className="text-text-secondary">{lead.funnel_status}</TableCell>
+                <TableCell className="text-text-secondary">{assigneeLabel(lead)}</TableCell>
+                <TableCell className="text-text-secondary">
+                  {new Date(lead.created_at).toLocaleString('tr-TR')}
+                </TableCell>
+                <TableCell className="text-text-secondary">
+                  {lead.last_contact_at
+                    ? new Date(lead.last_contact_at).toLocaleString('tr-TR')
+                    : '—'}
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>

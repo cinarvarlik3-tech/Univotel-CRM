@@ -101,17 +101,18 @@ export function Sidebar({ userName, userRole, isManager, isSuperadminUser }: Sid
 
   return (
     <>
-      {isOpen && pinned && (
-        <div
-          className="fixed inset-0 z-30 bg-black/20 lg:hidden"
-          onClick={() => setPinned(false)}
-          aria-hidden
-        />
-      )}
+      <div
+        className={cn(
+          'fixed inset-0 z-30 bg-black/20 transition-opacity duration-300 ease-in-out lg:hidden motion-reduce:transition-none',
+          isOpen && pinned ? 'opacity-100' : 'pointer-events-none opacity-0',
+        )}
+        onClick={() => setPinned(false)}
+        aria-hidden={!(isOpen && pinned)}
+      />
 
       <aside
         className={cn(
-          'fixed left-0 top-0 z-40 flex h-full flex-col bg-surface-sidebar transition-[width] duration-200 ease-in-out',
+          'fixed left-0 top-0 z-40 flex h-full flex-col bg-surface-sidebar transition-[width] duration-300 ease-in-out motion-reduce:transition-none',
           isOpen ? 'w-[220px]' : 'w-[60px]',
         )}
         onMouseEnter={() => setExpanded(true)}
@@ -119,7 +120,12 @@ export function Sidebar({ userName, userRole, isManager, isSuperadminUser }: Sid
           if (!pinned) setExpanded(false);
         }}
       >
-        <div className="flex h-[52px] items-center gap-2 px-3.5">
+        <div
+          className={cn(
+            'flex h-[52px] items-center gap-2',
+            isOpen ? 'px-3.5' : 'justify-center px-0',
+          )}
+        >
           <button
             type="button"
             className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[var(--sidebar-text)] hover:bg-[var(--sidebar-icon-hover-bg)]"
@@ -128,12 +134,19 @@ export function Sidebar({ userName, userRole, isManager, isSuperadminUser }: Sid
           >
             <IconMenu2 size={20} className="opacity-80" />
           </button>
-          {isOpen && <UnivotelLogoWhite size={32} />}
+          <div
+            className={cn(
+              'overflow-hidden transition-[opacity,max-width] duration-300 ease-in-out motion-reduce:transition-none',
+              isOpen ? 'max-w-[32px] opacity-100' : 'max-w-0 opacity-0',
+            )}
+          >
+            <UnivotelLogoWhite size={32} />
+          </div>
         </div>
 
         <Separator className="bg-[var(--sidebar-icon-hover-bg)]" />
 
-        <nav className="flex flex-1 flex-col gap-0.5 px-2 py-3">
+        <nav className={cn('flex flex-1 flex-col gap-0.5 py-3', isOpen ? 'px-2' : 'px-0')}>
           {visibleNav.map((item) => {
             const active = isActive(item.href);
             const Icon = item.icon;
@@ -142,20 +155,28 @@ export function Sidebar({ userName, userRole, isManager, isSuperadminUser }: Sid
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex h-10 items-center gap-3 rounded-lg px-2.5 text-[13px] font-medium transition-colors',
+                  'flex h-10 items-center rounded-lg text-[13px] font-medium transition-colors',
+                  isOpen ? 'gap-3 px-2.5' : 'justify-center px-0',
                   active
                     ? 'bg-[var(--sidebar-icon-active-bg)] text-[var(--sidebar-text)]'
                     : 'text-[var(--sidebar-icon-idle)] hover:bg-[var(--sidebar-icon-hover-bg)] hover:text-[var(--sidebar-text)]',
                 )}
               >
                 <Icon size={20} className="shrink-0" />
-                {isOpen && <span className="truncate">{item.label}</span>}
+                <span
+                  className={cn(
+                    'truncate transition-[opacity,max-width] duration-300 ease-in-out motion-reduce:transition-none',
+                    isOpen ? 'max-w-[160px] opacity-100' : 'max-w-0 opacity-0',
+                  )}
+                >
+                  {item.label}
+                </span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="mt-auto px-2 pb-3">
+        <div className={cn('mt-auto pb-3', isOpen ? 'px-2' : 'px-0')}>
           <Separator className="mb-2 bg-[var(--sidebar-icon-hover-bg)]" />
           {BOTTOM_ITEMS.map((item) => {
             const Icon = item.icon;
@@ -165,34 +186,48 @@ export function Sidebar({ userName, userRole, isManager, isSuperadminUser }: Sid
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex h-10 items-center gap-3 rounded-lg px-2.5 text-[13px] font-medium transition-colors',
+                  'flex h-10 items-center rounded-lg text-[13px] font-medium transition-colors',
+                  isOpen ? 'gap-3 px-2.5' : 'justify-center px-0',
                   active
                     ? 'bg-[var(--sidebar-icon-active-bg)] text-[var(--sidebar-text)]'
                     : 'text-[var(--sidebar-icon-idle)] hover:bg-[var(--sidebar-icon-hover-bg)] hover:text-[var(--sidebar-text)]',
                 )}
               >
                 <Icon size={20} className="shrink-0" />
-                {isOpen && <span className="truncate">{item.label}</span>}
+                <span
+                  className={cn(
+                    'truncate transition-[opacity,max-width] duration-300 ease-in-out motion-reduce:transition-none',
+                    isOpen ? 'max-w-[160px] opacity-100' : 'max-w-0 opacity-0',
+                  )}
+                >
+                  {item.label}
+                </span>
               </Link>
             );
           })}
 
-          <div className="mt-2 flex items-center gap-2.5 px-2.5 py-1.5">
+          <div
+            className={cn(
+              'mt-2 flex items-center py-1.5',
+              isOpen ? 'gap-2.5 px-2.5' : 'justify-center px-0',
+            )}
+          >
             <Avatar>
               <AvatarFallback className="bg-[var(--sidebar-icon-active-bg)] text-[var(--sidebar-text)]">
                 {getInitials(userName)}
               </AvatarFallback>
             </Avatar>
-            {isOpen && (
-              <div className="min-w-0">
-                <p className="truncate text-xs font-medium text-[var(--sidebar-text)]">
-                  {userName}
-                </p>
-                <p className="truncate text-[11px] capitalize text-[var(--sidebar-icon-idle)]">
-                  {userRole}
-                </p>
-              </div>
-            )}
+            <div
+              className={cn(
+                'min-w-0 overflow-hidden transition-[opacity,max-width] duration-300 ease-in-out motion-reduce:transition-none',
+                isOpen ? 'max-w-[140px] opacity-100' : 'max-w-0 opacity-0',
+              )}
+            >
+              <p className="truncate text-xs font-medium text-[var(--sidebar-text)]">{userName}</p>
+              <p className="truncate text-[11px] capitalize text-[var(--sidebar-icon-idle)]">
+                {userRole}
+              </p>
+            </div>
           </div>
         </div>
       </aside>

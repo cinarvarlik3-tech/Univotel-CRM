@@ -252,6 +252,38 @@ export interface OldLeadRow {
   old_lead_details?: { university: string | null } | { university: string | null }[] | null;
 }
 
+/** Full old_lead_details row from import. */
+export interface OldLeadDetailsRow {
+  lead_uuid: string;
+  university: string | null;
+  interested_hotel: string[];
+  rec_hotel: string | null;
+  room_type: string[];
+  budget_min: number | null;
+  budget_max: number | null;
+  move_in: string | null;
+  dorm_awaiting: string[];
+  uni_year: string | null;
+  parent_name: string | null;
+  kvkk_opt_in: boolean | null;
+  marketing_opt_in: boolean | null;
+  student_gender: string | null;
+  nationality: string | null;
+  preferred_district: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Old lead with full detail fields for sidebar panel. */
+export interface OldLeadDetailRow extends OldLeadRow {
+  updated_at: string;
+  language: string;
+  lead_score: number;
+  chatwoot_contact_id: number | null;
+  source_details: Record<string, unknown> | null;
+  old_lead_details?: OldLeadDetailsRow | OldLeadDetailsRow[] | null;
+}
+
 /** Archive analytics summary payload. */
 export interface ArchiveSummaryPayload {
   totals: { won: number; lost: number; total: number };

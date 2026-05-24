@@ -10,6 +10,7 @@ import {
   OldLeadListToolbar,
   type OldLeadListFilterState,
 } from '@/components/leads/OldLeadListToolbar';
+import { OldLeadDetailPanel } from '@/components/leads/OldLeadDetailPanel';
 import { OldLeadTable } from '@/components/leads/OldLeadTable';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -49,6 +50,8 @@ export default function OldLeadsPage() {
   const [accumulatedLeads, setAccumulatedLeads] = useState<OldLeadRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const canAccess = isManagerOrAbove(user?.role);
   const queryString = buildQueryFromState(appliedState);
@@ -90,6 +93,16 @@ export default function OldLeadsPage() {
     setLoadingMore(false);
   }, [nextCursor, appliedState]);
 
+  function openLead(uuid: string) {
+    setSelectedLeadId(uuid);
+    setPanelOpen(true);
+  }
+
+  function closePanel() {
+    setPanelOpen(false);
+    setSelectedLeadId(null);
+  }
+
   if (user && !canAccess) {
     return null;
   }
@@ -114,7 +127,13 @@ export default function OldLeadsPage() {
       {isLoading && <Skeleton className="h-64 w-full" />}
       {error && <p className="text-sm text-brand-red">Failed to load old leads</p>}
 
-      {!isLoading && <OldLeadTable leads={accumulatedLeads} />}
+      {!isLoading && (
+        <OldLeadTable
+          leads={accumulatedLeads}
+          selectedId={selectedLeadId ?? undefined}
+          onRowClick={openLead}
+        />
+      )}
 
       {nextCursor && (
         <div className="mt-4 flex justify-center">
@@ -123,6 +142,8 @@ export default function OldLeadsPage() {
           </Button>
         </div>
       )}
+
+      <OldLeadDetailPanel leadId={selectedLeadId} open={panelOpen} onClose={closePanel} />
     </AppShell>
   );
 }

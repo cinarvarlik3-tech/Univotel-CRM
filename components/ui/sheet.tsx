@@ -11,6 +11,13 @@ const SheetTrigger = SheetPrimitive.Trigger;
 const SheetClose = SheetPrimitive.Close;
 const SheetPortal = SheetPrimitive.Portal;
 
+/** Shared enter/exit animation classes for sheet surfaces. */
+const sheetOverlayAnimation =
+  'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:duration-300 data-[state=open]:duration-300 motion-reduce:animate-none motion-reduce:duration-0';
+
+const sheetContentAnimation =
+  'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:duration-300 data-[state=open]:duration-300 motion-reduce:animate-none motion-reduce:duration-0';
+
 /**
  * Sheet overlay backdrop.
  * @param props - Overlay props from Radix.
@@ -21,10 +28,7 @@ const SheetOverlay = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof SheetPrimitive.Overlay>
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Overlay
-    className={cn(
-      'fixed inset-0 z-50 bg-black/40 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-      className,
-    )}
+    className={cn('fixed inset-0 z-50 bg-black/40', sheetOverlayAnimation, className)}
     {...props}
     ref={ref}
   />
@@ -32,8 +36,22 @@ const SheetOverlay = React.forwardRef<
 SheetOverlay.displayName = SheetPrimitive.Overlay.displayName;
 
 const sheetVariants = {
-  right:
-    'inset-y-0 right-0 h-full w-[480px] max-w-[100vw] border-l border-border-default data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right',
+  right: cn(
+    'inset-y-0 right-0 h-full w-[480px] max-w-[100vw] border-l border-border-default',
+    'data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right',
+  ),
+  left: cn(
+    'inset-y-0 left-0 h-full w-[480px] max-w-[100vw] border-r border-border-default',
+    'data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left',
+  ),
+  top: cn(
+    'inset-x-0 top-0 w-full border-b border-border-default',
+    'data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top',
+  ),
+  bottom: cn(
+    'inset-x-0 bottom-0 w-full border-t border-border-default',
+    'data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom',
+  ),
 };
 
 interface SheetContentProps extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content> {
@@ -55,7 +73,8 @@ const SheetContent = React.forwardRef<
     <SheetPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed z-50 flex flex-col bg-surface-card shadow-lg transition ease-in-out data-[state=closed]:duration-200 data-[state=open]:duration-300',
+        'fixed z-50 flex flex-col bg-surface-card shadow-lg',
+        sheetContentAnimation,
         sheetVariants[side],
         className,
       )}

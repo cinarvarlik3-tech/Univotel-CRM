@@ -4,6 +4,7 @@
 import { IconFilter } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { CollapsiblePanel } from '@/components/ui/collapsible-panel';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import {
@@ -108,7 +109,7 @@ export function LeadListToolbar({
         </Button>
       </div>
 
-      {showFilters && (
+      <CollapsiblePanel open={showFilters}>
         <div className="rounded-[10px] border border-border-default bg-surface-card p-4">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             <div className="col-span-full flex items-center gap-2">
@@ -365,7 +366,7 @@ export function LeadListToolbar({
             </Button>
           </div>
         </div>
-      )}
+      </CollapsiblePanel>
     </div>
   );
 }
