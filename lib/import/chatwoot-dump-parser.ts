@@ -8,9 +8,17 @@ import type {
   ChatwootDumpData,
   ChatwootInboxRow,
   ChatwootMessageRow,
+  ChatwootUserRow,
 } from '@/lib/import/types';
 
-const PARSED_TABLES = new Set(['accounts', 'contacts', 'conversations', 'inboxes', 'messages']);
+const PARSED_TABLES = new Set([
+  'accounts',
+  'contacts',
+  'conversations',
+  'inboxes',
+  'messages',
+  'users',
+]);
 
 /**
  * Unescapes a PostgreSQL COPY field value.
@@ -125,6 +133,58 @@ function toInt(value: string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function toBool(value: string | null): boolean {
+  return value === 't' || value === 'true' || value === '1';
+}
+
+/**
+ * Parses users and messages from a Chatwoot dump (lighter path for message ETL).
+ * @param dumpPath - Path to readable_database.sql.
+ */
+export function loadChatwootMessagesDump(dumpPath: string): {
+  users: Map<number, ChatwootUserRow>;
+  messages: ChatwootMessageRow[];
+} {
+  const tables = parseChatwootDumpTables(dumpPath);
+
+  const users = new Map<number, ChatwootUserRow>();
+  for (const row of tables.get('users')?.rows ?? []) {
+    const id = toInt(row.id);
+    if (id == null) continue;
+    users.set(id, {
+      id,
+      name: row.name,
+      display_name: row.display_name,
+    });
+  }
+
+  const messages: ChatwootMessageRow[] = [];
+  for (const row of tables.get('messages')?.rows ?? []) {
+    const parsed = parseMessageRow(row);
+    if (parsed) messages.push(parsed);
+  }
+
+  return { users, messages };
+}
+
+function parseMessageRow(row: Record<string, string | null>): ChatwootMessageRow | null {
+  const id = toInt(row.id);
+  const conversationId = toInt(row.conversation_id);
+  const messageType = toInt(row.message_type);
+  if (id == null || conversationId == null || messageType == null) return null;
+
+  return {
+    id,
+    content: row.content,
+    conversation_id: conversationId,
+    message_type: messageType,
+    created_at: row.created_at ?? new Date(0).toISOString(),
+    sender_type: row.sender_type,
+    sender_id: toInt(row.sender_id),
+    private: toBool(row.private),
+  };
+}
+
 /**
  * Builds typed indexes from parsed COPY table rows.
  * @param dumpPath - Path to Chatwoot SQL dump.
@@ -181,24 +241,27 @@ export function loadChatwootDump(dumpPath: string): ChatwootDumpData {
     });
   }
 
+  const users = new Map<number, ChatwootUserRow>();
+  for (const row of tables.get('users')?.rows ?? []) {
+    const id = toInt(row.id);
+    if (id == null) continue;
+    users.set(id, {
+      id,
+      name: row.name,
+      display_name: row.display_name,
+    });
+  }
+
+  const messages: ChatwootMessageRow[] = [];
   const messagesByConversation = new Map<number, ChatwootMessageRow[]>();
   for (const row of tables.get('messages')?.rows ?? []) {
-    const id = toInt(row.id);
-    const conversationId = toInt(row.conversation_id);
-    const messageType = toInt(row.message_type);
-    if (id == null || conversationId == null || messageType == null) continue;
+    const message = parseMessageRow(row);
+    if (!message) continue;
 
-    const message: ChatwootMessageRow = {
-      id,
-      content: row.content,
-      conversation_id: conversationId,
-      message_type: messageType,
-      created_at: row.created_at ?? new Date(0).toISOString(),
-    };
-
-    const list = messagesByConversation.get(conversationId) ?? [];
+    messages.push(message);
+    const list = messagesByConversation.get(message.conversation_id) ?? [];
     list.push(message);
-    messagesByConversation.set(conversationId, list);
+    messagesByConversation.set(message.conversation_id, list);
   }
 
   for (const list of messagesByConversation.values()) {
@@ -210,6 +273,8 @@ export function loadChatwootDump(dumpPath: string): ChatwootDumpData {
     contacts,
     conversations,
     inboxes,
+    users,
+    messages,
     messagesByConversation,
   };
 }

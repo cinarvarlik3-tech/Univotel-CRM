@@ -26,6 +26,15 @@ export interface ChatwootMessageRow {
   conversation_id: number;
   message_type: number;
   created_at: string;
+  sender_type: string | null;
+  sender_id: number | null;
+  private: boolean;
+}
+
+export interface ChatwootUserRow {
+  id: number;
+  name: string | null;
+  display_name: string | null;
 }
 
 export interface ChatwootInboxRow {
@@ -39,6 +48,8 @@ export interface ChatwootDumpData {
   contacts: Map<number, ChatwootContactRow>;
   conversations: ChatwootConversationRow[];
   inboxes: Map<number, ChatwootInboxRow>;
+  users: Map<number, ChatwootUserRow>;
+  messages: ChatwootMessageRow[];
   messagesByConversation: Map<number, ChatwootMessageRow[]>;
 }
 

@@ -1,13 +1,16 @@
 /**
  * Read-only slide-over panel for imported old lead details.
  */
+import { useEffect, useState } from 'react';
 import { IconX } from '@tabler/icons-react';
+import { OldLeadChatView } from '@/components/leads/OldLeadChatView';
 import { SourceDetailsPanel } from '@/components/leads/SourceDetailsPanel';
 import { Button } from '@/components/ui/button';
 import { KvList } from '@/components/ui/kv-list';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useOldLeadDetail } from '@/hooks/useOldLeadDetail';
 import { displayLeadContactIdentifier } from '@/lib/ui/display-phone';
 import type { OldLeadDetailRow } from '@/types/domain';
@@ -89,13 +92,27 @@ function recordItems(lead: OldLeadDetailRow) {
  * @param props - Lead ID, open state, close handler.
  */
 export function OldLeadDetailPanel({ leadId, open, onClose }: OldLeadDetailPanelProps) {
+  const [tab, setTab] = useState('details');
   const { lead, details, loading, error } = useOldLeadDetail(
     open ? (leadId ?? undefined) : undefined,
   );
 
+  useEffect(() => {
+    if (!open) setTab('details');
+  }, [open]);
+
+  useEffect(() => {
+    setTab('details');
+  }, [leadId]);
+
   const sourceDetails =
     lead?.source_details && typeof lead.source_details === 'object'
       ? (lead.source_details as Record<string, unknown>)
+      : null;
+
+  const chatwootUrl =
+    sourceDetails && typeof sourceDetails.chatwoot_url === 'string'
+      ? sourceDetails.chatwoot_url
       : null;
 
   return (
@@ -148,35 +165,58 @@ export function OldLeadDetailPanel({ leadId, open, onClose }: OldLeadDetailPanel
               <p className="text-xs text-text-tertiary">Historical import — read only</p>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-              <section className="mb-6">
-                <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-tertiary">
-                  Profile
-                </h3>
-                <KvList
-                  layout="stacked"
-                  items={[{ term: 'University', value: details?.university ?? '—' }]}
-                />
-              </section>
+            <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
+              <TabsList className="h-auto w-full shrink-0 justify-start gap-6 px-5 pt-2">
+                <TabsTrigger value="details">Details</TabsTrigger>
+                <TabsTrigger value="conversation">Conversation</TabsTrigger>
+              </TabsList>
 
-              <section className="mb-6">
-                <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-tertiary">
-                  Record
-                </h3>
-                <KvList layout="stacked" items={recordItems(lead)} />
-              </section>
-
-              {importMetaItems(sourceDetails).length > 0 && (
+              <TabsContent
+                value="details"
+                className="mt-0 min-h-0 flex-1 overflow-y-auto px-5 py-4 data-[state=inactive]:hidden"
+              >
                 <section className="mb-6">
                   <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-tertiary">
-                    Import metadata
+                    Profile
                   </h3>
-                  <KvList layout="stacked" items={importMetaItems(sourceDetails)} />
+                  <KvList
+                    layout="stacked"
+                    items={[{ term: 'University', value: details?.university ?? '—' }]}
+                  />
                 </section>
-              )}
 
-              <SourceDetailsPanel sourceDetails={sourceDetails} embedded />
-            </div>
+                <section className="mb-6">
+                  <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-tertiary">
+                    Record
+                  </h3>
+                  <KvList layout="stacked" items={recordItems(lead)} />
+                </section>
+
+                {importMetaItems(sourceDetails).length > 0 && (
+                  <section className="mb-6">
+                    <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-tertiary">
+                      Import metadata
+                    </h3>
+                    <KvList layout="stacked" items={importMetaItems(sourceDetails)} />
+                  </section>
+                )}
+
+                <SourceDetailsPanel sourceDetails={sourceDetails} embedded />
+              </TabsContent>
+
+              <TabsContent
+                value="conversation"
+                className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+              >
+                {tab === 'conversation' && (
+                  <OldLeadChatView
+                    leadId={lead.uuid}
+                    leadName={lead.lead_name}
+                    chatwootUrl={chatwootUrl}
+                  />
+                )}
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </SheetContent>

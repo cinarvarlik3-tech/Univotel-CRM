@@ -922,6 +922,59 @@ export type Database = {
           },
         ];
       };
+      old_lead_messages: {
+        Row: {
+          chatwoot_conversation_id: number;
+          chatwoot_message_id: number;
+          content: string | null;
+          created_at: string;
+          id: string;
+          imported_at: string;
+          is_private: boolean;
+          lead_uuid: string;
+          message_type: string;
+          sender_id: number | null;
+          sender_name: string | null;
+          sender_type: string | null;
+        };
+        Insert: {
+          chatwoot_conversation_id: number;
+          chatwoot_message_id: number;
+          content?: string | null;
+          created_at: string;
+          id?: string;
+          imported_at?: string;
+          is_private?: boolean;
+          lead_uuid: string;
+          message_type: string;
+          sender_id?: number | null;
+          sender_name?: string | null;
+          sender_type?: string | null;
+        };
+        Update: {
+          chatwoot_conversation_id?: number;
+          chatwoot_message_id?: number;
+          content?: string | null;
+          created_at?: string;
+          id?: string;
+          imported_at?: string;
+          is_private?: boolean;
+          lead_uuid?: string;
+          message_type?: string;
+          sender_id?: number | null;
+          sender_name?: string | null;
+          sender_type?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'old_lead_messages_lead_uuid_fkey';
+            columns: ['lead_uuid'];
+            isOneToOne: false;
+            referencedRelation: 'old_leads';
+            referencedColumns: ['uuid'];
+          },
+        ];
+      };
       old_leads: {
         Row: {
           archived_at: string | null;

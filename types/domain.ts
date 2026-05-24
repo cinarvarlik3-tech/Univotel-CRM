@@ -284,6 +284,17 @@ export interface OldLeadDetailRow extends OldLeadRow {
   old_lead_details?: OldLeadDetailsRow | OldLeadDetailsRow[] | null;
 }
 
+/** Imported Chatwoot message for old lead chat UI. */
+export interface OldLeadMessageRow {
+  id: string;
+  messageType: 'incoming' | 'outgoing' | 'activity';
+  content: string | null;
+  senderType: 'contact' | 'user' | 'system' | null;
+  senderName: string | null;
+  createdAt: string;
+  chatwootConversationId: number;
+}
+
 /** Archive analytics summary payload. */
 export interface ArchiveSummaryPayload {
   totals: { won: number; lost: number; total: number };

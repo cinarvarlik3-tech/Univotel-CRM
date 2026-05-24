@@ -19,6 +19,8 @@
     "db:seed": "pnpm exec supabase db seed",
     "import:old-leads": "tsx scripts/import-old-leads.ts",
     "import:old-leads:write": "tsx scripts/import-old-leads.ts --write",
+    "import:old-lead-messages": "tsx scripts/import-old-lead-messages.ts",
+    "import:old-lead-messages:write": "tsx scripts/import-old-lead-messages.ts --write",
     "supabase": "supabase",
     "prepare": "husky"
   },
