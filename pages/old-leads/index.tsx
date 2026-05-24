@@ -50,6 +50,7 @@ export default function OldLeadsPage() {
   const [accumulatedLeads, setAccumulatedLeads] = useState<OldLeadRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [hasLoadedMore, setHasLoadedMore] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
 
@@ -64,13 +65,14 @@ export default function OldLeadsPage() {
   }, [user, canAccess, router]);
 
   useEffect(() => {
-    if (data) {
+    if (data && !hasLoadedMore) {
       setAccumulatedLeads(data.oldLeads);
       setNextCursor(data.nextCursor);
     }
-  }, [data]);
+  }, [data, hasLoadedMore]);
 
   function handleApply() {
+    setHasLoadedMore(false);
     setAppliedState(listState);
     setAccumulatedLeads([]);
     setNextCursor(null);
@@ -86,7 +88,13 @@ export default function OldLeadsPage() {
     const json = await res.json();
 
     if (res.ok) {
-      setAccumulatedLeads((prev) => [...prev, ...json.data.oldLeads]);
+      const page = json.data.oldLeads as OldLeadRow[];
+      setHasLoadedMore(true);
+      setAccumulatedLeads((prev) => {
+        const seen = new Set(prev.map((lead) => lead.uuid));
+        const unique = page.filter((lead) => !seen.has(lead.uuid));
+        return [...prev, ...unique];
+      });
       setNextCursor(json.data.nextCursor);
     }
 
