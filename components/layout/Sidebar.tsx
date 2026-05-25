@@ -16,6 +16,7 @@ import {
   IconUserCheck,
   IconUsers,
   IconPhone,
+  IconWebhook,
 } from '@tabler/icons-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -38,6 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/properties', label: 'Properties', icon: IconBuilding },
   { href: '/dashboard', label: 'Analytics', icon: IconChartBar, managerOnly: true },
   { href: '/campaigns', label: 'Campaigns', icon: IconSpeakerphone, managerOnly: true },
+  { href: '/webhook-logs', label: 'Webhook Logs', icon: IconWebhook, managerOnly: true },
   { href: '/leads/archived', label: 'Archive', icon: IconArchive, managerOnly: true },
   { href: '/old-leads', label: 'Old leads', icon: IconHistory, managerOnly: true },
   { href: '/admin/dni-numbers', label: 'DNI Numbers', icon: IconPhone, superadminOnly: true },

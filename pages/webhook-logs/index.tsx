@@ -7,13 +7,14 @@ import { WebhookLogTable } from '@/components/webhook-logs/WebhookLogTable';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useWebhookLogs } from '@/hooks/useWebhookLogs';
+import { isManagerOrAbove } from '@/lib/auth/roles';
 
 export default function WebhookLogsPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const { data, mutate, error, isLoading } = useWebhookLogs('?status=failed');
+  const { data, mutate, error, isLoading } = useWebhookLogs('?limit=50');
 
-  if (user && user.role !== 'manager') {
+  if (user && !isManagerOrAbove(user.role)) {
     if (typeof window !== 'undefined') router.replace('/leads');
     return null;
   }
