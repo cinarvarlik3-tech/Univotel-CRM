@@ -7,8 +7,10 @@ import { z } from 'zod';
 const ChatwootPhoneHolderSchema = z.object({
   id: z.number().optional(),
   phone_number: z.string().nullable().optional(),
-  name: z.string().optional(),
-  identifier: z.string().optional(),
+  /** Chatwoot often sends null for agent (User) senders — must allow null, not only undefined. */
+  name: z.string().nullable().optional(),
+  identifier: z.string().nullable().optional(),
+  type: z.string().nullable().optional(),
   additional_attributes: z.record(z.unknown()).optional(),
 });
 

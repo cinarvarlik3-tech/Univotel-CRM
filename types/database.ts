@@ -653,6 +653,59 @@ export type Database = {
           },
         ];
       };
+      lead_messages: {
+        Row: {
+          chatwoot_conversation_id: number;
+          chatwoot_message_id: number;
+          content: string | null;
+          created_at: string;
+          id: string;
+          is_private: boolean;
+          lead_uuid: string;
+          message_type: string;
+          sender_id: number | null;
+          sender_name: string | null;
+          sender_type: string | null;
+          synced_at: string;
+        };
+        Insert: {
+          chatwoot_conversation_id: number;
+          chatwoot_message_id: number;
+          content?: string | null;
+          created_at: string;
+          id?: string;
+          is_private?: boolean;
+          lead_uuid: string;
+          message_type: string;
+          sender_id?: number | null;
+          sender_name?: string | null;
+          sender_type?: string | null;
+          synced_at?: string;
+        };
+        Update: {
+          chatwoot_conversation_id?: number;
+          chatwoot_message_id?: number;
+          content?: string | null;
+          created_at?: string;
+          id?: string;
+          is_private?: boolean;
+          lead_uuid?: string;
+          message_type?: string;
+          sender_id?: number | null;
+          sender_name?: string | null;
+          sender_type?: string | null;
+          synced_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'lead_messages_lead_uuid_fkey';
+            columns: ['lead_uuid'];
+            isOneToOne: false;
+            referencedRelation: 'leads';
+            referencedColumns: ['uuid'];
+          },
+        ];
+      };
       leads: {
         Row: {
           archived_at: string | null;

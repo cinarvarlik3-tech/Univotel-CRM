@@ -34,7 +34,7 @@ function accountUrl(path: string): string {
  * @param path - Account-relative API path.
  * @param init - Fetch init options.
  */
-async function chatwootFetch(path: string, init: RequestInit = {}): Promise<Response> {
+export async function chatwootFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const token = env.CHATWOOT_API_TOKEN;
   if (!token) {
     throw new Error('CHATWOOT_API_TOKEN is not configured');

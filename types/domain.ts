@@ -284,8 +284,8 @@ export interface OldLeadDetailRow extends OldLeadRow {
   old_lead_details?: OldLeadDetailsRow | OldLeadDetailsRow[] | null;
 }
 
-/** Imported Chatwoot message for old lead chat UI. */
-export interface OldLeadMessageRow {
+/** Chat message row for lead / old lead conversation UI. */
+export interface ChatMessageRow {
   id: string;
   messageType: 'incoming' | 'outgoing' | 'activity';
   content: string | null;
@@ -294,6 +294,9 @@ export interface OldLeadMessageRow {
   createdAt: string;
   chatwootConversationId: number;
 }
+
+/** @deprecated Use ChatMessageRow */
+export type OldLeadMessageRow = ChatMessageRow;
 
 /** Archive analytics summary payload. */
 export interface ArchiveSummaryPayload {

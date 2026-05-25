@@ -3,10 +3,10 @@
  */
 import { cn } from '@/lib/utils';
 import { formatChatMessageTime } from '@/lib/ui/format-chat-timestamp';
-import type { OldLeadMessageRow } from '@/types/domain';
+import type { ChatMessageRow } from '@/types/domain';
 
 interface OldLeadChatBubbleProps {
-  message: OldLeadMessageRow;
+  message: ChatMessageRow;
   fallbackLeadName: string | null;
 }
 

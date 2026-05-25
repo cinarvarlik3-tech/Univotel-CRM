@@ -45,18 +45,8 @@ type InboundChatwootPayload = ChatwootConversationCreated | ChatwootMessageCreat
 type ChatwootPhonePayload = {
   channel?: string;
   meta?: ChatwootConversationCreated['meta'];
-  contact?: {
-    phone_number?: string | null;
-    name?: string;
-    identifier?: string;
-    additional_attributes?: Record<string, unknown>;
-  };
-  sender?: {
-    phone_number?: string | null;
-    name?: string;
-    identifier?: string;
-    additional_attributes?: Record<string, unknown>;
-  };
+  contact?: ChatwootConversationCreated['contact'];
+  sender?: ChatwootConversationCreated['sender'];
 };
 
 /** Resolved contact identifier for lead creation. */

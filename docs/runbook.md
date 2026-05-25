@@ -1,12 +1,12 @@
 # Univotel CRM — Production Runbook
 
-Last updated: 2026-05-24. This document describes **what the running system does now** and **how to fix it when something breaks**. For design history, see implementation docs; this is operational reference only.
+Last updated: 2026-05-25. This document describes **what the running system does now** and **how to fix it when something breaks**. For design history, see implementation docs; this is operational reference only.
 
 ---
 
 ## 1. System Overview
 
-Univotel CRM ingests leads from Chatwoot (WhatsApp/Instagram), NetGSM (phone calls), and Meta WhatsApp calls, stores them in Supabase Postgres, assigns them to salespeople, tracks SLA and tasks, sends Telegram alerts to managers and agents, runs WhatsApp campaigns, and archives terminal leads after **80 days**. **Phase 4** adds first-click attribution: REF codes and UTM from marketing sites, Dynamic Number Insertion (DNI) for call source tracking, a `collected_data` table written in parallel with `leads.source_details`, and async GA4 Data API session enrichment. **Old leads (historical import):** one-time bulk import from a Chatwoot SQL dump (`readable_database.sql`) into read-only `old_leads` / `old_lead_details` tables — browsable at `/old-leads` (manager/superadmin only; migrations `0038`–`0039`). No webhooks, SLA, assignment, or archive integration with the active pipeline. The UI and API run on Cloudflare Workers (OpenNext). Scheduled jobs run in **Supabase pg_cron** (HTTP callbacks to the CRM for most jobs; archive/reconcile remain SQL-only).
+Univotel CRM ingests leads from Chatwoot (WhatsApp/Instagram), NetGSM (phone calls), and Meta WhatsApp calls, stores them in Supabase Postgres, assigns them to salespeople, tracks SLA and tasks, sends Telegram alerts to managers and agents, runs WhatsApp campaigns, and archives terminal leads after **80 days**. **Phase 4** adds first-click attribution: REF codes and UTM from marketing sites, Dynamic Number Insertion (DNI) for call source tracking, a `collected_data` table written in parallel with `leads.source_details`, and async GA4 Data API session enrichment. **Old leads (historical import):** one-time bulk import from a Chatwoot SQL dump (`readable_database.sql`) into read-only `old_leads` / `old_lead_details` (migrations `0038`–`0039`), plus one-time message import into `old_lead_messages` (`0040`) — browsable at `/old-leads` with a read-only **Conversation** tab (manager/superadmin only). **Active lead chat (live):** opening **Conversation** on an active lead slide-over calls the Chatwoot Application API for that lead only, caches messages in `lead_messages` (`0041`), and re-syncs every **15s** while the tab stays open (requires `CHATWOOT_API_TOKEN` + `CHATWOOT_ACCOUNT_ID`; no cron, no background sync for other leads). Old leads are not wired to live webhooks or the active SLA/archive pipeline. The UI and API run on Cloudflare Workers (OpenNext). Scheduled jobs run in **Supabase pg_cron** (HTTP callbacks to the CRM for most jobs; archive/reconcile remain SQL-only).
 
 | Service                            | What it does                                                                 | If it goes down                                                                 |
 | ---------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -32,7 +32,7 @@ Univotel CRM ingests leads from Chatwoot (WhatsApp/Instagram), NetGSM (phone cal
 
 | Role          | Access                                                                                                                                                                                         |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `salesperson` | Assigned + unassigned active leads; own tasks; read-only properties; **My Leads** at `/leads/mine`                                                                                             |
+| `salesperson` | Assigned + unassigned active leads (incl. **Conversation** tab — live Chatwoot sync per open lead); own tasks; read-only properties; **My Leads** at `/leads/mine`                             |
 | `manager`     | All active leads, archived leads, dashboard, campaigns, webhook logs, notifications; **My Leads** for personally assigned subset; **Old leads** at `/old-leads` (read-only historical imports) |
 | `superadmin`  | Everything `manager` has + **DNI numbers admin** (`/admin/dni-numbers`); same manager-level data access via RLS                                                                                |
 
@@ -54,18 +54,19 @@ Univotel CRM ingests leads from Chatwoot (WhatsApp/Instagram), NetGSM (phone cal
 
 ### Where credentials live (no secrets in this doc)
 
-| Secret / config                                                             | Location                                                                                        |
-| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| All app secrets (Supabase keys, webhook secrets, Telegram, Meta, cron, GA4) | **Cloudflare Wrangler secrets** — list with `pnpm exec wrangler secret list`                    |
-| GA4 service account JSON                                                    | Wrangler secret `GOOGLE_SERVICE_ACCOUNT_JSON` (never commit)                                    |
-| GA4 property ID                                                             | Wrangler secret `GA4_PROPERTY_ID` (numeric, from GA4 Admin → Property settings)                 |
-| Local dev                                                                   | `.env.local` (copy from `.env.example`)                                                         |
-| Cloudflare local preview                                                    | `.dev.vars` (copy from `.dev.vars.example`)                                                     |
-| pg_cron HTTP job config                                                     | Supabase **`cron_settings`** table (`base_url`, `cron_secret`) — set via SQL editor, not in git |
-| Auth users                                                                  | Supabase Dashboard → Authentication → Users (UUID must match `salespeople.id`)                  |
-| GTM containers                                                              | Google Tag Manager (external) — `univotel.com` + side domains; not in this repo                 |
-| NetGSM virtual numbers                                                      | NetGSM account — mapped in `dni_numbers` table via superadmin UI                                |
-| Chatwoot SQL dump (old leads import)                                        | Local file `readable_database.sql` (gitignored) — export from Chatwoot Postgres; not in repo    |
+| Secret / config                                                             | Location                                                                                           |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| All app secrets (Supabase keys, webhook secrets, Telegram, Meta, cron, GA4) | **Cloudflare Wrangler secrets** — list with `pnpm exec wrangler secret list`                       |
+| GA4 service account JSON                                                    | Wrangler secret `GOOGLE_SERVICE_ACCOUNT_JSON` (never commit)                                       |
+| GA4 property ID                                                             | Wrangler secret `GA4_PROPERTY_ID` (numeric, from GA4 Admin → Property settings)                    |
+| Local dev                                                                   | `.env.local` (copy from `.env.example`)                                                            |
+| Cloudflare local preview                                                    | `.dev.vars` (copy from `.dev.vars.example`)                                                        |
+| pg_cron HTTP job config                                                     | Supabase **`cron_settings`** table (`base_url`, `cron_secret`) — set via SQL editor, not in git    |
+| Auth users                                                                  | Supabase Dashboard → Authentication → Users (UUID must match `salespeople.id`)                     |
+| GTM containers                                                              | Google Tag Manager (external) — `univotel.com` + side domains; not in this repo                    |
+| NetGSM virtual numbers                                                      | NetGSM account — mapped in `dni_numbers` table via superadmin UI                                   |
+| Chatwoot SQL dump (old leads import)                                        | Local file `readable_database.sql` (gitignored) — export from Chatwoot Postgres; not in repo       |
+| Chatwoot API (active lead live chat)                                        | Wrangler: `CHATWOOT_API_TOKEN`, `CHATWOOT_ACCOUNT_ID`, `CHATWOOT_BASE_URL` — same as assignee sync |
 
 ### Connect to Supabase SQL
 
@@ -131,13 +132,15 @@ pnpm db:migrate          # runs: supabase db push
 pnpm gen:types           # regenerates types/database.ts from remote schema
 ```
 
-Migrations are in `supabase/migrations/` numbered `0001`–`0039`. Apply in order.
+Migrations are in `supabase/migrations/` numbered `0001`–`0041`. Apply in order.
 
 | Range         | Phase                                                                                                |
 | ------------- | ---------------------------------------------------------------------------------------------------- |
 | `0026`–`0032` | Phase 3 — archive fields, nightly archive, analytics MVs, 80-day cutoff                              |
 | `0033`–`0037` | Phase 4 — superadmin role, `ref_sessions`, `dni_numbers`, `collected_data`, GA4 enrichment cron      |
 | `0038`–`0039` | Old leads — `old_leads`, `old_lead_details`, unique `chatwoot_conversation_id` for idempotent import |
+| `0040`        | Old lead messages — `old_lead_messages` (historical dump import; read-only)                          |
+| `0041`        | Active lead messages — `lead_messages` (on-demand Chatwoot API sync when Conversation tab opens)     |
 
 **Phase 4 post-migration checks:**
 
@@ -173,6 +176,16 @@ SELECT indexname FROM pg_indexes
 WHERE tablename = 'old_leads' AND indexname = 'idx_old_leads_chatwoot_conv_unique';
 ```
 
+**Message tables post-migration checks (after `0040`–`0041`):**
+
+```sql
+SELECT to_regclass('public.old_lead_messages'),
+       to_regclass('public.lead_messages');
+
+SELECT tablename, policyname FROM pg_policies
+WHERE tablename IN ('old_lead_messages', 'lead_messages');
+```
+
 **One-time old leads import (local CLI, not cron):**
 
 Requires migrations `0038`–`0039`, `.env.local` with Supabase service role + `CHATWOOT_BASE_URL`, and Chatwoot dump at `readable_database.sql` (or `--dump path`).
@@ -189,6 +202,24 @@ pnpm import:old-leads:write
 ```
 
 Import merges multiple Chatwoot conversations per phone or Instagram handle into one row (primary = most recently updated conversation). Skipped conversations (no phone/handle) are logged to `import-old-leads-skipped.json`. Re-import requires truncating both tables first (see Section 5).
+
+**One-time old lead messages import (after leads import, migration `0040`):**
+
+Requires `old_leads` populated, same dump file, and migrations `0038`–`0040`.
+
+```bash
+# Dry-run — expect ~79k messages mapped for ~8.5k leads
+pnpm import:old-lead-messages
+
+# Insert (fails if old_lead_messages already has rows)
+pnpm import:old-lead-messages:write
+```
+
+Maps messages by `chatwoot_conversation_id` (primary + `import_meta.merged_conversation_ids`). Agent names on outbound bubbles come from Chatwoot `users` in the dump. Private agent notes are stored but hidden in UI.
+
+**Active lead chat (`0041`) — no bulk import:**
+
+Messages load from Chatwoot API when a user opens **Conversation** on `/leads` (see Section 10). Apply migration `0041` only; no CLI backfill required unless you add a custom script later.
 
 **After migration, verify pg_cron jobs exist:**
 
@@ -267,6 +298,8 @@ curl -X POST https://panel.marketinguni.app/api/webhooks/chatwoot \
 **Replay:** Manager → `/webhook-logs` → failed row → **Replay**, or `POST /api/webhook-logs/{uuid}/replay` with manager session.
 
 **Lead creation rules:** Incoming messages only (skips `message_type=outgoing`). Duplicate phone → `duplicate_submission` in contact history, no new lead.
+
+**Payload validation:** Zod schema accepts `null` on `sender`/`contact` fields (e.g. `identifier`, `name`) — common on outbound agent messages. Invalid payloads log to `webhook_logs` as failed and may Telegram-alert managers; they do **not** block live chat (Conversation tab uses Chatwoot API, not this webhook).
 
 **Phase 4 attribution:** Chatwoot reads `additional_attributes.referral` (`ref_code`, `ad_id`, `campaign_id`, etc.). On create, CRM looks up `ref_sessions` by `ref_code` for UTM/referral_domain, writes `collected_data` + updates `source_details`, and queues GA4 enrichment when `ref_code` is present. Requires Meta **`referral` webhook field** subscribed in Meta Developer Console for REF to arrive in payload.
 
@@ -657,6 +690,46 @@ LIMIT 20;
 
 ---
 
+### Chatwoot webhook validation failed (Telegram alert)
+
+**Cause:** Webhook JSON did not match `ChatwootPayloadSchema` (historically `sender.identifier: null` on outbound messages). Processing stops for that event; lead creation from that webhook is skipped.
+
+**Check:**
+
+```sql
+SELECT id, event_type, status, error_message, created_at
+FROM webhook_logs
+WHERE source = 'chatwoot' AND status = 'failed'
+ORDER BY created_at DESC
+LIMIT 10;
+```
+
+**Fix:** Deploy latest app (schema accepts nullable sender fields). Replay from `/webhook-logs` if the underlying event still matters. **Note:** Outgoing `message_created` webhooks are intentionally not used for lead creation; Conversation UI uses Chatwoot API sync instead.
+
+---
+
+### Active lead Conversation tab empty or "Failed to sync messages"
+
+**Cause:** Migration `0041` not applied, missing Chatwoot API secrets, or lead has no `chatwoot_conversation_id`.
+
+**Check:**
+
+```sql
+SELECT uuid, lead_name, chatwoot_conversation_id, source_details->>'chatwoot_url' AS url
+FROM leads
+WHERE uuid = '<lead-uuid>';
+
+SELECT COUNT(*) FROM lead_messages WHERE lead_uuid = '<lead-uuid>';
+
+SELECT to_regclass('public.lead_messages');
+```
+
+**Check env:** `CHATWOOT_API_TOKEN`, `CHATWOOT_ACCOUNT_ID` in Wrangler (and `.env.local` for dev).
+
+**Fix:** Apply `0041`, ensure API token can read conversations in Chatwoot, open **Conversation** tab (triggers `POST /api/leads/{id}/messages/sync`). Link conversation via webhook or set `chatwoot_conversation_id` on the lead row.
+
+---
+
 ### Old leads page empty or `/old-leads` returns 403
 
 **Cause:** User is `salesperson` (manager/superadmin only), migrations `0038`–`0039` not applied, or import not run.
@@ -862,6 +935,30 @@ FROM old_leads
 WHERE lead_phone ILIKE '%0532%' OR lead_name ILIKE '%test%'
 ORDER BY created_at DESC
 LIMIT 20;
+```
+
+### Old lead message count
+
+```sql
+SELECT COUNT(*) FROM old_lead_messages;
+
+SELECT lead_uuid, COUNT(*) AS msg_count
+FROM old_lead_messages
+GROUP BY lead_uuid
+ORDER BY msg_count DESC
+LIMIT 10;
+```
+
+### Active lead message count (live cache)
+
+```sql
+SELECT COUNT(*) FROM lead_messages;
+
+SELECT lead_uuid, COUNT(*) AS msg_count
+FROM lead_messages
+GROUP BY lead_uuid
+ORDER BY msg_count DESC
+LIMIT 10;
 ```
 
 ---
@@ -1078,23 +1175,48 @@ Integration test checklist: `docs/phase_4_tests.md`.
 
 **Behavior:**
 
-| Setting             | Value                                                                                         |
-| ------------------- | --------------------------------------------------------------------------------------------- |
-| Access              | **Read-only** — manager/superadmin via RLS; salespeople redirected from `/old-leads`          |
-| UI                  | `/old-leads` — list + slide-over detail panel; filters: search, `lead_source`, `message_from` |
-| API                 | `GET /api/old-leads` (cursor pagination), `GET /api/old-leads/{uuid}`                         |
-| Import              | Local CLI only — `pnpm import:old-leads` / `pnpm import:old-leads:write` (Section 3)          |
-| Dump source         | `readable_database.sql` — Chatwoot Postgres export (gitignored)                               |
-| Dedup on import     | Groups by normalized phone or Instagram handle; merges multiple conversations per contact     |
-| DB idempotency      | Unique partial index on `chatwoot_conversation_id` (migration `0039`)                         |
-| `lead_phone` values | Turkish mobile, international phone, or Instagram handle (no active-pipeline dedup)           |
-| `source_details`    | Chatwoot URL + `import_meta.merged_conversation_ids`; `source_confidence = unknown`           |
-| Not integrated with | SLA crons, assignment, webhooks, archive, `collected_data`, campaigns, Telegram alerts        |
-| Re-import           | Requires `TRUNCATE old_lead_details; TRUNCATE old_leads;` then `--write`                      |
+| Setting             | Value                                                                                        |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| Access              | **Read-only** — manager/superadmin via RLS; salespeople redirected from `/old-leads`         |
+| UI                  | `/old-leads` — list + slide-over; tabs **Details** \| **Conversation** (read-only thread)    |
+| API                 | `GET /api/old-leads`, `GET /api/old-leads/{uuid}`, `GET /api/old-leads/{uuid}/messages`      |
+| Import (leads)      | `pnpm import:old-leads` / `pnpm import:old-leads:write` (Section 3)                          |
+| Import (messages)   | `pnpm import:old-lead-messages` / `pnpm import:old-lead-messages:write` (after leads import) |
+| Dump source         | `readable_database.sql` — Chatwoot Postgres export (gitignored)                              |
+| Dedup on import     | Groups by normalized phone or Instagram handle; merges multiple conversations per contact    |
+| DB idempotency      | Unique partial index on `chatwoot_conversation_id` (migration `0039`)                        |
+| `lead_phone` values | Turkish mobile, international phone, or Instagram handle (no active-pipeline dedup)          |
+| `source_details`    | Chatwoot URL + `import_meta.merged_conversation_ids`; `source_confidence = unknown`          |
+| Not integrated with | SLA crons, assignment, webhooks, archive, `collected_data`, campaigns, Telegram alerts       |
+| Re-import (leads)   | `TRUNCATE old_lead_details; TRUNCATE old_leads;` then `import:old-leads:write`               |
+| Re-import (msgs)    | `TRUNCATE old_lead_messages;` then `import:old-lead-messages:write`                          |
+| Messages table      | `old_lead_messages` — migration `0040`; agent names from dump `users` at import time         |
 
 **Expanded `lead_source` values (schema only — import currently sets `whatsapp` or `instagram`):**
 
 `google-ads`, `meta-ads`, `google-maps`, `sahibinden` — reserved for future enrichment; not set by current import script.
+
+### Active lead chat (live sync)
+
+**Tables:**
+
+| Table           | Purpose                                                                 |
+| --------------- | ----------------------------------------------------------------------- |
+| `lead_messages` | Cache of Chatwoot messages per active lead; synced on Conversation open |
+
+**Behavior:**
+
+| Setting         | Value                                                                                                     |
+| --------------- | --------------------------------------------------------------------------------------------------------- |
+| Access          | Same RLS as `leads` — salesperson (assigned + unassigned pool), manager, superadmin                       |
+| UI              | `/leads` slide-over → **Conversation** tab                                                                |
+| Sync trigger    | `POST /api/leads/{id}/messages/sync` when tab opens; **not** called from list or cron                     |
+| Poll while open | Every **15s** re-sync same lead only; stops when tab closes or user switches lead                         |
+| Data source     | Chatwoot Application API (`listConversationMessages`) — not webhook, not SQL dump                         |
+| Requires        | `CHATWOOT_API_TOKEN`, `CHATWOOT_ACCOUNT_ID`, lead `chatwoot_conversation_id` (or URL in `source_details`) |
+| Private notes   | Stored if returned by API; excluded from UI (`is_private = false` filter)                                 |
+| Bubbles         | Inbound left (lead name), outbound right (agent name from Chatwoot sender / agents list)                  |
+| Not integrated  | Does not create leads, does not update funnel; webhooks still handle lead creation separately             |
 
 ---
 
@@ -1131,6 +1253,7 @@ GROUP BY source, status;
 - Many `failed` → Section 5 replay + check Wrangler secrets
 - REF/DNI from marketing sites failing → check CORS allow list + `/api/health`; verify `ref_sessions` / `dni_numbers` tables exist (migrations `0033`–`0037`)
 - Old leads UI empty → verify `old_leads` row count (migrations `0038`–`0039`, Section 3 import)
+- Active lead chat empty → migration `0041`, Chatwoot API secrets, `chatwoot_conversation_id` on lead (Section 5)
 
 ### Step 4 — Are crons running?
 
@@ -1177,27 +1300,38 @@ Roll back Worker (Section 3). If DB migration caused issue, check Supabase migra
 
 ## 10. Manager UI Routes
 
-| Route                | Purpose                                               | Access                    |
-| -------------------- | ----------------------------------------------------- | ------------------------- |
-| `/dashboard`         | Analytics (materialized views, refreshed every 5 min) | manager, superadmin       |
-| `/leads`             | Active lead list                                      | all roles (scoped by RLS) |
-| `/leads/mine`        | Leads assigned to current user                        | all roles                 |
-| `/leads/my`          | Redirect alias → `/leads/mine`                        | all roles                 |
-| `/leads/archived`    | Archived leads                                        | manager, superadmin       |
-| `/leads/new`         | Manual lead entry                                     | authenticated             |
-| `/leads/{uuid}`      | Lead detail + manual archive                          | scoped by RLS             |
-| `/tasks`             | Task list                                             | scoped by RLS             |
-| `/campaigns`         | WhatsApp campaigns                                    | manager, superadmin       |
-| `/notifications`     | Manager alert inbox                                   | manager, superadmin       |
-| `/webhook-logs`      | Webhook audit + replay                                | manager, superadmin       |
-| `/admin/dni-numbers` | DNI virtual number admin                              | **superadmin only**       |
-| `/old-leads`         | Historical Chatwoot imports (read-only)               | manager, superadmin       |
-| `/team`              | Salespeople list                                      | manager, superadmin       |
-| `/properties`        | Property inventory                                    | authenticated             |
+| Route                | Purpose                                                | Access                    |
+| -------------------- | ------------------------------------------------------ | ------------------------- |
+| `/dashboard`         | Analytics (materialized views, refreshed every 5 min)  | manager, superadmin       |
+| `/leads`             | Active lead list                                       | all roles (scoped by RLS) |
+| `/leads/mine`        | Leads assigned to current user                         | all roles                 |
+| `/leads/my`          | Redirect alias → `/leads/mine`                         | all roles                 |
+| `/leads/archived`    | Archived leads                                         | manager, superadmin       |
+| `/leads/new`         | Manual lead entry                                      | authenticated             |
+| `/leads/{uuid}`      | Redirect → `/leads?selected={uuid}` (slide-over panel) | scoped by RLS             |
+| `/tasks`             | Task list                                              | scoped by RLS             |
+| `/campaigns`         | WhatsApp campaigns                                     | manager, superadmin       |
+| `/notifications`     | Manager alert inbox                                    | manager, superadmin       |
+| `/webhook-logs`      | Webhook audit + replay                                 | manager, superadmin       |
+| `/admin/dni-numbers` | DNI virtual number admin                               | **superadmin only**       |
+| `/old-leads`         | Historical Chatwoot imports (read-only)                | manager, superadmin       |
+| `/team`              | Salespeople list                                       | manager, superadmin       |
+| `/properties`        | Property inventory                                     | authenticated             |
 
 Attribution detail API (for lead detail panels): `GET /api/leads/{uuid}/attribution` → full `collected_data` row (manager/superadmin). Returns **404** for pre-Phase 4 leads with no `collected_data`.
 
 Old lead detail API: `GET /api/old-leads/{uuid}` → full `old_leads` row + `old_lead_details` (manager/superadmin). Read-only — no PATCH/POST routes.
+
+**Active lead slide-over** (`/leads` with `?selected=`): tabs **Overview**, **Profile**, **Conversation** (live Chatwoot sync), **History** (CRM audit log), **Actions** (managers). **Old lead slide-over:** **Details**, **Conversation** (dump import).
+
+| API                                  | Method | Purpose                                                                    |
+| ------------------------------------ | ------ | -------------------------------------------------------------------------- |
+| `GET /api/leads/{id}/messages`       | GET    | Paginated read from `lead_messages` (load older)                           |
+| `POST /api/leads/{id}/messages/sync` | POST   | Fetch from Chatwoot API + upsert cache; called when Conversation tab opens |
+| `GET /api/old-leads/{uuid}/messages` | GET    | Paginated read from `old_lead_messages`                                    |
+| `GET /api/old-leads/{uuid}`          | GET    | Old lead detail (manager/superadmin)                                       |
+
+Live sync poll interval while Conversation tab is open: **15s** (`LEAD_CHAT_SYNC_POLL_MS` in `lib/constants.ts`).
 
 ---
 
@@ -1222,6 +1356,10 @@ pnpm exec tsx scripts/sync-chatwoot-agents.ts
 # Old leads import (Chatwoot SQL dump → old_leads)
 pnpm import:old-leads              # dry-run
 pnpm import:old-leads:write        # insert (requires empty old_leads table)
+
+# Old lead messages import (dump → old_lead_messages; requires old_leads + 0040)
+pnpm import:old-lead-messages      # dry-run
+pnpm import:old-lead-messages:write
 
 # List Wrangler secrets (names only)
 pnpm exec wrangler secret list

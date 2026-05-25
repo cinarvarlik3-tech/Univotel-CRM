@@ -17,6 +17,9 @@ export const SLA_DEADLINES: Record<
 };
 
 /** Manual toggle for August peak season — reduces all SLAs to 30 minutes. */
+/** Poll interval while active lead Conversation tab is open (Chatwoot live sync). */
+export const LEAD_CHAT_SYNC_POLL_MS = 15_000;
+
 export const PEAK_SEASON_ACTIVE = false;
 
 /**

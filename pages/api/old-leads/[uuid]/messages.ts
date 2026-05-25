@@ -6,7 +6,7 @@ import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
 import { isManagerOrAbove } from '@/lib/auth/roles';
 import { createServerSupabase } from '@/lib/supabase/server';
-import type { OldLeadMessageRow } from '@/types/domain';
+import type { ChatMessageRow } from '@/types/domain';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -19,12 +19,12 @@ function mapMessageRow(row: {
   sender_name: string | null;
   created_at: string;
   chatwoot_conversation_id: number;
-}): OldLeadMessageRow {
+}): ChatMessageRow {
   return {
     id: row.id,
-    messageType: row.message_type as OldLeadMessageRow['messageType'],
+    messageType: row.message_type as ChatMessageRow['messageType'],
     content: row.content,
-    senderType: row.sender_type as OldLeadMessageRow['senderType'],
+    senderType: row.sender_type as ChatMessageRow['senderType'],
     senderName: row.sender_name,
     createdAt: row.created_at,
     chatwootConversationId: row.chatwoot_conversation_id,

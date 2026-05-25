@@ -11,6 +11,7 @@ import { LeadSection } from '@/components/leads/LeadSection';
 import { LeadStatusForm } from '@/components/leads/LeadStatusForm';
 import { ManagerLeadActions } from '@/components/leads/ManagerLeadActions';
 import { ContactHistorySection } from '@/components/leads/ContactHistorySection';
+import { LeadChatView } from '@/components/leads/LeadChatView';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -98,6 +99,16 @@ export function LeadDetailPanel({
     setTab('overview');
   }, [leadId]);
 
+  const sourceDetails =
+    lead?.source_details && typeof lead.source_details === 'object'
+      ? (lead.source_details as Record<string, unknown>)
+      : null;
+
+  const chatwootUrl =
+    sourceDetails && typeof sourceDetails.chatwoot_url === 'string'
+      ? sourceDetails.chatwoot_url
+      : null;
+
   const resetKey = lead?.updated_at ?? leadId ?? '';
   const detailsKey = details?.updated_at ?? details?.lead_uuid ?? leadId ?? '';
 
@@ -126,48 +137,72 @@ export function LeadDetailPanel({
               <TabsList className="h-auto shrink-0 px-5 pt-2">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="profile">Profile</TabsTrigger>
+                <TabsTrigger value="conversation">Conversation</TabsTrigger>
                 <TabsTrigger value="history">History</TabsTrigger>
                 {isManager && <TabsTrigger value="actions">Actions</TabsTrigger>}
               </TabsList>
 
-              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-                <TabsContent value="overview" className="mt-0">
-                  <LeadDetailOverview lead={lead} details={details} />
-                </TabsContent>
+              <TabsContent
+                value="overview"
+                className="mt-0 min-h-0 flex-1 overflow-y-auto px-5 py-4 data-[state=inactive]:hidden"
+              >
+                <LeadDetailOverview lead={lead} details={details} />
+              </TabsContent>
 
-                <TabsContent value="profile" className="mt-0">
-                  <ProfileTab
+              <TabsContent
+                value="profile"
+                className="mt-0 min-h-0 flex-1 overflow-y-auto px-5 py-4 data-[state=inactive]:hidden"
+              >
+                <ProfileTab
+                  lead={lead}
+                  leadId={leadId}
+                  details={details}
+                  detailsKey={detailsKey}
+                  resetKey={resetKey}
+                  onSaved={reload}
+                />
+              </TabsContent>
+
+              <TabsContent
+                value="conversation"
+                className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+              >
+                {tab === 'conversation' && (
+                  <LeadChatView
+                    leadId={leadId}
+                    leadName={lead.lead_name}
+                    chatwootUrl={chatwootUrl}
+                  />
+                )}
+              </TabsContent>
+
+              <TabsContent
+                value="history"
+                className="mt-0 min-h-0 flex-1 overflow-y-auto px-5 py-4 data-[state=inactive]:hidden"
+              >
+                <ContactHistorySection
+                  leadId={leadId}
+                  entries={history}
+                  onAdded={reload}
+                  embedded
+                />
+              </TabsContent>
+
+              {isManager && salespeople && (
+                <TabsContent
+                  value="actions"
+                  className="mt-0 min-h-0 flex-1 overflow-y-auto px-5 py-4 data-[state=inactive]:hidden"
+                >
+                  <ManagerLeadActions
                     lead={lead}
                     leadId={leadId}
-                    details={details}
-                    detailsKey={detailsKey}
-                    resetKey={resetKey}
-                    onSaved={reload}
-                  />
-                </TabsContent>
-
-                <TabsContent value="history" className="mt-0">
-                  <ContactHistorySection
-                    leadId={leadId}
-                    entries={history}
-                    onAdded={reload}
+                    salespeople={salespeople}
+                    onReassigned={reload}
                     embedded
+                    onArchived={onClose}
                   />
                 </TabsContent>
-
-                {isManager && salespeople && (
-                  <TabsContent value="actions" className="mt-0">
-                    <ManagerLeadActions
-                      lead={lead}
-                      leadId={leadId}
-                      salespeople={salespeople}
-                      onReassigned={reload}
-                      embedded
-                      onArchived={onClose}
-                    />
-                  </TabsContent>
-                )}
-              </div>
+              )}
             </Tabs>
           </>
         )}

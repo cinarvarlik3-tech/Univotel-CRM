@@ -2,16 +2,16 @@
  * Hook for paginated old lead chat message history.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { OldLeadMessageRow } from '@/types/domain';
+import type { ChatMessageRow } from '@/types/domain';
 
 interface MessagesResponse {
-  messages: OldLeadMessageRow[];
+  messages: ChatMessageRow[];
   hasMore: boolean;
   oldestCursor: string | null;
 }
 
 interface UseOldLeadMessagesResult {
-  messages: OldLeadMessageRow[];
+  messages: ChatMessageRow[];
   loading: boolean;
   loadingMore: boolean;
   error: string | null;
@@ -28,7 +28,7 @@ export function useOldLeadMessages(
   leadId: string | undefined,
   enabled: boolean,
 ): UseOldLeadMessagesResult {
-  const [messages, setMessages] = useState<OldLeadMessageRow[]>([]);
+  const [messages, setMessages] = useState<ChatMessageRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
