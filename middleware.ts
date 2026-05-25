@@ -38,5 +38,13 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  matcher: [
+    /*
+     * Skip middleware for inbound webhooks, cron, and public attribution APIs.
+     * Webhooks use static tokens / HMAC — no Supabase session.
+     * Excluding them also avoids `self is not defined` in local `next dev` (webpack
+     * chunk runtime expects Workers/browser `self`, not Node middleware).
+     */
+    '/((?!_next/static|_next/image|favicon.ico|api/webhooks|api/cron|api/ref|api/dni|api/health|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 };
