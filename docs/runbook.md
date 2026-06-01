@@ -1,12 +1,12 @@
 # Univotel CRM — Production Runbook
 
-Last updated: 2026-05-25. This document describes **what the running system does now** and **how to fix it when something breaks**. For design history, see implementation docs; this is operational reference only.
+Last updated: 2026-05-31. This document describes **what the running system does now** and **how to fix it when something breaks**. For design history, see implementation docs; this is operational reference only.
 
 ---
 
 ## 1. System Overview
 
-Univotel CRM ingests leads from Chatwoot (WhatsApp/Instagram), NetGSM (phone calls), and Meta WhatsApp calls, stores them in Supabase Postgres, assigns them to salespeople, tracks SLA and tasks, sends Telegram alerts to managers and agents, runs WhatsApp campaigns, and archives terminal leads after **80 days**. **Phase 4** adds first-click attribution: REF codes and UTM from marketing sites, Dynamic Number Insertion (DNI) for call source tracking, a `collected_data` table written in parallel with `leads.source_details`, and async GA4 Data API session enrichment. **Old leads (historical import):** one-time bulk import from a Chatwoot SQL dump (`readable_database.sql`) into read-only `old_leads` / `old_lead_details` (migrations `0038`–`0039`), plus one-time message import into `old_lead_messages` (`0040`) — browsable at `/old-leads` with a read-only **Conversation** tab (manager/superadmin only). **Active lead chat (live):** opening **Conversation** on an active lead slide-over calls the Chatwoot Application API for that lead only, caches messages in `lead_messages` (`0041`), and re-syncs every **15s** while the tab stays open (requires `CHATWOOT_API_TOKEN` + `CHATWOOT_ACCOUNT_ID`; no cron, no background sync for other leads). Old leads are not wired to live webhooks or the active SLA/archive pipeline. The UI and API run on Cloudflare Workers (OpenNext). Scheduled jobs run in **Supabase pg_cron** (HTTP callbacks to the CRM for most jobs; archive/reconcile remain SQL-only).
+Univotel CRM ingests leads from Chatwoot (WhatsApp/Instagram), NetGSM (phone calls), and Meta WhatsApp calls, stores them in Supabase Postgres, assigns them to salespeople, tracks SLA and tasks, sends Telegram alerts to managers and agents, runs WhatsApp campaigns, and archives terminal leads after **80 days**. **Phase 4** adds first-click attribution: REF codes and UTM from marketing sites, Dynamic Number Insertion (DNI) for call source tracking, a `collected_data` table written in parallel with `leads.source_details`, and async GA4 Data API session enrichment. **Old leads (historical import):** one-time bulk import from a Chatwoot SQL dump (`readable_database.sql`) into read-only `old_leads` / `old_lead_details` (migrations `0038`–`0039`), plus one-time message import into `old_lead_messages` (`0040`) — browsable at `/old-leads` with a read-only **Conversation** tab (manager/superadmin only). **Active lead chat (live):** Messages are continuously synced into `lead_messages` via the Chatwoot `message_created` webhook. Opening **Conversation** on an active lead slide-over additionally calls the Chatwoot Application API to backfill history and re-syncs every **15s** while the tab stays open (requires `CHATWOOT_API_TOKEN` + `CHATWOOT_ACCOUNT_ID`). Old leads are not wired to live webhooks or the active SLA/archive pipeline. The UI and API run on Cloudflare Workers (OpenNext). Scheduled jobs run in **Supabase pg_cron** (HTTP callbacks to the CRM for most jobs; archive/reconcile remain SQL-only).
 
 | Service                            | What it does                                                                 | If it goes down                                                                 |
 | ---------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -134,13 +134,14 @@ pnpm gen:types           # regenerates types/database.ts from remote schema
 
 Migrations are in `supabase/migrations/` numbered `0001`–`0041`. Apply in order.
 
-| Range         | Phase                                                                                                |
-| ------------- | ---------------------------------------------------------------------------------------------------- |
-| `0026`–`0032` | Phase 3 — archive fields, nightly archive, analytics MVs, 80-day cutoff                              |
-| `0033`–`0037` | Phase 4 — superadmin role, `ref_sessions`, `dni_numbers`, `collected_data`, GA4 enrichment cron      |
-| `0038`–`0039` | Old leads — `old_leads`, `old_lead_details`, unique `chatwoot_conversation_id` for idempotent import |
-| `0040`        | Old lead messages — `old_lead_messages` (historical dump import; read-only)                          |
-| `0041`        | Active lead messages — `lead_messages` (on-demand Chatwoot API sync when Conversation tab opens)     |
+| Range         | Phase                                                                                                    |
+| ------------- | -------------------------------------------------------------------------------------------------------- |
+| `0026`–`0032` | Phase 3 — archive fields, nightly archive, analytics MVs, 80-day cutoff                                  |
+| `0033`–`0037` | Phase 4 — superadmin role, `ref_sessions`, `dni_numbers`, `collected_data`, GA4 enrichment cron          |
+| `0038`–`0039` | Old leads — `old_leads`, `old_lead_details`, unique `chatwoot_conversation_id` for idempotent import     |
+| `0040`        | Old lead messages — `old_lead_messages` (historical dump import; read-only)                              |
+| `0041`        | Active lead messages — `lead_messages` (on-demand Chatwoot API sync + real-time webhook sync)            |
+| `0049`        | contact_history types — adds `call`, `message_start`, `chatwoot` source; updates `unarchive_single_lead` |
 
 **Phase 4 post-migration checks:**
 
@@ -186,6 +187,32 @@ SELECT tablename, policyname FROM pg_policies
 WHERE tablename IN ('old_lead_messages', 'lead_messages');
 ```
 
+**Property inventory + hotel recommendation (after `0042`–`0046`):**
+
+Migrations add property availability/rooms, `lead_details` recommendation inputs (`campus`, `room_category`, `district_preference`, `rec_hotel` jsonb), and consolidate gender onto `student_gender` (`0046` drops redundant `lead_details.gender`).
+
+```sql
+SELECT to_regclass('public.properties'),
+       to_regclass('public.property_room_types'),
+       to_regclass('public.property_rooms');
+
+-- rec_hotel is jsonb on active lead_details
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'lead_details'
+  AND column_name IN ('campus', 'room_category', 'district_preference', 'rec_hotel', 'student_gender');
+```
+
+Then run `pnpm gen:types`. Requires Wrangler secret / `.env.local`: `MAKE_WEBHOOK_URL` (Make.com scenario webhook for **Öneri Al**).
+
+**Old leads fuzzy search (migration `0047`):**
+
+```sql
+SELECT proname FROM pg_proc WHERE proname = 'search_old_leads_ids';
+```
+
+Without `0047`, **Fuzzy search** on `/old-leads` returns 500 from `GET /api/old-leads`.
+
 **One-time old leads import (local CLI, not cron):**
 
 Requires migrations `0038`–`0039`, `.env.local` with Supabase service role + `CHATWOOT_BASE_URL`, and Chatwoot dump at `readable_database.sql` (or `--dump path`).
@@ -217,9 +244,28 @@ pnpm import:old-lead-messages:write
 
 Maps messages by `chatwoot_conversation_id` (primary + `import_meta.merged_conversation_ids`). Agent names on outbound bubbles come from Chatwoot `users` in the dump. Private agent notes are stored but hidden in UI.
 
+**One-time old lead gender backfill (after messages import):**
+
+Infers `old_lead_details.student_gender` from inbound message keywords (`lib/import/extract-gender.ts`). Only updates rows where `student_gender IS NULL` — safe to re-run.
+
+```bash
+# Dry-run — review sample matches before writing
+pnpm backfill:old-lead-gender
+
+# Optional cap for spot-check
+pnpm backfill:old-lead-gender -- --limit 100
+
+# Apply updates
+pnpm backfill:old-lead-gender:write
+```
+
+Expect a **low fill rate** compared to university — many conversations never mention gender. Null after backfill means unknown, not an error.
+
+Apply migration `0047` before using **Fuzzy search** on old leads (`search_old_leads_ids` RPC). Without it, fuzzy mode returns a 500 from the API.
+
 **Active lead chat (`0041`) — no bulk import:**
 
-Messages load from Chatwoot API when a user opens **Conversation** on `/leads` (see Section 10). Apply migration `0041` only; no CLI backfill required unless you add a custom script later.
+Messages stream in real-time via `message_created` webhooks. They are also backfilled from the Chatwoot API when a user opens **Conversation** on `/leads` (see Section 10). Apply migration `0041` only; no CLI backfill required unless you add a custom script later.
 
 **After migration, verify pg_cron jobs exist:**
 
@@ -266,6 +312,8 @@ No enforced branch in repo. Convention: deploy from `main` after local test (`pn
 
 All webhooks **await processing** before returning HTTP 200 (Cloudflare isolate safety). Failed processing is logged to `webhook_logs` and may trigger Telegram `webhook_failure` alert.
 
+**Middleware:** Session refresh middleware does **not** run on `/api/webhooks/*`, `/api/cron/*`, `/api/ref/*`, `/api/dni/*`, or `/api/health` (see `middleware.ts`). Webhooks use HMAC/static tokens only. This also avoids `self is not defined` errors when testing webhooks on local `pnpm dev`.
+
 Base URL: `https://panel.marketinguni.app`
 
 ### Chatwoot
@@ -293,11 +341,13 @@ curl -X POST https://panel.marketinguni.app/api/webhooks/chatwoot \
   -d "$BODY"
 ```
 
-**On failure:** `/webhook-logs` (manager UI) shows `status=failed`. Also check Supabase `webhook_logs`.
+**On failure:** `/webhook-logs` UI or Supabase `webhook_logs` (`status=failed`). See **Webhook logs (UI)** below.
 
-**Replay:** Manager → `/webhook-logs` → failed row → **Replay**, or `POST /api/webhook-logs/{uuid}/replay` with manager session.
+**Replay:** Manager/superadmin → `/webhook-logs` → **Replay** on `failed` rows only, or `POST /api/webhook-logs/{uuid}/replay` with manager/superadmin session.
 
 **Lead creation rules:** Incoming messages only (skips `message_type=outgoing`). Duplicate phone → `duplicate_submission` in contact history, no new lead.
+
+**Message sync & history:** Both incoming and outgoing messages are synced to `lead_messages` (`0041`) via webhook. A `message_start` entry is written to `contact_history` if it's a new conversation (≥4h gap since last chatwoot source interaction).
 
 **Payload validation:** Zod schema accepts `null` on `sender`/`contact` fields (e.g. `identifier`, `name`) — common on outbound agent messages. Invalid payloads log to `webhook_logs` as failed and may Telegram-alert managers; they do **not** block live chat (Conversation tab uses Chatwoot API, not this webhook).
 
@@ -324,18 +374,49 @@ curl -X POST https://panel.marketinguni.app/api/webhooks/chatwoot \
 
 ### NetGSM
 
-| Field          | Value                                                    |
-| -------------- | -------------------------------------------------------- |
-| URL            | `POST /api/webhooks/netgsm`                              |
-| Source         | NetGSM santral / CDR webhook                             |
-| Auth           | JSON body field `token` must match `NETGSM_STATIC_TOKEN` |
-| Payload fields | `arayan`, `aranan`, `sure`, `kimlik`                     |
+| Field          | Value                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------- |
+| URL            | `POST /api/webhooks/netgsm`                                                                               |
+| Source         | NetGSM santral dinleme / **CDR** HTTP POST (not the IVR “CRM Call Integration” function screen alone)     |
+| Auth           | JSON body field `token` must match `NETGSM_STATIC_TOKEN` (Wrangler in prod; `.env.local` for local dev)   |
+| Payload fields | `arayan`, `aranan`, `sure`, `kimlik` (aliases supported — see `lib/webhooks/normalize-netgsm-payload.ts`) |
+
+**CDR matching (Company Line):** If `scenario: "cdr"` and the call involves `COMPANY_PHONE_NUMBER` (+90 212 909 52 44), the CRM searches for an existing lead by phone (including archived leads).
+
+- If found: Unarchives the lead (if archived) and writes a `call` entry to `contact_history` (e.g., "15/05/2026 14.30'de aradı — 2 dk 5 sn"). Does **not** create a new lead.
+- If not found or not company line: Falls through to normal lead creation.
+
+**Lead creation rules:** CRM creates a lead when (and not matched by CDR above):
+
+- `scenario: "cdr"` (typical CDR payload), **or**
+- Inbound/hangup-style event with `customer_num` or `arayan`, plus `unique_id` / `kimlik`, plus duration (`sure` / `talktime`)
+
+Events such as `Queue` / ring-only without caller id are logged as **`skipped`** (no lead). Wrong token → **401** and **no** `webhook_logs` row.
 
 **Phase 4 attribution:** `aranan` (called virtual number) is matched against `dni_numbers.virtual_number`; `lead_count` and `last_lead_at` increment on the matching row. `collected_data.source_confidence = inferred`, `path_lost_at = lost_at_source` (no browser session).
 
-**On failure:** `/webhook-logs`, source `netgsm`.
+**Prod smoke test (curl):**
 
-**Replay:** Same replay flow.
+```bash
+TOKEN=$(grep '^NETGSM_STATIC_TOKEN=' .env.local | cut -d= -f2-)
+
+curl -i -X POST https://panel.marketinguni.app/api/webhooks/netgsm \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"scenario\": \"cdr\",
+    \"kimlik\": \"smoke-$(date +%s)\",
+    \"arayan\": \"05321234567\",
+    \"aranan\": \"850300000000\",
+    \"sure\": 30,
+    \"token\": \"$TOKEN\"
+  }"
+```
+
+Expect **HTTP 200** and a new `webhook_logs` row with `source=netgsm`, `status=success`. If curl works but a **live phone call** produces no new log row, NetGSM is not firing HTTP POST on that call path (fix santral dinleme / CDR event binding in NetGSM — not CRM code).
+
+**On failure:** `/webhook-logs` or SQL (`source=netgsm`). Check `failed` vs `skipped` vs no row at all.
+
+**Replay:** Same replay flow (failed rows only).
 
 ---
 
@@ -357,6 +438,17 @@ curl -X POST https://panel.marketinguni.app/api/webhooks/chatwoot \
 `received` → `processing` → `success` | `failed` | `skipped`
 
 Idempotency keys prevent duplicate processing (e.g. `chatwoot_{conversationId}_{messageId}`).
+
+### Webhook logs (UI)
+
+| Field  | Value                                                                  |
+| ------ | ---------------------------------------------------------------------- |
+| Route  | `/webhook-logs` (sidebar: **Webhook Logs** — manager + **superadmin**) |
+| API    | `GET /api/webhook-logs?limit=50` (all statuses; not failed-only)       |
+| Replay | `POST /api/webhook-logs/{id}/replay` — **failed** rows only            |
+| SQL    | Full audit when UI is empty but DB has rows (see Section 5)            |
+
+Salespeople are redirected to `/leads`. Pre-2026-05-26 deploy only listed `status=failed`, so successful NetGSM `cdr` tests looked like “no logs”.
 
 ---
 
@@ -431,7 +523,7 @@ ORDER BY created_at DESC
 LIMIT 10;
 ```
 
-**Fix:** Manager → Replay from UI. If signature errors, verify webhook secret in Wrangler matches provider dashboard.
+**Fix:** Manager/superadmin → Replay from `/webhook-logs`. If signature errors, verify webhook secret in Wrangler matches provider dashboard.
 
 ---
 
@@ -587,13 +679,58 @@ SELECT id, status, daily_send_count, paused_at FROM campaigns ORDER BY updated_a
 
 ---
 
-### Duplicate leads from WhatsApp messages (Chatwoot + Meta API both active)
+### NetGSM curl works but live call creates no lead / no log
 
-**Cause:** Both the WhatsApp (Meta) API and Chatwoot are connected and configured to deliver messages. Every incoming WhatsApp message that creates a lead is created twice — once from the WhatsApp webhook and once from Chatwoot.
+**Cause:** CRM endpoint and token are fine; NetGSM does not POST on real calls (CDR/santral dinleme not bound to that number’s call path, or only Queue/ring events without `cdr` + `arayan` + `kimlik`).
 
-**Note:** This cannot be solved by disabling WhatsApp's message delivery, because then WhatsApp won't send messages to Chatwoot. That would make debugging and log checking harder.
+**Check:**
 
-**Possible direction (not implemented):** Remove the WhatsApp API integration, forgoing the WhatsApp call lead creation feature. More on this at a later date.
+```sql
+SELECT status, event_type, payload->>'scenario' AS scenario, created_at
+FROM webhook_logs
+WHERE source = 'netgsm'
+  AND created_at > NOW() - INTERVAL '1 hour'
+ORDER BY created_at DESC;
+```
+
+**Fix:** In NetGSM, enable **call-end / CDR** HTTP notification to `https://panel.marketinguni.app/api/webhooks/netgsm` with `token` in JSON. “CRM Call Integration” IVR function settings alone do not replace CDR webhook. Ask NetGSM support which menu fires POST after hangup. Compare payload to Section 4 NetGSM smoke curl.
+
+---
+
+### Webhook logs UI empty but SQL has rows
+
+**Cause:** Old UI filtered `?status=failed` only; successful NetGSM/Chatwoot tests show as `success` in DB.
+
+**Check:**
+
+```sql
+SELECT status, source, COUNT(*) FROM webhook_logs
+GROUP BY status, source ORDER BY source, status;
+```
+
+**Fix:** Deploy latest app (lists last 50 logs of any status). Or query SQL directly.
+
+---
+
+### Local `pnpm dev` — webhook returns 500 HTML (`self is not defined`)
+
+**Cause:** Next.js middleware ran on webhook routes in dev; webpack chunk expects browser `self`.
+
+**Fix:** Use latest `middleware.ts` (webhook paths excluded). `rm -rf .next`, restart `pnpm dev`. Test: `curl -X POST http://localhost:3000/api/webhooks/netgsm ...` should return **200** or **401**, not HTML error page.
+
+---
+
+### `/webhook-logs` redirects to `/leads`
+
+**Cause:** Logged in as `salesperson`, or pre-fix build where only `role=manager` was allowed (superadmin redirected).
+
+**Fix:** Log in as **manager** or **superadmin**. Deploy commit with `isManagerOrAbove` for webhook logs.
+
+---
+
+### Duplicate leads from WhatsApp messages (historical note)
+
+**Current code:** Message leads are created from **Chatwoot** webhooks only. Meta `/api/webhooks/whatsapp-calls` handles **`calls`** and campaign **`statuses`** — not chat messages. Duplicate message leads from “Meta + Chatwoot” are **not** expected with the current processor unless a second integration duplicates Chatwoot traffic.
 
 ---
 
@@ -1210,13 +1347,82 @@ Integration test checklist: `docs/phase_4_tests.md`.
 | --------------- | --------------------------------------------------------------------------------------------------------- |
 | Access          | Same RLS as `leads` — salesperson (assigned + unassigned pool), manager, superadmin                       |
 | UI              | `/leads` slide-over → **Conversation** tab                                                                |
-| Sync trigger    | `POST /api/leads/{id}/messages/sync` when tab opens; **not** called from list or cron                     |
-| Poll while open | Every **15s** re-sync same lead only; stops when tab closes or user switches lead                         |
-| Data source     | Chatwoot Application API (`listConversationMessages`) — not webhook, not SQL dump                         |
+| Webhook sync    | `message_created` webhooks automatically upsert to `lead_messages` in real-time                           |
+| UI Sync trigger | `POST /api/leads/{id}/messages/sync` when tab opens (backfills history)                                   |
+| Poll while open | Every **15s** re-sync same lead only via API; stops when tab closes or user switches lead                 |
+| Data source     | Webhooks (real-time) + Chatwoot Application API (`listConversationMessages`)                              |
 | Requires        | `CHATWOOT_API_TOKEN`, `CHATWOOT_ACCOUNT_ID`, lead `chatwoot_conversation_id` (or URL in `source_details`) |
 | Private notes   | Stored if returned by API; excluded from UI (`is_private = false` filter)                                 |
 | Bubbles         | Inbound left (lead name), outbound right (agent name from Chatwoot sender / agents list)                  |
 | Not integrated  | Does not create leads, does not update funnel; webhooks still handle lead creation separately             |
+
+### Lead list filters (active + old leads)
+
+Both `/leads` and `/old-leads` use the same dynamic filter pipeline: UI toolbar state → query string (`filter[field][operator]=value`) → `GET /api/leads` or `GET /api/old-leads` → `parseFilterParams` → whitelist validation → split root vs details embed → PostgREST filters.
+
+**Query layer (shared code):**
+
+| Module                                                                   | Role                                                                                                                |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `lib/query/filter-builder.ts`                                            | Parses `filter[field][op]=value`; operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `ilike`, `in`, `is`, `cs`, `ov` |
+| `lib/query/supabase-query-types.ts`                                      | Typed PostgREST query-builder shapes for filter helpers (no `any`)                                                  |
+| `lib/query/filter-field-config.ts`                                       | Per-column metadata (leads vs details table, ilike vs eq, array ops)                                                |
+| `lib/query/apply-embedded-filters.ts`                                    | Applies filters on embedded `lead_details` / `old_lead_details` paths                                               |
+| `lib/ui/append-list-filter-params.ts`                                    | Maps toolbar state → query params                                                                                   |
+| `lib/ui/build-leads-query-string.ts` / `build-old-leads-query-string.ts` | Builds full list API URLs                                                                                           |
+| `lib/ui/lead-list-query.ts` / `old-lead-list-query.ts`                   | Maps toolbar state (incl. date ranges) → query builders                                                             |
+| `lib/query/apply-composite-filters.ts`                                   | Old-lead `rec_hotel` TEXT empty-string handling via `composite=old_rec_hotel_present\|old_rec_hotel_absent`         |
+| `components/leads/list-filter-controls.tsx`                              | Shared filter UI: collapsible sections, presence selects, dorm awaiting, data-quality toggles                       |
+
+**UI layout:** Filter panel sections (**Pipeline**, **Assignment & dates**, **Student profile**, **Housing intent**, **Compliance & contacts**) are **collapsible** — click the section heading to expand/collapse. **Pipeline** starts open; other sections start collapsed. Fuzzy search checkbox stays visible above all sections.
+
+**Presence filters:** `filter[column][is]=null` (missing) or `filter[column][is]=not.null` (has value). Used for unassigned (`assigned_to`), parent phone/name, missing university/gender/budget toggles, and active-lead `rec_hotel` jsonb.
+
+**Array filters:** `dorm_awaiting` uses overlap (`ov`) for any-of multi-select. `interested_hotel` and `room_type` use contains (`cs`) with a single value.
+
+**University:** partial match via `filter[university][ilike]=%term%` (not exact `eq`).
+
+**Active leads (`/leads`) — filter groups in UI:**
+
+| Group                 | Fields                                                                                                                                         |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pipeline              | funnel, SLA, source, channel, stage, special state, loss reason, persona, language, organic, min score                                         |
+| Assignment & dates    | assignee (incl. Unassigned), created range, last contact range, SLA range, move-in range                                                       |
+| Student profile       | university (partial), uni year, cinsiyet, nationality, dorm awaiting                                                                           |
+| Housing intent        | budget min/max, preferred district, campus, room category, district preference, interested hotel (property dropdown), room type, has hotel rec |
+| Compliance & contacts | KVKK opt-in, marketing opt-in, has parent phone/name, missing data toggles                                                                     |
+
+Gender filter on active leads is available to all roles (same RLS as list — own + unassigned pool for salespeople; all for managers).
+
+**Old leads (`/old-leads`) — same groups minus active-only fields:**
+
+No campus, room category, or district preference (not on `old_lead_details`). Interested hotel is free-text (exact array contains). Has hotel rec uses composite filter (TEXT column — empty string counts as absent).
+
+**Campaign segments:** `FILTERABLE_COLUMNS` whitelist is derived from `LEAD_LIST_FILTER_FIELDS`; new list filters are automatically valid in campaign segment JSON unless UI is updated separately.
+
+**Fuzzy search:** trigram RPC on name + phone only (`search_leads_ids` / `search_old_leads_ids`). Filters compose with fuzzy results. Old-leads fuzzy requires migration `0047`.
+
+### Hotel recommendation (active leads)
+
+Make.com workflow returns up to three property matches; results are stored on `lead_details.rec_hotel` (jsonb).
+
+| Step | What happens                                                                                                                              |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | User fills **Öneri Girdileri** on lead Profile: `student_gender`, `campus`, `budget_max`, `room_category`, optional `district_preference` |
+| 2    | **Öneri Al** in lead slide-over Profile tab → `POST /api/leads/{id}/request-rec`                                                          |
+| 3    | CRM proxies payload to `MAKE_WEBHOOK_URL` (Make.com scenario)                                                                             |
+| 4    | Make.com callback → `PATCH /api/leads/{id}/rec-hotel` with `recommendations[]`                                                            |
+| 5    | UI polls lead detail and renders cards via `LeadRecHotel`                                                                                 |
+
+**Auth on callback:** `PATCH /api/leads/{id}/rec-hotel` accepts `Authorization: Bearer {CRON_SECRET}` (Make.com) **or** any authenticated CRM session.
+
+**Service-role write path:** DB upsert runs in `lib/leads/save-rec-hotel.ts` (not in the API route directly). ESLint restricts `@/lib/supabase/service` to `lib/leads/`, `lib/jobs/`, etc. — API routes must delegate to those modules.
+
+**Required env:** `MAKE_WEBHOOK_URL`, `CRON_SECRET` (for Make callback bearer token).
+
+**Schema (migrations `0042`–`0046`):** `properties.is_available`, `property_room_types`, `property_rooms`, `lead_details` rec fields; `student_gender` is the single gender field (legacy `lead_details.gender` removed in `0046`).
+
+**If Öneri Al fails:** Check `MAKE_WEBHOOK_URL` in Wrangler; verify lead has required profile fields; check Make.com scenario logs; confirm callback URL points to `https://panel.marketinguni.app/api/leads/{uuid}/rec-hotel` with correct bearer token.
 
 ---
 
@@ -1317,17 +1523,28 @@ Roll back Worker (Section 3). If DB migration caused issue, check Supabase migra
 | `/old-leads`         | Historical Chatwoot imports (read-only)                | manager, superadmin       |
 | `/team`              | Salespeople list                                       | manager, superadmin       |
 | `/properties`        | Property inventory                                     | authenticated             |
+| `/settings`          | Theme, **language (TR/EN)**, sign out                  | authenticated             |
+
+### UI locale (Turkish / English)
+
+- **Default:** Turkish (`tr`) on first visit when no preference is stored.
+- **Toggle:** **Settings** → **Language** → Türkçe or English. English remains fully supported.
+- **Persistence:** Browser `localStorage` key `univotel-locale` (same pattern as `univotel-theme` for dark mode).
+- **Scope:** Menus, labels, buttons, table headers, empty states, and enum display labels. **Not translated:** lead names, notes, chat message bodies, universities, hotel names, webhook payloads, Telegram/cron alert text.
+- **Code:** `lib/i18n/messages/{en,tr}.ts`, `components/layout/LocaleProvider.tsx`, `hooks/useTranslation.ts`. New UI strings need keys in **both** catalogs.
 
 Attribution detail API (for lead detail panels): `GET /api/leads/{uuid}/attribution` → full `collected_data` row (manager/superadmin). Returns **404** for pre-Phase 4 leads with no `collected_data`.
 
 Old lead detail API: `GET /api/old-leads/{uuid}` → full `old_leads` row + `old_lead_details` (manager/superadmin). Read-only — no PATCH/POST routes.
 
-**Active lead slide-over** (`/leads` with `?selected=`): tabs **Overview**, **Profile**, **Conversation** (live Chatwoot sync), **History** (CRM audit log), **Actions** (managers). **Old lead slide-over:** **Details**, **Conversation** (dump import).
+**Active lead slide-over** (`/leads` with `?selected=`): tabs **Overview**, **Profile** (incl. hotel **Öneri Al** + recommendation cards), **Conversation** (live Chatwoot sync), **History** (CRM audit log), **Actions** (managers). **Old lead slide-over:** **Details**, **Conversation** (dump import).
 
 | API                                  | Method | Purpose                                                                    |
 | ------------------------------------ | ------ | -------------------------------------------------------------------------- |
 | `GET /api/leads/{id}/messages`       | GET    | Paginated read from `lead_messages` (load older)                           |
 | `POST /api/leads/{id}/messages/sync` | POST   | Fetch from Chatwoot API + upsert cache; called when Conversation tab opens |
+| `POST /api/leads/{id}/request-rec`   | POST   | Proxy hotel recommendation request to Make.com (`MAKE_WEBHOOK_URL`)        |
+| `PATCH /api/leads/{id}/rec-hotel`    | PATCH  | Make.com callback — upserts `lead_details.rec_hotel` via `save-rec-hotel`  |
 | `GET /api/old-leads/{uuid}/messages` | GET    | Paginated read from `old_lead_messages`                                    |
 | `GET /api/old-leads/{uuid}`          | GET    | Old lead detail (manager/superadmin)                                       |
 
@@ -1338,11 +1555,15 @@ Live sync poll interval while Conversation tab is open: **15s** (`LEAD_CHAT_SYNC
 ## 11. Useful CLI Commands
 
 ```bash
-# Local dev
+# Local dev (if odd errors: rm -rf .next && pnpm dev)
 pnpm dev
 
-# Tests
+# Tests + production build check before deploy
 pnpm test
+pnpm build          # runs ESLint; must pass before cf:deploy
+
+# Cloudflare production deploy (runs opennext build + wrangler deploy)
+pnpm cf:deploy
 
 # Type generation after migration
 pnpm gen:types
@@ -1372,6 +1593,13 @@ pnpm exec wrangler secret put GA4_PROPERTY_ID
 # Local Cloudflare preview
 pnpm cf:preview
 ```
+
+**Deploy build failures (ESLint):**
+
+| Error                                                   | Cause                                                   | Fix                                                               |
+| ------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------- |
+| `Service role client may only be imported from lib/...` | `pages/api/*` imports `@/lib/supabase/service` directly | Move DB logic to `lib/leads/`, `lib/jobs/`, etc.; keep route thin |
+| `@typescript-eslint/no-explicit-any` in `lib/query/*`   | Untyped Supabase query-builder generics                 | Use `lib/query/supabase-query-types.ts`                           |
 
 ---
 
