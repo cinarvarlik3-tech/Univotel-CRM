@@ -136,6 +136,14 @@ export async function processChatwoot(body: unknown): Promise<void> {
 
   if (payload.event === 'conversation_created') {
     await handleLeadCreate(payload);
+    // Write the first message immediately after the conversation link is persisted.
+    // Without this, message_created may arrive before the link exists and silently skip.
+    if (payload.message?.id) {
+      await withRetry(
+        () => handleMessageCreated(payload as unknown as ChatwootMessageCreated),
+        'message sync',
+      );
+    }
     return;
   }
 

@@ -1,6 +1,6 @@
 # Univotel CRM — Production Runbook
 
-Last updated: 2026-05-31. This document describes **what the running system does now** and **how to fix it when something breaks**. For design history, see implementation docs; this is operational reference only.
+Last updated: 2026-06-01. This document describes **what the running system does now** and **how to fix it when something breaks**. For design history, see implementation docs; this is operational reference only.
 
 ---
 
@@ -1402,6 +1402,51 @@ No campus, room category, or district preference (not on `old_lead_details`). In
 
 **Fuzzy search:** trigram RPC on name + phone only (`search_leads_ids` / `search_old_leads_ids`). Filters compose with fuzzy results. Old-leads fuzzy requires migration `0047`.
 
+### Funnel View (active lead slide-over tab)
+
+The **Funnel View** tab (`components/leads/FunnelView.tsx`) fetches `GET /api/leads/{id}/funnel-view` and renders three sections:
+
+| Section           | What it shows                                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------------------------- |
+| Pipeline strip    | All funnel stages in order; current stage highlighted; amber ring when lead is stale                 |
+| Stats row         | Missing critical fields count · salesperson's lead distribution · hotel rec status / Öneri Al button |
+| Activity timeline | Merged feed of chat messages, CDR call logs, tasks, and status changes — sorted newest first         |
+
+**Distribution scope:** Always shows the distribution of leads assigned to the lead's own salesperson (`assigned_to`), regardless of whether the viewer is a manager or salesperson.
+
+**Full screen:** Expand button (top-right of Funnel View section) stretches the slide-over to fill the viewport by overriding `SheetContent` width via dynamic className. State is local React — resets when slide-over closes.
+
+#### Stale warning thresholds — ⚠️ placeholder values, needs product owner decision
+
+A lead is considered **stale** when `last_contact_at` is older than the threshold for its current funnel stage. Stale leads show an amber ring on the pipeline strip node and a tooltip suffix `'X gündür görüşülmedi'`.
+
+**Current state:** All thresholds are set to **7 days** as a placeholder. This has not been reviewed or approved by the product owner.
+
+**To update:** Edit `STALE_THRESHOLDS_BY_STAGE` in `lib/constants.ts` — one value per funnel stage. No other code changes needed.
+
+```ts
+// lib/constants.ts
+export const STALE_THRESHOLDS_BY_STAGE: Readonly<Record<string, number>> = {
+  yeni: 7, // ← change to decided value
+  aranacak: 7,
+  arandi: 7,
+  'arandi-acmadi': 7,
+  'bizi-aradi-konustuk': 7,
+  ziyaret: 7,
+  'ziyaret-etmedi': 7,
+  'ziyaret-etti': 7,
+  'teklif-gonderildi': 7,
+  'kapora-alindi': 7,
+  'sozlesme-imzalandi': 7,
+  'ziyaret-ama-almayacak': 7,
+  ilgilenmiyor: 7,
+};
+```
+
+Stale check is based on `leads.last_contact_at` only — not on how long the lead has been in its current stage. A lead contacted yesterday is never stale even if it has been in the same stage for 30 days.
+
+---
+
 ### Hotel recommendation (active leads)
 
 Make.com workflow returns up to three property matches; results are stored on `lead_details.rec_hotel` (jsonb).
@@ -1537,7 +1582,7 @@ Attribution detail API (for lead detail panels): `GET /api/leads/{uuid}/attribut
 
 Old lead detail API: `GET /api/old-leads/{uuid}` → full `old_leads` row + `old_lead_details` (manager/superadmin). Read-only — no PATCH/POST routes.
 
-**Active lead slide-over** (`/leads` with `?selected=`): tabs **Overview**, **Profile** (incl. hotel **Öneri Al** + recommendation cards), **Conversation** (live Chatwoot sync), **History** (CRM audit log), **Actions** (managers). **Old lead slide-over:** **Details**, **Conversation** (dump import).
+**Active lead slide-over** (`/leads` with `?selected=`): tabs **Overview**, **Profile** (incl. hotel **Öneri Al** + recommendation cards), **Conversation** (live Chatwoot sync), **Funnel View** (pipeline strip, stats row, merged activity timeline — see Section 8), **History** (CRM audit log), **Actions** (managers). **Old lead slide-over:** **Details**, **Conversation** (dump import).
 
 | API                                  | Method | Purpose                                                                    |
 | ------------------------------------ | ------ | -------------------------------------------------------------------------- |
@@ -1545,6 +1590,7 @@ Old lead detail API: `GET /api/old-leads/{uuid}` → full `old_leads` row + `old
 | `POST /api/leads/{id}/messages/sync` | POST   | Fetch from Chatwoot API + upsert cache; called when Conversation tab opens |
 | `POST /api/leads/{id}/request-rec`   | POST   | Proxy hotel recommendation request to Make.com (`MAKE_WEBHOOK_URL`)        |
 | `PATCH /api/leads/{id}/rec-hotel`    | PATCH  | Make.com callback — upserts `lead_details.rec_hotel` via `save-rec-hotel`  |
+| `GET /api/leads/{id}/funnel-view`    | GET    | Pipeline data, stats, and merged activity timeline for Funnel View tab     |
 | `GET /api/old-leads/{uuid}/messages` | GET    | Paginated read from `old_lead_messages`                                    |
 | `GET /api/old-leads/{uuid}`          | GET    | Old lead detail (manager/superadmin)                                       |
 

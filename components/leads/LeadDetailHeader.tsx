@@ -2,7 +2,12 @@
  * Sticky header for the lead detail slide-over panel.
  */
 import Link from 'next/link';
-import { IconExternalLink, IconX } from '@tabler/icons-react';
+import {
+  IconArrowsMaximize,
+  IconArrowsMinimize,
+  IconExternalLink,
+  IconX,
+} from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -14,6 +19,8 @@ interface LeadDetailHeaderProps {
   lead: LeadWithDetails;
   leadId: string;
   onClose?: () => void;
+  isFullScreen?: boolean;
+  onToggleFullScreen?: () => void;
 }
 
 /**
@@ -31,23 +38,47 @@ function assigneeLabel(lead: LeadWithDetails, unassignedLabel: string): string {
  * @param props - Lead data and UUID.
  * @returns Panel header element.
  */
-export function LeadDetailHeader({ lead, leadId, onClose }: LeadDetailHeaderProps) {
+export function LeadDetailHeader({
+  lead,
+  leadId,
+  onClose,
+  isFullScreen,
+  onToggleFullScreen,
+}: LeadDetailHeaderProps) {
   const { locale, t } = useTranslation();
 
   return (
     <div className="relative space-y-2 border-b border-border-default px-5 pb-3 pt-4">
-      {onClose && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="absolute right-3 top-3 size-8"
-          onClick={onClose}
-          aria-label={t('leads.closePanel')}
-        >
-          <IconX className="size-4" />
-        </Button>
-      )}
+      <div className="absolute right-3 top-3 flex items-center gap-0.5">
+        {onToggleFullScreen && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            onClick={onToggleFullScreen}
+            aria-label={isFullScreen ? 'Daralt' : 'Tam ekran'}
+          >
+            {isFullScreen ? (
+              <IconArrowsMinimize className="size-4" />
+            ) : (
+              <IconArrowsMaximize className="size-4" />
+            )}
+          </Button>
+        )}
+        {onClose && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            onClick={onClose}
+            aria-label={t('leads.closePanel')}
+          >
+            <IconX className="size-4" />
+          </Button>
+        )}
+      </div>
       <h2 className="font-heading pr-8 text-base font-bold text-text-primary">
         {lead.lead_name ?? t('common.unnamedLead')}
       </h2>

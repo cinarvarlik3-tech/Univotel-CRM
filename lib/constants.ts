@@ -472,3 +472,26 @@ export const COMPANY_PHONE_NUMBER = '+90 212 909 52 44';
  * Lead numaralarıyla aynı formatta karşılaştırılabilmesi için sabit olarak tanımlandı.
  */
 export const COMPANY_PHONE_NUMBER_NORMALIZED = '02129095244';
+
+/** Default stale warning threshold in days — based on last_contact_at. */
+export const STALE_THRESHOLD_DAYS_DEFAULT = 7;
+
+/**
+ * Per-stage stale thresholds (days since last_contact_at).
+ * All default to 7 — to be tuned by product owner per stage.
+ */
+export const STALE_THRESHOLDS_BY_STAGE: Readonly<Record<string, number>> = {
+  yeni: 7,
+  aranacak: 7,
+  arandi: 7,
+  'arandi-acmadi': 7,
+  'bizi-aradi-konustuk': 7,
+  ziyaret: 7,
+  'ziyaret-etmedi': 7,
+  'ziyaret-etti': 7,
+  'teklif-gonderildi': 7,
+  'kapora-alindi': 7,
+  'sozlesme-imzalandi': 7,
+  'ziyaret-ama-almayacak': 7,
+  ilgilenmiyor: 7,
+};

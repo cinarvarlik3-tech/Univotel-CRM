@@ -13,7 +13,9 @@ import { LeadStatusForm } from '@/components/leads/LeadStatusForm';
 import { ManagerLeadActions } from '@/components/leads/ManagerLeadActions';
 import { ContactHistorySection } from '@/components/leads/ContactHistorySection';
 import { LeadChatView } from '@/components/leads/LeadChatView';
+import { FunnelView } from '@/components/leads/FunnelView';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KvList } from '@/components/ui/kv-list';
@@ -129,9 +131,11 @@ export function LeadDetailPanel({
     open ? (leadId ?? undefined) : undefined,
   );
   const [tab, setTab] = useState('overview');
+  const [isFullScreen, setIsFullScreen] = useState(false);
 
   useEffect(() => {
     setTab('overview');
+    setIsFullScreen(false);
   }, [leadId]);
 
   const sourceDetails =
@@ -149,7 +153,11 @@ export function LeadDetailPanel({
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent side="right" className="flex h-full flex-col gap-0 p-0" hideClose>
+      <SheetContent
+        side="right"
+        className={cn('flex h-full flex-col gap-0 p-0', isFullScreen && 'w-screen max-w-none')}
+        hideClose
+      >
         {loading && (
           <div className="flex flex-col gap-3 p-5">
             <Skeleton className="h-6 w-48" />
@@ -166,13 +174,20 @@ export function LeadDetailPanel({
 
         {lead && leadId && !loading && (
           <>
-            <LeadDetailHeader lead={lead} leadId={leadId} onClose={onClose} />
+            <LeadDetailHeader
+              lead={lead}
+              leadId={leadId}
+              onClose={onClose}
+              isFullScreen={isFullScreen}
+              onToggleFullScreen={() => setIsFullScreen((v) => !v)}
+            />
 
             <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
               <TabsList className="h-auto shrink-0 px-5 pt-2">
                 <TabsTrigger value="overview">{t('leads.overview')}</TabsTrigger>
                 <TabsTrigger value="profile">{t('leads.profile')}</TabsTrigger>
                 <TabsTrigger value="conversation">{t('leads.conversation')}</TabsTrigger>
+                <TabsTrigger value="funnel-view">Funnel View</TabsTrigger>
                 <TabsTrigger value="history">{t('leads.history')}</TabsTrigger>
                 {isManager && <TabsTrigger value="actions">{t('leads.actions')}</TabsTrigger>}
               </TabsList>
@@ -207,6 +222,20 @@ export function LeadDetailPanel({
                     leadId={leadId}
                     leadName={lead.lead_name}
                     chatwootUrl={chatwootUrl}
+                  />
+                )}
+              </TabsContent>
+
+              <TabsContent
+                value="funnel-view"
+                className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+              >
+                {tab === 'funnel-view' && (
+                  <FunnelView
+                    leadId={leadId}
+                    salespeople={salespeople}
+                    isFullScreen={isFullScreen}
+                    onToggleFullScreen={() => setIsFullScreen((v) => !v)}
                   />
                 )}
               </TabsContent>
