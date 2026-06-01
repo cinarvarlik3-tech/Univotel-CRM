@@ -134,11 +134,18 @@ export async function processChatwoot(body: unknown): Promise<void> {
     return;
   }
 
-  if (payload.event === 'conversation_created' || payload.event === 'message_created') {
-    if (payload.event === 'message_created' && payload.message_type === 'outgoing') {
-      return;
-    }
+  if (payload.event === 'conversation_created') {
     await handleLeadCreate(payload);
+    return;
+  }
+
+  if (payload.event === 'message_created') {
+    // Sadece incoming mesajlar yeni lead yaratır
+    if (payload.message_type !== 'outgoing') {
+      await handleLeadCreate(payload);
+    }
+    // Hem incoming hem outgoing lead_messages'a yazılır
+    await withRetry(() => handleMessageCreated(payload), 'message sync');
   }
 }
 
@@ -951,5 +958,184 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
     if (historyError) {
       throw new Error(`contact_history insert failed: ${historyError.message}`);
     }
+  }
+}
+
+/** Yeni konuşma sayılması için minimum sessizlik süresi (saat). */
+const CONVERSATION_GAP_HOURS = 4;
+
+/**
+ * message_created event'ini lead_messages ve contact_history'e yazar.
+ * Hem incoming hem outgoing mesajlar kaydedilir.
+ * Lead bulunamazsa sessizce geçer.
+ * @param payload - Parsed ChatwootMessageCreated payload.
+ */
+async function handleMessageCreated(payload: ChatwootMessageCreated): Promise<void> {
+  const conversationId = payload.conversation?.id ?? payload.id;
+  const messageId = payload.message?.id;
+
+  if (!messageId) {
+    console.warn(`[chatwoot] message_created without message.id conversation=${conversationId}`);
+    return;
+  }
+
+  const lead = await findLeadByChatwootConversation(conversationId);
+  if (!lead) {
+    console.info(
+      `[chatwoot] no lead for message_created conversation=${conversationId} — skipping message sync`,
+    );
+    return;
+  }
+
+  const content = payload.message?.content ?? null;
+  const rawCreatedAt = payload.message?.created_at;
+  const messageTimestamp = rawCreatedAt
+    ? new Date(rawCreatedAt * 1000).toISOString()
+    : new Date().toISOString();
+
+  const senderType = payload.message?.sender?.type ?? null;
+  const senderName = payload.message?.sender?.name ?? null;
+  const senderId = payload.message?.sender?.id ?? null;
+  const isPrivate = payload.message?.private ?? false;
+  const messageType = payload.message_type ?? 'incoming';
+
+  await syncMessageToLeadMessages({
+    leadUuid: lead.uuid,
+    conversationId,
+    messageId,
+    messageType,
+    content,
+    senderType,
+    senderName,
+    senderId,
+    isPrivate,
+    messageTimestamp,
+  });
+
+  await maybeWriteMessageStart({
+    leadUuid: lead.uuid,
+    conversationId,
+    messageId,
+    content,
+    messageTimestamp,
+    senderType,
+    senderName,
+  });
+}
+
+/**
+ * Chatwoot mesajını lead_messages'a upsert eder.
+ * Conflict target: chatwoot_message_id (unique index).
+ */
+async function syncMessageToLeadMessages(params: {
+  leadUuid: string;
+  conversationId: number;
+  messageId: number;
+  messageType: string;
+  content: string | null;
+  senderType: string | null;
+  senderName: string | null;
+  senderId: number | null;
+  isPrivate: boolean;
+  messageTimestamp: string;
+}): Promise<void> {
+  const client = createServiceClient();
+  const { error } = await client.from('lead_messages').upsert(
+    {
+      lead_uuid: params.leadUuid,
+      chatwoot_conversation_id: params.conversationId,
+      chatwoot_message_id: params.messageId,
+      content: params.content,
+      message_type: params.messageType,
+      sender_type: params.senderType,
+      sender_name: params.senderName,
+      sender_id: params.senderId,
+      is_private: params.isPrivate,
+      created_at: params.messageTimestamp,
+      synced_at: new Date().toISOString(),
+    },
+    { onConflict: 'chatwoot_message_id' },
+  );
+
+  if (error) {
+    console.error(
+      `[chatwoot] lead_messages upsert failed conversation=${params.conversationId} message=${params.messageId}:`,
+      error.message,
+    );
+  } else {
+    console.info(
+      `[chatwoot] lead_messages synced lead=${params.leadUuid} message=${params.messageId}`,
+    );
+  }
+}
+
+/**
+ * Konuşma başlangıcını contact_history'e yazar.
+ * Son chatwoot kaydından bu yana >= 4 saat geçtiyse yeni message_start insert edilir.
+ * Aynı konuşmada devam eden mesajlar için yazılmaz (append-only korunur).
+ */
+async function maybeWriteMessageStart(params: {
+  leadUuid: string;
+  conversationId: number;
+  messageId: number;
+  content: string | null;
+  messageTimestamp: string;
+  senderType: string | null;
+  senderName: string | null;
+}): Promise<void> {
+  const client = createServiceClient();
+
+  const { data: lastEntry, error: queryError } = await client
+    .from('contact_history')
+    .select('created_at')
+    .eq('lead_uuid', params.leadUuid)
+    .eq('interaction_source', 'chatwoot')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (queryError) {
+    console.error(
+      `[chatwoot] contact_history query failed lead=${params.leadUuid}:`,
+      queryError.message,
+    );
+    return;
+  }
+
+  const messageTime = new Date(params.messageTimestamp);
+  const lastTime = lastEntry ? new Date(lastEntry.created_at) : null;
+  const gapMs = lastTime ? messageTime.getTime() - lastTime.getTime() : Infinity;
+  const gapHours = gapMs / (1000 * 60 * 60);
+
+  if (gapHours < CONVERSATION_GAP_HOURS) {
+    // Aynı konuşma akışı — yazma
+    return;
+  }
+
+  const snippet = (params.content ?? '').slice(0, 100);
+  const { error: insertError } = await client.from('contact_history').insert({
+    lead_uuid: params.leadUuid,
+    interaction_type: 'message_start',
+    interaction_source: 'chatwoot',
+    notes: `Konuşma başladı — "${snippet}"`,
+    metadata: {
+      sender_type: params.senderType,
+      sender_name: params.senderName,
+      chatwoot_conversation_id: params.conversationId,
+      chatwoot_message_id: params.messageId,
+    },
+    status_changed: false,
+    created_at: params.messageTimestamp,
+  });
+
+  if (insertError) {
+    console.error(
+      `[chatwoot] contact_history message_start failed lead=${params.leadUuid}:`,
+      insertError.message,
+    );
+  } else {
+    console.info(
+      `[chatwoot] contact_history message_start written lead=${params.leadUuid} conversation=${params.conversationId}`,
+    );
   }
 }

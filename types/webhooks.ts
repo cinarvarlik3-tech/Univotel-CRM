@@ -50,7 +50,23 @@ const ChatwootInboundMessageSchema = z.object({
   contact: ChatwootPhoneHolderSchema.optional(),
   sender: ChatwootPhoneHolderSchema.optional(),
   message_type: z.string().optional(),
-  message: z.object({ id: z.number().optional() }).optional(),
+  message: z
+    .object({
+      id: z.number().optional(),
+      content: z.string().nullable().optional(),
+      /** Unix timestamp (seconds). */
+      created_at: z.number().optional(),
+      message_type: z.number().optional(),
+      private: z.boolean().optional(),
+      sender: z
+        .object({
+          id: z.number().optional(),
+          name: z.string().nullable().optional(),
+          type: z.string().nullable().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
   messages: z.array(z.object({ id: z.number().optional() })).optional(),
   conversation: ChatwootConversationSchema,
   additional_attributes: z.record(z.unknown()).optional(),

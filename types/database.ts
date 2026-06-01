@@ -348,102 +348,109 @@ export type Database = {
       };
       collected_data: {
         Row: {
-          id: string;
-          lead_uuid: string;
-          channel: string;
-          external_id: string;
-          ref_code: string | null;
-          utm_source: string | null;
-          utm_medium: string | null;
-          utm_campaign: string | null;
-          utm_content: string | null;
-          landing_page: string | null;
-          referral_domain: string | null;
-          session_start: string | null;
-          session_duration: number | null;
-          click_event: string | null;
-          ga4_session_id: string | null;
           ad_id: string | null;
-          campaign_id: string | null;
           adset_id: string | null;
-          placement: string | null;
-          called_number: string | null;
           call_duration: number | null;
+          called_number: string | null;
+          campaign_id: string | null;
+          channel: string;
           chatwoot_url: string | null;
-          is_organic: boolean | null;
-          normalization_failed: boolean;
-          source_confidence: string;
-          path_lost_at: string;
+          click_event: string | null;
+          created_at: string;
+          external_id: string;
           ga4_enriched: boolean;
           ga4_enriched_at: string | null;
           ga4_fetch_attempts: number;
-          created_at: string;
+          ga4_session_id: string | null;
+          id: string;
+          is_organic: boolean | null;
+          landing_page: string | null;
+          lead_uuid: string;
+          normalization_failed: boolean;
+          path_lost_at: string;
+          placement: string | null;
+          ref_code: string | null;
+          referral_domain: string | null;
+          session_duration: number | null;
+          session_start: string | null;
+          source_confidence: string;
+          utm_campaign: string | null;
+          utm_content: string | null;
+          utm_medium: string | null;
+          utm_source: string | null;
         };
         Insert: {
-          id?: string;
-          lead_uuid: string;
-          channel: string;
-          external_id: string;
-          ref_code?: string | null;
-          utm_source?: string | null;
-          utm_medium?: string | null;
-          utm_campaign?: string | null;
-          utm_content?: string | null;
-          landing_page?: string | null;
-          referral_domain?: string | null;
-          session_start?: string | null;
-          session_duration?: number | null;
-          click_event?: string | null;
-          ga4_session_id?: string | null;
           ad_id?: string | null;
-          campaign_id?: string | null;
           adset_id?: string | null;
-          placement?: string | null;
-          called_number?: string | null;
           call_duration?: number | null;
+          called_number?: string | null;
+          campaign_id?: string | null;
+          channel: string;
           chatwoot_url?: string | null;
-          is_organic?: boolean | null;
-          normalization_failed?: boolean;
-          source_confidence: string;
-          path_lost_at: string;
+          click_event?: string | null;
+          created_at?: string;
+          external_id: string;
           ga4_enriched?: boolean;
           ga4_enriched_at?: string | null;
           ga4_fetch_attempts?: number;
-          created_at?: string;
+          ga4_session_id?: string | null;
+          id?: string;
+          is_organic?: boolean | null;
+          landing_page?: string | null;
+          lead_uuid: string;
+          normalization_failed?: boolean;
+          path_lost_at: string;
+          placement?: string | null;
+          ref_code?: string | null;
+          referral_domain?: string | null;
+          session_duration?: number | null;
+          session_start?: string | null;
+          source_confidence: string;
+          utm_campaign?: string | null;
+          utm_content?: string | null;
+          utm_medium?: string | null;
+          utm_source?: string | null;
         };
         Update: {
-          id?: string;
-          lead_uuid?: string;
-          channel?: string;
-          external_id?: string;
-          ref_code?: string | null;
-          utm_source?: string | null;
-          utm_medium?: string | null;
-          utm_campaign?: string | null;
-          utm_content?: string | null;
-          landing_page?: string | null;
-          referral_domain?: string | null;
-          session_start?: string | null;
-          session_duration?: number | null;
-          click_event?: string | null;
-          ga4_session_id?: string | null;
           ad_id?: string | null;
-          campaign_id?: string | null;
           adset_id?: string | null;
-          placement?: string | null;
-          called_number?: string | null;
           call_duration?: number | null;
+          called_number?: string | null;
+          campaign_id?: string | null;
+          channel?: string;
           chatwoot_url?: string | null;
-          is_organic?: boolean | null;
-          normalization_failed?: boolean;
-          source_confidence?: string;
-          path_lost_at?: string;
+          click_event?: string | null;
+          created_at?: string;
+          external_id?: string;
           ga4_enriched?: boolean;
           ga4_enriched_at?: string | null;
           ga4_fetch_attempts?: number;
-          created_at?: string;
+          ga4_session_id?: string | null;
+          id?: string;
+          is_organic?: boolean | null;
+          landing_page?: string | null;
+          lead_uuid?: string;
+          normalization_failed?: boolean;
+          path_lost_at?: string;
+          placement?: string | null;
+          ref_code?: string | null;
+          referral_domain?: string | null;
+          session_duration?: number | null;
+          session_start?: string | null;
+          source_confidence?: string;
+          utm_campaign?: string | null;
+          utm_content?: string | null;
+          utm_medium?: string | null;
+          utm_source?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: 'collected_data_lead_uuid_fkey';
+            columns: ['lead_uuid'];
+            isOneToOne: true;
+            referencedRelation: 'active_leads';
+            referencedColumns: ['uuid'];
+          },
           {
             foreignKeyName: 'collected_data_lead_uuid_fkey';
             columns: ['lead_uuid'];
@@ -541,37 +548,37 @@ export type Database = {
       };
       dni_numbers: {
         Row: {
-          id: string;
-          virtual_number: string;
-          source: string;
-          display_label: string;
-          is_active: boolean;
-          lead_count: number;
-          last_lead_at: string | null;
           created_at: string;
+          display_label: string;
+          id: string;
+          is_active: boolean;
+          last_lead_at: string | null;
+          lead_count: number;
+          source: string;
           updated_at: string;
+          virtual_number: string;
         };
         Insert: {
-          id?: string;
-          virtual_number: string;
-          source: string;
-          display_label: string;
-          is_active?: boolean;
-          lead_count?: number;
-          last_lead_at?: string | null;
           created_at?: string;
+          display_label: string;
+          id?: string;
+          is_active?: boolean;
+          last_lead_at?: string | null;
+          lead_count?: number;
+          source: string;
           updated_at?: string;
+          virtual_number: string;
         };
         Update: {
-          id?: string;
-          virtual_number?: string;
-          source?: string;
-          display_label?: string;
-          is_active?: boolean;
-          lead_count?: number;
-          last_lead_at?: string | null;
           created_at?: string;
+          display_label?: string;
+          id?: string;
+          is_active?: boolean;
+          last_lead_at?: string | null;
+          lead_count?: number;
+          source?: string;
           updated_at?: string;
+          virtual_number?: string;
         };
         Relationships: [];
       };
@@ -579,7 +586,9 @@ export type Database = {
         Row: {
           budget_max: number | null;
           budget_min: number | null;
+          campus: string | null;
           created_at: string;
+          district_preference: string | null;
           dorm_awaiting: string[];
           interested_hotel: string[];
           kvkk_opt_in: boolean | null;
@@ -589,7 +598,8 @@ export type Database = {
           nationality: string | null;
           parent_name: string | null;
           preferred_district: string | null;
-          rec_hotel: string | null;
+          rec_hotel: Json | null;
+          room_category: string | null;
           room_type: string[];
           student_gender: string | null;
           uni_year: string | null;
@@ -599,7 +609,9 @@ export type Database = {
         Insert: {
           budget_max?: number | null;
           budget_min?: number | null;
+          campus?: string | null;
           created_at?: string;
+          district_preference?: string | null;
           dorm_awaiting?: string[];
           interested_hotel?: string[];
           kvkk_opt_in?: boolean | null;
@@ -609,7 +621,8 @@ export type Database = {
           nationality?: string | null;
           parent_name?: string | null;
           preferred_district?: string | null;
-          rec_hotel?: string | null;
+          rec_hotel?: Json | null;
+          room_category?: string | null;
           room_type?: string[];
           student_gender?: string | null;
           uni_year?: string | null;
@@ -619,7 +632,9 @@ export type Database = {
         Update: {
           budget_max?: number | null;
           budget_min?: number | null;
+          campus?: string | null;
           created_at?: string;
+          district_preference?: string | null;
           dorm_awaiting?: string[];
           interested_hotel?: string[];
           kvkk_opt_in?: boolean | null;
@@ -629,7 +644,8 @@ export type Database = {
           nationality?: string | null;
           parent_name?: string | null;
           preferred_district?: string | null;
-          rec_hotel?: string | null;
+          rec_hotel?: Json | null;
+          room_category?: string | null;
           room_type?: string[];
           student_gender?: string | null;
           uni_year?: string | null;
@@ -697,6 +713,13 @@ export type Database = {
           synced_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: 'lead_messages_lead_uuid_fkey';
+            columns: ['lead_uuid'];
+            isOneToOne: false;
+            referencedRelation: 'active_leads';
+            referencedColumns: ['uuid'];
+          },
           {
             foreignKeyName: 'lead_messages_lead_uuid_fkey';
             columns: ['lead_uuid'];
@@ -1139,6 +1162,13 @@ export type Database = {
             foreignKeyName: 'old_leads_assigned_to_fkey';
             columns: ['assigned_to'];
             isOneToOne: false;
+            referencedRelation: 'mv_agent_performance';
+            referencedColumns: ['salesperson_id'];
+          },
+          {
+            foreignKeyName: 'old_leads_assigned_to_fkey';
+            columns: ['assigned_to'];
+            isOneToOne: false;
             referencedRelation: 'salespeople';
             referencedColumns: ['id'];
           },
@@ -1153,10 +1183,10 @@ export type Database = {
           google_sheet_id: string | null;
           hotel_name: string;
           id: string;
+          is_available: boolean;
           serviced_gender: string | null;
           serviced_schools: string[];
           status: string;
-          total_beds: number | null;
           updated_at: string;
         };
         Insert: {
@@ -1167,10 +1197,10 @@ export type Database = {
           google_sheet_id?: string | null;
           hotel_name: string;
           id?: string;
+          is_available?: boolean;
           serviced_gender?: string | null;
           serviced_schools?: string[];
           status?: string;
-          total_beds?: number | null;
           updated_at?: string;
         };
         Update: {
@@ -1181,44 +1211,156 @@ export type Database = {
           google_sheet_id?: string | null;
           hotel_name?: string;
           id?: string;
+          is_available?: boolean;
           serviced_gender?: string | null;
           serviced_schools?: string[];
           status?: string;
-          total_beds?: number | null;
           updated_at?: string;
         };
         Relationships: [];
       };
-      ref_sessions: {
+      property_room_types: {
         Row: {
-          ref_code: string;
-          utm_source: string | null;
-          utm_medium: string | null;
-          utm_campaign: string | null;
-          utm_content: string | null;
-          landing_page: string | null;
-          referral_domain: string | null;
+          amenities: Json;
           created_at: string;
+          has_balcony: boolean;
+          has_kitchen: boolean;
+          has_laundry: boolean;
+          housing_type: string;
+          id: string;
+          is_available: boolean;
+          is_duplex: boolean;
+          occupant_count: number;
+          property_id: string;
+          room_category: string;
+          room_count: number;
+          room_name: string;
+          room_price: number;
+          room_size: string | null;
+          updated_at: string;
         };
         Insert: {
-          ref_code: string;
-          utm_source?: string | null;
-          utm_medium?: string | null;
-          utm_campaign?: string | null;
-          utm_content?: string | null;
-          landing_page?: string | null;
-          referral_domain?: string | null;
+          amenities?: Json;
           created_at?: string;
+          has_balcony?: boolean;
+          has_kitchen?: boolean;
+          has_laundry?: boolean;
+          housing_type: string;
+          id?: string;
+          is_available?: boolean;
+          is_duplex?: boolean;
+          occupant_count: number;
+          property_id: string;
+          room_category: string;
+          room_count: number;
+          room_name: string;
+          room_price: number;
+          room_size?: string | null;
+          updated_at?: string;
         };
         Update: {
-          ref_code?: string;
-          utm_source?: string | null;
-          utm_medium?: string | null;
+          amenities?: Json;
+          created_at?: string;
+          has_balcony?: boolean;
+          has_kitchen?: boolean;
+          has_laundry?: boolean;
+          housing_type?: string;
+          id?: string;
+          is_available?: boolean;
+          is_duplex?: boolean;
+          occupant_count?: number;
+          property_id?: string;
+          room_category?: string;
+          room_count?: number;
+          room_name?: string;
+          room_price?: number;
+          room_size?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'property_room_types_property_id_fkey';
+            columns: ['property_id'];
+            isOneToOne: false;
+            referencedRelation: 'properties';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      property_rooms: {
+        Row: {
+          created_at: string;
+          current_occupants: number;
+          id: string;
+          is_available: boolean;
+          room_floor: number;
+          room_number: string;
+          room_type_id: string;
+          serviced_gender: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          current_occupants?: number;
+          id?: string;
+          is_available?: boolean;
+          room_floor: number;
+          room_number: string;
+          room_type_id: string;
+          serviced_gender?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          current_occupants?: number;
+          id?: string;
+          is_available?: boolean;
+          room_floor?: number;
+          room_number?: string;
+          room_type_id?: string;
+          serviced_gender?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'property_rooms_room_type_id_fkey';
+            columns: ['room_type_id'];
+            isOneToOne: false;
+            referencedRelation: 'property_room_types';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      ref_sessions: {
+        Row: {
+          created_at: string;
+          landing_page: string | null;
+          ref_code: string;
+          referral_domain: string | null;
+          utm_campaign: string | null;
+          utm_content: string | null;
+          utm_medium: string | null;
+          utm_source: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          landing_page?: string | null;
+          ref_code: string;
+          referral_domain?: string | null;
           utm_campaign?: string | null;
           utm_content?: string | null;
-          landing_page?: string | null;
-          referral_domain?: string | null;
+          utm_medium?: string | null;
+          utm_source?: string | null;
+        };
+        Update: {
           created_at?: string;
+          landing_page?: string | null;
+          ref_code?: string;
+          referral_domain?: string | null;
+          utm_campaign?: string | null;
+          utm_content?: string | null;
+          utm_medium?: string | null;
+          utm_source?: string | null;
         };
         Relationships: [];
       };
@@ -1524,7 +1666,9 @@ export type Database = {
         Row: {
           budget_max: number | null;
           budget_min: number | null;
+          campus: string | null;
           created_at: string | null;
+          district_preference: string | null;
           dorm_awaiting: string[] | null;
           interested_hotel: string[] | null;
           kvkk_opt_in: boolean | null;
@@ -1534,7 +1678,8 @@ export type Database = {
           nationality: string | null;
           parent_name: string | null;
           preferred_district: string | null;
-          rec_hotel: string | null;
+          rec_hotel: Json | null;
+          room_category: string | null;
           room_type: string[] | null;
           student_gender: string | null;
           uni_year: string | null;
@@ -1544,7 +1689,9 @@ export type Database = {
         Insert: {
           budget_max?: number | null;
           budget_min?: number | null;
+          campus?: string | null;
           created_at?: string | null;
+          district_preference?: string | null;
           dorm_awaiting?: string[] | null;
           interested_hotel?: string[] | null;
           kvkk_opt_in?: boolean | null;
@@ -1554,7 +1701,8 @@ export type Database = {
           nationality?: never;
           parent_name?: string | null;
           preferred_district?: string | null;
-          rec_hotel?: string | null;
+          rec_hotel?: Json | null;
+          room_category?: string | null;
           room_type?: string[] | null;
           student_gender?: never;
           uni_year?: string | null;
@@ -1564,7 +1712,9 @@ export type Database = {
         Update: {
           budget_max?: number | null;
           budget_min?: number | null;
+          campus?: string | null;
           created_at?: string | null;
+          district_preference?: string | null;
           dorm_awaiting?: string[] | null;
           interested_hotel?: string[] | null;
           kvkk_opt_in?: boolean | null;
@@ -1574,7 +1724,8 @@ export type Database = {
           nationality?: never;
           parent_name?: string | null;
           preferred_district?: string | null;
-          rec_hotel?: string | null;
+          rec_hotel?: Json | null;
+          room_category?: string | null;
           room_type?: string[] | null;
           student_gender?: never;
           uni_year?: string | null;
@@ -1654,12 +1805,12 @@ export type Database = {
       };
       get_cron_setting: { Args: { p_key: string }; Returns: string };
       get_user_role: { Args: never; Returns: string };
-      is_manager_or_superadmin: { Args: never; Returns: boolean };
-      is_superadmin: { Args: never; Returns: boolean };
       increment_active_lead_count: {
         Args: { agent_id: string };
         Returns: undefined;
       };
+      is_manager_or_superadmin: { Args: never; Returns: boolean };
+      is_superadmin: { Args: never; Returns: boolean };
       search_archived_leads_ids: {
         Args: { search_term: string };
         Returns: {
@@ -1672,10 +1823,17 @@ export type Database = {
           lead_uuid: string;
         }[];
       };
+      search_old_leads_ids: {
+        Args: { search_term: string };
+        Returns: {
+          lead_uuid: string;
+        }[];
+      };
       show_limit: { Args: never; Returns: number };
       show_trgm: { Args: { '': string }; Returns: string[] };
+      unaccent: { Args: { '': string }; Returns: string };
       unarchive_single_lead: {
-        Args: { manager_uuid: string; target_uuid: string };
+        Args: { manager_uuid?: string; target_uuid: string };
         Returns: undefined;
       };
       validate_dorm_awaiting: { Args: { arr: string[] }; Returns: boolean };

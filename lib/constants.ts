@@ -3,18 +3,15 @@
  * Central configuration used across business logic and API routes.
  */
 
-/** SLA deadline configuration per lead source in minutes from creation. */
-export const SLA_DEADLINES: Record<
-  string,
-  { deadlineMinutes: number; atRiskOffsetMinutes: number }
-> = {
-  netgsm_call: { deadlineMinutes: 5, atRiskOffsetMinutes: 2 },
-  whatsapp_call: { deadlineMinutes: 5, atRiskOffsetMinutes: 2 },
-  whatsapp: { deadlineMinutes: 30, atRiskOffsetMinutes: 5 },
-  instagram: { deadlineMinutes: 30, atRiskOffsetMinutes: 5 },
-  manual: { deadlineMinutes: 480, atRiskOffsetMinutes: 30 },
-  form: { deadlineMinutes: 60, atRiskOffsetMinutes: 15 },
-};
+/** Istanbul SLA window — status updates and alerts run 09:00–17:00 only. */
+export const SLA_BUSINESS_HOUR_START = '09:00';
+export const SLA_BUSINESS_HOUR_END = '17:00';
+
+/** Standard SLA duration in minutes once counting starts (within business hours). */
+export const SLA_DEADLINE_MINUTES = 60;
+
+/** Minutes before deadline when a lead is marked at-risk in application code. */
+export const SLA_AT_RISK_OFFSET_MINUTES = 15;
 
 /** Manual toggle for August peak season — reduces all SLAs to 30 minutes. */
 /** Poll interval while active lead Conversation tab is open (Chatwoot live sync). */
@@ -191,6 +188,15 @@ export const TASK_TYPES = [
 /** Valid uni_year values for lead_details. */
 export const UNI_YEARS = ['1-sinif', '2-sinif', '3-sinif', '4-sinif', 'universitede'] as const;
 
+/** Valid student_gender values for lead_details. */
+export const STUDENT_GENDER_VALUES = ['male', 'female', 'other'] as const;
+
+/** Valid room_category values for hotel recommendation. */
+export const ROOM_CATEGORY_VALUES = ['single', 'double', 'triple', 'quad'] as const;
+
+/** Tri-state presence filter values for nullable field UI controls. */
+export const PRESENCE_FILTER_VALUES = ['any', 'yes', 'no'] as const;
+
 /** Chatwoot uni_year labels. */
 export const CHATWOOT_UNI_YEAR_LABELS = new Set<string>(UNI_YEARS);
 
@@ -231,6 +237,19 @@ export const LEAD_DETAILS_FILTER_FIELDS = [
   'budget_max',
   'move_in',
   'uni_year',
+  'student_gender',
+  'preferred_district',
+  'district_preference',
+  'campus',
+  'room_category',
+  'nationality',
+  'parent_name',
+  'kvkk_opt_in',
+  'marketing_opt_in',
+  'dorm_awaiting',
+  'interested_hotel',
+  'room_type',
+  'rec_hotel',
 ] as const;
 
 /** Filter fields on leads table root. */
@@ -238,6 +257,7 @@ export const LEADS_TABLE_FILTER_FIELDS = [
   'funnel_status',
   'student_stage',
   'lead_source',
+  'message_from',
   'assigned_to',
   'sla_status',
   'language',
@@ -249,6 +269,9 @@ export const LEADS_TABLE_FILTER_FIELDS = [
   'sla_deadline',
   'lead_name',
   'lead_phone',
+  'special_state',
+  'loss_reason',
+  'parent_phone',
 ] as const;
 
 /** Filter fields exposed in lead list toolbar (leads + lead_details). */
@@ -355,28 +378,8 @@ export const LABEL_TO_FIELD_MAP: Readonly<Record<string, LabelFieldTarget[]>> = 
   return map;
 })();
 
-/** Columns allowed in dynamic filter builder queries. */
-export const FILTERABLE_COLUMNS: ReadonlySet<string> = new Set([
-  'funnel_status',
-  'student_stage',
-  'lead_source',
-  'assigned_to',
-  'sla_status',
-  'lead_score',
-  'language',
-  'persona_type',
-  'is_organic',
-  'created_at',
-  'last_contact_at',
-  'sla_deadline',
-  'lead_name',
-  'lead_phone',
-  'university',
-  'budget_min',
-  'budget_max',
-  'move_in',
-  'uni_year',
-]);
+/** Columns allowed in dynamic filter builder queries (active leads + campaigns). */
+export const FILTERABLE_COLUMNS: ReadonlySet<string> = new Set(LEAD_LIST_FILTER_FIELDS);
 
 /** Columns allowed for single-column sort on lead list. */
 export const SORTABLE_COLUMNS: ReadonlySet<string> = new Set([
@@ -390,6 +393,66 @@ export const SORTABLE_COLUMNS: ReadonlySet<string> = new Set([
 /** Sortable columns as array for UI dropdowns. */
 export const SORTABLE_COLUMN_OPTIONS = Array.from(SORTABLE_COLUMNS);
 
+/** Filter fields on old_lead_details table (require embed join). */
+export const OLD_LEAD_DETAILS_FILTER_FIELDS = [
+  'university',
+  'budget_min',
+  'budget_max',
+  'move_in',
+  'uni_year',
+  'student_gender',
+  'preferred_district',
+  'nationality',
+  'parent_name',
+  'kvkk_opt_in',
+  'marketing_opt_in',
+  'dorm_awaiting',
+  'interested_hotel',
+  'room_type',
+  'rec_hotel',
+] as const;
+
+/** Filter fields on old_leads table root. */
+export const OLD_LEADS_TABLE_FILTER_FIELDS = [
+  'funnel_status',
+  'student_stage',
+  'lead_source',
+  'message_from',
+  'assigned_to',
+  'language',
+  'persona_type',
+  'lead_score',
+  'is_organic',
+  'created_at',
+  'last_contact_at',
+  'lead_name',
+  'lead_phone',
+  'special_state',
+  'loss_reason',
+  'parent_phone',
+] as const;
+
+/** Filter fields exposed in old lead list toolbar. */
+export const OLD_LEAD_LIST_FILTER_FIELDS = [
+  ...OLD_LEADS_TABLE_FILTER_FIELDS,
+  ...OLD_LEAD_DETAILS_FILTER_FIELDS,
+] as const;
+
+/** Columns allowed in old leads dynamic filter queries. */
+export const OLD_FILTERABLE_COLUMNS: ReadonlySet<string> = new Set(OLD_LEAD_LIST_FILTER_FIELDS);
+
+/** Columns allowed for single-column sort on old lead list. */
+export const OLD_SORTABLE_COLUMNS: ReadonlySet<string> = new Set([
+  'created_at',
+  'last_contact_at',
+  'lead_score',
+  'lead_name',
+  'funnel_status',
+]);
+
+/** Sortable old lead columns as array for UI dropdowns. */
+export const OLD_SORTABLE_COLUMN_OPTIONS = Array.from(OLD_SORTABLE_COLUMNS);
+
 /** Default pagination limit for list endpoints. */
 export const DEFAULT_PAGE_LIMIT = 50;
 
@@ -401,3 +464,14 @@ export const ISTANBUL_TIMEZONE = 'Europe/Istanbul';
 
 /** Internal retry delays in milliseconds for webhook processing. */
 export const RETRY_DELAYS_MS = [0, 5000, 15000] as const;
+
+/** Şirket sabit hat numarası (E.164 formatında). CDR kayıtlarında arayan/aranan tespiti için kullanılır. */
+export const COMPANY_PHONE_NUMBER = '+90 212 909 52 44';
+
+/**
+ * Şirket sabit hattının normalize edilmiş hali.
+ * normalizePhone(COMPANY_PHONE_NUMBER).phone ile aynı sonucu verir:
+ * '+90 212 909 52 44' → '02129095244'
+ * Lead numaralarıyla aynı formatta karşılaştırılabilmesi için sabit olarak tanımlandı.
+ */
+export const COMPANY_PHONE_NUMBER_NORMALIZED = '02129095244';
