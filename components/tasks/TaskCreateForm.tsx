@@ -11,6 +11,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { TASK_TYPES } from '@/lib/constants';
 import { useAuth } from '@/hooks/useAuth';
+import { useTranslation } from '@/hooks/useTranslation';
+import { isManagerOrAbove } from '@/lib/auth/roles';
+import { formatEnumLabel } from '@/lib/i18n';
 import { useSalespeople } from '@/hooks/useSalespeople';
 
 interface TaskCreateFormProps {
@@ -24,6 +27,7 @@ interface TaskCreateFormProps {
  */
 export function TaskCreateForm({ onCreated }: TaskCreateFormProps) {
   const router = useRouter();
+  const { locale, t } = useTranslation();
   const { user } = useAuth();
   const { data: salespeople } = useSalespeople();
 
@@ -44,7 +48,7 @@ export function TaskCreateForm({ onCreated }: TaskCreateFormProps) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!leadUuid || !dueWhen) {
-      setError('Lead UUID and due date are required');
+      setError(t('tasks.requiredFields'));
       return;
     }
 
@@ -58,7 +62,7 @@ export function TaskCreateForm({ onCreated }: TaskCreateFormProps) {
     };
 
     if (notes) body.notes = notes;
-    if (user?.role === 'manager' && assignedTo) {
+    if (isManagerOrAbove(user?.role) && assignedTo) {
       body.assigned_to = assignedTo;
     }
 
@@ -72,7 +76,7 @@ export function TaskCreateForm({ onCreated }: TaskCreateFormProps) {
     setSaving(false);
 
     if (!res.ok) {
-      setError(json.error ?? 'Failed to create task');
+      setError(json.error ?? t('tasks.createFailed'));
       return;
     }
 
@@ -85,11 +89,11 @@ export function TaskCreateForm({ onCreated }: TaskCreateFormProps) {
   return (
     <Card className="mb-4">
       <CardHeader>
-        <CardTitle>New task</CardTitle>
+        <CardTitle>{t('tasks.newTask')}</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <FormField label="Lead UUID *" htmlFor="lead_uuid">
+          <FormField label={t('tasks.leadUuidRequired')} htmlFor="lead_uuid">
             <Input
               id="lead_uuid"
               value={leadUuid}
@@ -98,13 +102,16 @@ export function TaskCreateForm({ onCreated }: TaskCreateFormProps) {
             />
           </FormField>
           <FormSelect
-            label="Task type"
+            label={t('tasks.taskType')}
             id="task_type"
             value={taskType}
             onValueChange={setTaskType}
-            options={TASK_TYPES.map((t) => ({ value: t, label: t }))}
+            options={TASK_TYPES.map((type) => ({
+              value: type,
+              label: formatEnumLabel(locale, 'task', type),
+            }))}
           />
-          <FormField label="Due *" htmlFor="due_when">
+          <FormField label={t('tasks.dueRequired')} htmlFor="due_when">
             <Input
               id="due_when"
               type="datetime-local"
@@ -113,7 +120,7 @@ export function TaskCreateForm({ onCreated }: TaskCreateFormProps) {
               required
             />
           </FormField>
-          <FormField label="Notes" htmlFor="task_notes">
+          <FormField label={t('tasks.notes')} htmlFor="task_notes">
             <Textarea
               id="task_notes"
               value={notes}
@@ -121,21 +128,21 @@ export function TaskCreateForm({ onCreated }: TaskCreateFormProps) {
               rows={2}
             />
           </FormField>
-          {user?.role === 'manager' && salespeople && (
+          {isManagerOrAbove(user?.role) && salespeople && (
             <FormSelect
-              label="Assign to (optional)"
+              label={t('tasks.assignOptional')}
               id="assigned_to"
               value={assignedTo || '__none__'}
               onValueChange={(v) => setAssignedTo(v === '__none__' ? '' : v)}
               options={[
-                { value: '__none__', label: 'Self / default' },
+                { value: '__none__', label: t('common.selfDefault') },
                 ...salespeople.map((sp) => ({ value: sp.id, label: sp.full_name })),
               ]}
             />
           )}
           {error && <p className="text-xs text-brand-red">{error}</p>}
           <Button type="submit" disabled={saving}>
-            {saving ? 'Creating...' : 'Create task'}
+            {saving ? t('common.creating') : t('tasks.createTask')}
           </Button>
         </form>
       </CardContent>

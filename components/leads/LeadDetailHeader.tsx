@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { IconExternalLink, IconX } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { displayLeadPhone } from '@/lib/ui/display-phone';
 import type { LeadWithDetails } from '@/types/domain';
 
@@ -17,10 +19,11 @@ interface LeadDetailHeaderProps {
 /**
  * Resolves assignee display name from lead row.
  * @param lead - Lead with joined salesperson data.
+ * @param unassignedLabel - Localized unassigned fallback.
  * @returns Assignee name or fallback label.
  */
-function assigneeLabel(lead: LeadWithDetails): string {
-  return lead.salespeople?.full_name ?? lead.assignee_name ?? 'Unassigned';
+function assigneeLabel(lead: LeadWithDetails, unassignedLabel: string): string {
+  return lead.salespeople?.full_name ?? lead.assignee_name ?? unassignedLabel;
 }
 
 /**
@@ -29,6 +32,8 @@ function assigneeLabel(lead: LeadWithDetails): string {
  * @returns Panel header element.
  */
 export function LeadDetailHeader({ lead, leadId, onClose }: LeadDetailHeaderProps) {
+  const { locale, t } = useTranslation();
+
   return (
     <div className="relative space-y-2 border-b border-border-default px-5 pb-3 pt-4">
       {onClose && (
@@ -38,31 +43,39 @@ export function LeadDetailHeader({ lead, leadId, onClose }: LeadDetailHeaderProp
           size="icon"
           className="absolute right-3 top-3 size-8"
           onClick={onClose}
-          aria-label="Close panel"
+          aria-label={t('leads.closePanel')}
         >
           <IconX className="size-4" />
         </Button>
       )}
       <h2 className="font-heading pr-8 text-base font-bold text-text-primary">
-        {lead.lead_name ?? 'Unnamed lead'}
+        {lead.lead_name ?? t('common.unnamedLead')}
       </h2>
       <p className="font-mono text-sm text-text-primary">{displayLeadPhone(lead)}</p>
       <div className="flex flex-wrap items-center gap-1.5">
         <StatusBadge status={lead.funnel_status} type="funnel" />
         <StatusBadge status={lead.sla_status} type="sla" />
         <span className="text-xs text-text-tertiary">·</span>
-        <span className="text-xs text-text-secondary">{lead.lead_source}</span>
+        <span className="text-xs text-text-secondary">
+          {formatEnumLabel(locale, 'source', lead.lead_source)}
+        </span>
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-secondary">
-        <span>Assignee: {assigneeLabel(lead)}</span>
-        <span>Score: {lead.lead_score ?? 0}</span>
-        <span>Stage: {lead.student_stage}</span>
+        <span>
+          {t('leads.assignee')}: {assigneeLabel(lead, t('common.unassigned'))}
+        </span>
+        <span>
+          {t('leads.score')}: {lead.lead_score ?? 0}
+        </span>
+        <span>
+          {t('leads.studentStage')}: {formatEnumLabel(locale, 'stage', lead.student_stage)}
+        </span>
       </div>
       <Link
         href={`/tasks?lead_uuid=${leadId}`}
         className="inline-flex items-center gap-1 text-xs text-brand-blue hover:underline"
       >
-        Create task
+        {t('leads.createTask')}
         <IconExternalLink className="size-3" />
       </Link>
     </div>

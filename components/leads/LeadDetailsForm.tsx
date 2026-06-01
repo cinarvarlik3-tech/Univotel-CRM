@@ -8,6 +8,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { FormField } from '@/components/ui/form-field';
 import { FormSelect } from '@/components/ui/form-select';
 import { Input } from '@/components/ui/input';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { DORM_AWAITING_VALUES, UNI_YEARS } from '@/lib/constants';
 import { useProperties } from '@/hooks/useProperties';
 import type { LeadDetailRow } from '@/types/domain';
@@ -19,12 +21,16 @@ interface LeadDetailsFormProps {
   embedded?: boolean;
 }
 
+const GENDER_VALUES = ['male', 'female', 'other'] as const;
+const ROOM_CATEGORIES = ['single', 'double', 'triple', 'quad'] as const;
+
 /**
  * Renders lead_details edit form for API-supported fields.
  * @param props - Lead UUID and current details row.
  * @returns Lead details form card.
  */
 export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDetailsFormProps) {
+  const { locale, t } = useTranslation();
   const { data: properties } = useProperties();
   const d = details;
 
@@ -42,6 +48,9 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
   const [dormAwaiting, setDormAwaiting] = useState<string[]>(d?.dorm_awaiting ?? []);
   const [kvkkOptIn, setKvkkOptIn] = useState(d?.kvkk_opt_in ?? false);
   const [marketingOptIn, setMarketingOptIn] = useState(d?.marketing_opt_in ?? false);
+  const [campus, setCampus] = useState(d?.campus ?? '');
+  const [roomCategory, setRoomCategory] = useState(d?.room_category ?? '');
+  const [districtPreference, setDistrictPreference] = useState(d?.district_preference ?? '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -61,6 +70,9 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
     setDormAwaiting(details.dorm_awaiting ?? []);
     setKvkkOptIn(details.kvkk_opt_in ?? false);
     setMarketingOptIn(details.marketing_opt_in ?? false);
+    setCampus(details.campus ?? '');
+    setRoomCategory(details.room_category ?? '');
+    setDistrictPreference(details.district_preference ?? '');
   }, [details]);
 
   function toggleHotel(name: string) {
@@ -99,6 +111,9 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
       dorm_awaiting: dormAwaiting,
       kvkk_opt_in: kvkkOptIn,
       marketing_opt_in: marketingOptIn,
+      campus: campus || null,
+      room_category: roomCategory || null,
+      district_preference: districtPreference || null,
     };
 
     const res = await fetch(`/api/lead-details/${leadId}`, {
@@ -111,7 +126,7 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
     setSaving(false);
 
     if (!res.ok) {
-      setError(json.error ?? 'Failed to save details');
+      setError(json.error ?? t('leads.saveDetailsFailed'));
       return;
     }
 
@@ -120,26 +135,17 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
 
   const formBody = (
     <>
-      {!embedded && details?.rec_hotel && (
-        <p className="text-sm text-text-primary">
-          <strong>Recommended hotel (auto):</strong> {details.rec_hotel}
-        </p>
-      )}
-      {embedded && (
-        <p className="text-xs text-text-secondary">
-          Gender and nationality may be hidden per KVKK if you are not the assignee.
-        </p>
-      )}
+      {embedded && <p className="text-xs text-text-secondary">{t('leads.kvkkHiddenNote')}</p>}
 
       <div className="grid grid-cols-2 gap-3">
-        <FormField label="University" htmlFor="university" className="col-span-2">
+        <FormField label={t('filters.university')} htmlFor="university" className="col-span-2">
           <Input
             id="university"
             value={university}
             onChange={(e) => setUniversity(e.target.value)}
           />
         </FormField>
-        <FormField label="Budget min" htmlFor="budget_min">
+        <FormField label={t('filters.budgetMin')} htmlFor="budget_min">
           <Input
             id="budget_min"
             type="number"
@@ -147,7 +153,7 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
             onChange={(e) => setBudgetMin(e.target.value)}
           />
         </FormField>
-        <FormField label="Budget max" htmlFor="budget_max">
+        <FormField label={t('filters.budgetMax')} htmlFor="budget_max">
           <Input
             id="budget_max"
             type="number"
@@ -155,7 +161,21 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
             onChange={(e) => setBudgetMax(e.target.value)}
           />
         </FormField>
-        <FormField label="Move-in date" htmlFor="move_in" className="col-span-2">
+        <FormSelect
+          label={t('filters.gender')}
+          id="student_gender"
+          className="col-span-2"
+          value={studentGender || '__none__'}
+          onValueChange={(v) => setStudentGender(v === '__none__' ? '' : v)}
+          options={[
+            { value: '__none__', label: t('leads.selectPlaceholder') },
+            ...GENDER_VALUES.map((g) => ({
+              value: g,
+              label: formatEnumLabel(locale, 'gender', g),
+            })),
+          ]}
+        />
+        <FormField label={t('leads.moveInDate')} htmlFor="move_in" className="col-span-2">
           <Input
             id="move_in"
             type="date"
@@ -166,23 +186,26 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
       </div>
 
       <FormSelect
-        label="Uni year"
+        label={t('filters.uniYear')}
         id="uni_year"
         value={uniYear || '__none__'}
         onValueChange={(v) => setUniYear(v === '__none__' ? '' : v)}
         options={[
-          { value: '__none__', label: '—' },
-          ...UNI_YEARS.map((y) => ({ value: y, label: y })),
+          { value: '__none__', label: t('common.emDash') },
+          ...UNI_YEARS.map((y) => ({
+            value: y,
+            label: formatEnumLabel(locale, 'uniYear', y),
+          })),
         ]}
       />
-      <FormField label="Parent name" htmlFor="parent_name">
+      <FormField label={t('leads.parentName')} htmlFor="parent_name">
         <Input
           id="parent_name"
           value={parentName}
           onChange={(e) => setParentName(e.target.value)}
         />
       </FormField>
-      <FormField label="Preferred district" htmlFor="preferred_district">
+      <FormField label={t('filters.preferredDistrict')} htmlFor="preferred_district">
         <Input
           id="preferred_district"
           value={preferredDistrict}
@@ -192,7 +215,9 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
 
       {properties && properties.length > 0 && (
         <fieldset className="space-y-2 rounded-lg border border-border-default p-4">
-          <legend className="px-1 text-sm font-medium text-text-primary">Interested hotels</legend>
+          <legend className="px-1 text-sm font-medium text-text-primary">
+            {t('leads.interestedHotels')}
+          </legend>
           {properties.map((p) => (
             <div key={p.id} className="flex items-center gap-2">
               <Checkbox
@@ -208,12 +233,14 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
         </fieldset>
       )}
 
-      <FormField label="Room types (comma-separated)" htmlFor="room_type">
+      <FormField label={t('leads.roomTypesComma')} htmlFor="room_type">
         <Input id="room_type" value={roomTypes} onChange={(e) => setRoomTypes(e.target.value)} />
       </FormField>
 
       <fieldset className="space-y-2 rounded-lg border border-border-default p-4">
-        <legend className="px-1 text-sm font-medium text-text-primary">Dorm awaiting</legend>
+        <legend className="px-1 text-sm font-medium text-text-primary">
+          {t('leads.dormAwaiting')}
+        </legend>
         {DORM_AWAITING_VALUES.map((v) => (
           <div key={v} className="flex items-center gap-2">
             <Checkbox
@@ -222,31 +249,55 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
               onCheckedChange={() => toggleDorm(v)}
             />
             <label htmlFor={`dorm_${v}`} className="text-sm text-text-primary">
-              {v}
+              {formatEnumLabel(locale, 'dorm', v)}
             </label>
           </div>
         ))}
       </fieldset>
 
-      <FormSelect
-        label="Student gender"
-        id="student_gender"
-        value={studentGender || '__none__'}
-        onValueChange={(v) => setStudentGender(v === '__none__' ? '' : v)}
-        options={[
-          { value: '__none__', label: '—' },
-          { value: 'male', label: 'male' },
-          { value: 'female', label: 'female' },
-          { value: 'other', label: 'other' },
-        ]}
-      />
-      <FormField label="Nationality" htmlFor="nationality">
+      <FormField label={t('filters.nationality')} htmlFor="nationality">
         <Input
           id="nationality"
           value={nationality}
           onChange={(e) => setNationality(e.target.value)}
         />
       </FormField>
+
+      <div className="space-y-3 rounded-lg border border-border-default p-4">
+        <p className="text-sm font-medium text-text-primary">{t('leads.recInputs')}</p>
+
+        <FormField label={t('leads.recCampus')} htmlFor="campus">
+          <Input
+            id="campus"
+            placeholder={t('leads.recCampusPlaceholder')}
+            value={campus}
+            onChange={(e) => setCampus(e.target.value)}
+          />
+        </FormField>
+
+        <FormSelect
+          label={t('leads.recRoomType')}
+          id="room_category"
+          value={roomCategory || '__none__'}
+          onValueChange={(v) => setRoomCategory(v === '__none__' ? '' : v)}
+          options={[
+            { value: '__none__', label: t('leads.selectPlaceholder') },
+            ...ROOM_CATEGORIES.map((r) => ({
+              value: r,
+              label: formatEnumLabel(locale, 'room', r),
+            })),
+          ]}
+        />
+
+        <FormField label={t('leads.recDistrictPref')} htmlFor="district_preference">
+          <Input
+            id="district_preference"
+            placeholder={t('leads.recDistrictPlaceholder')}
+            value={districtPreference}
+            onChange={(e) => setDistrictPreference(e.target.value)}
+          />
+        </FormField>
+      </div>
 
       <div className="flex items-center gap-2">
         <Checkbox
@@ -255,7 +306,7 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
           onCheckedChange={(checked) => setKvkkOptIn(checked === true)}
         />
         <label htmlFor="kvkk_opt_in" className="text-sm text-text-primary">
-          KVKK opt-in
+          {t('filters.kvkkOptIn')}
         </label>
       </div>
       <div className="flex items-center gap-2">
@@ -265,13 +316,13 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
           onCheckedChange={(checked) => setMarketingOptIn(checked === true)}
         />
         <label htmlFor="marketing_opt_in" className="text-sm text-text-primary">
-          Marketing opt-in
+          {t('filters.marketingOptIn')}
         </label>
       </div>
 
       {error && <p className="text-xs text-brand-red">{error}</p>}
       <Button type="button" onClick={handleSave} disabled={saving}>
-        {saving ? 'Saving...' : 'Save details'}
+        {saving ? t('common.saving') : t('leads.saveDetails')}
       </Button>
     </>
   );
@@ -283,10 +334,8 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Student details</CardTitle>
-        <CardDescription>
-          Gender and nationality may be hidden per KVKK if you are not the assignee.
-        </CardDescription>
+        <CardTitle>{t('leads.studentDetails')}</CardTitle>
+        <CardDescription>{t('leads.kvkkHiddenNote')}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">{formBody}</CardContent>
     </Card>

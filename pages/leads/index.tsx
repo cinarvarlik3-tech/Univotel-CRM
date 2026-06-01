@@ -15,8 +15,10 @@ import {
 import { LeadTable } from '@/components/leads/LeadTable';
 import { Button } from '@/components/ui/button';
 import { KpiCard } from '@/components/ui/kpi-card';
+import { TasksDueTodayKpiCard } from '@/components/leads/TasksDueTodayKpiCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
+import { useTranslation } from '@/hooks/useTranslation';
 import { isManagerOrAbove } from '@/lib/auth/roles';
 import { useLeads } from '@/hooks/useLeads';
 import { useSalespeople } from '@/hooks/useSalespeople';
@@ -42,6 +44,7 @@ function selectedLeadFromQuery(
  */
 export default function LeadsPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { data: salespeople } = useSalespeople();
 
@@ -68,9 +71,8 @@ export default function LeadsPage() {
   const kpis = useMemo(() => {
     const active = accumulatedLeads.length;
     const breached = accumulatedLeads.filter((l) => l.sla_status === 'breached').length;
-    const atRisk = accumulatedLeads.filter((l) => l.sla_status === 'at_risk').length;
     const onTime = accumulatedLeads.filter((l) => l.sla_status === 'on_time').length;
-    return { active, breached, atRisk, onTime };
+    return { active, breached, onTime };
   }, [accumulatedLeads]);
 
   function handleApply() {
@@ -114,28 +116,33 @@ export default function LeadsPage() {
 
   return (
     <AppShell
-      title="Leads"
+      title={t('leads.title')}
       count={accumulatedLeads.length || undefined}
       actions={
         <Button asChild>
           <Link href="/leads/new">
             <IconPlus size={16} />
-            Add lead
+            {t('leads.addLead')}
           </Link>
         </Button>
       }
     >
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard label="Active leads" value={kpis.active} variant="blue" sub="Current page" />
-        <KpiCard label="SLA breached" value={kpis.breached} variant="red" sub="Needs attention" />
         <KpiCard
-          label="At risk"
-          value={kpis.atRisk}
-          variant="neutral"
-          valueClassName="text-[var(--badge-warning-text)]"
+          label={t('leads.activeLeads')}
+          value={kpis.active}
+          variant="blue"
+          sub={t('leads.currentPage')}
         />
         <KpiCard
-          label="On time"
+          label={t('leads.slaBreached')}
+          value={kpis.breached}
+          variant="red"
+          sub={t('leads.needsAttention')}
+        />
+        <TasksDueTodayKpiCard />
+        <KpiCard
+          label={t('leads.onTime')}
           value={kpis.onTime}
           variant="neutral"
           valueClassName="text-[var(--badge-success-text)]"
@@ -159,7 +166,7 @@ export default function LeadsPage() {
           <Skeleton className="h-[58px] w-full" />
         </div>
       )}
-      {error && <p className="text-sm text-brand-red">Failed to load leads</p>}
+      {error && <p className="text-sm text-brand-red">{t('leads.failedToLoad')}</p>}
 
       {!isLoading && (
         <LeadTable
@@ -172,7 +179,7 @@ export default function LeadsPage() {
       {nextCursor && (
         <div className="mt-4 flex justify-center">
           <Button type="button" variant="secondary" onClick={loadMore} disabled={loadingMore}>
-            {loadingMore ? 'Loading...' : 'Load more'}
+            {loadingMore ? t('common.loading') : t('common.loadMore')}
           </Button>
         </div>
       )}

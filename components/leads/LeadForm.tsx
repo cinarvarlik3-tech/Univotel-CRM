@@ -7,6 +7,8 @@ import { FormField } from '@/components/ui/form-field';
 import { FormSelect } from '@/components/ui/form-select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { LANGUAGES } from '@/lib/constants';
 
 interface LeadFormProps {
@@ -27,6 +29,7 @@ interface LeadFormProps {
  * @returns Lead creation form.
  */
 export function LeadForm({ onSubmit }: LeadFormProps) {
+  const { locale, t } = useTranslation();
   const [leadName, setLeadName] = useState('');
   const [leadPhone, setLeadPhone] = useState('');
   const [language, setLanguage] = useState('tr');
@@ -53,7 +56,7 @@ export function LeadForm({ onSubmit }: LeadFormProps) {
         notes: notes || undefined,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create lead');
+      setError(err instanceof Error ? err.message : t('leads.failedToCreate'));
     } finally {
       setSubmitting(false);
     }
@@ -61,10 +64,10 @@ export function LeadForm({ onSubmit }: LeadFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="flex max-w-md flex-col gap-4">
-      <FormField label="Name" htmlFor="lead_name">
+      <FormField label={t('leads.name')} htmlFor="lead_name">
         <Input id="lead_name" value={leadName} onChange={(e) => setLeadName(e.target.value)} />
       </FormField>
-      <FormField label="Phone *" htmlFor="lead_phone">
+      <FormField label={t('leads.phoneRequired')} htmlFor="lead_phone">
         <Input
           id="lead_phone"
           value={leadPhone}
@@ -73,16 +76,19 @@ export function LeadForm({ onSubmit }: LeadFormProps) {
         />
       </FormField>
       <FormSelect
-        label="Language"
+        label={t('filters.language')}
         id="language"
         value={language}
         onValueChange={setLanguage}
-        options={LANGUAGES.map((l) => ({ value: l, label: l }))}
+        options={LANGUAGES.map((l) => ({
+          value: l,
+          label: formatEnumLabel(locale, 'language', l),
+        }))}
       />
-      <FormField label="University" htmlFor="university">
+      <FormField label={t('filters.university')} htmlFor="university">
         <Input id="university" value={university} onChange={(e) => setUniversity(e.target.value)} />
       </FormField>
-      <FormField label="Budget min" htmlFor="budget_min">
+      <FormField label={t('filters.budgetMin')} htmlFor="budget_min">
         <Input
           id="budget_min"
           type="number"
@@ -90,7 +96,7 @@ export function LeadForm({ onSubmit }: LeadFormProps) {
           onChange={(e) => setBudgetMin(e.target.value)}
         />
       </FormField>
-      <FormField label="Budget max" htmlFor="budget_max">
+      <FormField label={t('filters.budgetMax')} htmlFor="budget_max">
         <Input
           id="budget_max"
           type="number"
@@ -98,12 +104,12 @@ export function LeadForm({ onSubmit }: LeadFormProps) {
           onChange={(e) => setBudgetMax(e.target.value)}
         />
       </FormField>
-      <FormField label="Notes" htmlFor="notes">
+      <FormField label={t('leads.notes')} htmlFor="notes">
         <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
       </FormField>
       {error && <p className="text-xs text-brand-red">{error}</p>}
       <Button type="submit" disabled={submitting}>
-        {submitting ? 'Creating...' : 'Create Lead'}
+        {submitting ? t('common.creating') : t('leads.createLead')}
       </Button>
     </form>
   );

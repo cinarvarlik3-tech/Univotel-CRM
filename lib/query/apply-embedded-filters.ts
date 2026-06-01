@@ -2,6 +2,7 @@
  * Applies filter conditions to Supabase embedded resource paths (e.g. lead_details.field).
  */
 import type { FilterCondition } from '@/lib/query/filter-builder';
+import type { EmbeddedFilterableQuery } from '@/lib/query/supabase-query-types';
 
 /**
  * Applies filters to an embedded relation using dotted column paths.
@@ -10,13 +11,12 @@ import type { FilterCondition } from '@/lib/query/filter-builder';
  * @param filters - Filter conditions for embedded columns.
  * @returns Modified query builder.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function applyEmbeddedFilters<T extends { filter: (...args: any[]) => T }>(
+export function applyEmbeddedFilters<T extends EmbeddedFilterableQuery>(
   query: T,
   embedPrefix: string,
   filters: FilterCondition[],
 ): T {
-  let result = query;
+  let result: EmbeddedFilterableQuery = query;
 
   for (const { field, operator, value } of filters) {
     const column = `${embedPrefix}.${field}`;
@@ -47,10 +47,20 @@ export function applyEmbeddedFilters<T extends { filter: (...args: any[]) => T }
         result = result.filter(column, 'in', `(${value})`);
         break;
       case 'is':
-        result = result.filter(column, 'is', value);
+        if (value === 'not.null') {
+          result = result.not(column, 'is', null);
+        } else {
+          result = result.filter(column, 'is', value === 'null' ? null : value);
+        }
+        break;
+      case 'cs':
+        result = result.filter(column, 'cs', value);
+        break;
+      case 'ov':
+        result = result.filter(column, 'ov', value);
         break;
     }
   }
 
-  return result;
+  return result as T;
 }

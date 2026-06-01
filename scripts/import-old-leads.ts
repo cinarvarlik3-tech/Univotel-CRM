@@ -71,6 +71,7 @@ async function main(): Promise<void> {
   console.log(`Skipped conversations:     ${built.skipped.length}`);
   console.log(`Normalization failed:      ${built.stats.normalizationFailed}`);
   console.log(`University extracted:      ${built.stats.universityExtracted}`);
+  console.log(`Gender extracted:        ${built.stats.genderExtracted}`);
   console.log(
     `By channel:                whatsapp=${built.stats.byChannel.whatsapp} instagram=${built.stats.byChannel.instagram}`,
   );

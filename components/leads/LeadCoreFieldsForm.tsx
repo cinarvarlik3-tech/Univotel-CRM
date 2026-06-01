@@ -8,6 +8,8 @@ import { FormField } from '@/components/ui/form-field';
 import { FormSelect } from '@/components/ui/form-select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { LANGUAGES, PERSONA_TYPES, SPECIAL_STATES, STUDENT_STAGES } from '@/lib/constants';
 import type { LeadWithDetails } from '@/types/domain';
 
@@ -24,6 +26,7 @@ interface LeadCoreFieldsFormProps {
  * @returns Core fields form card.
  */
 export function LeadCoreFieldsForm({ lead, leadId, onSaved, embedded }: LeadCoreFieldsFormProps) {
+  const { locale, t } = useTranslation();
   const [studentStage, setStudentStage] = useState(lead.student_stage);
   const [personaType, setPersonaType] = useState(lead.persona_type ?? '');
   const [specialState, setSpecialState] = useState(lead.special_state ?? '');
@@ -65,7 +68,7 @@ export function LeadCoreFieldsForm({ lead, leadId, onSaved, embedded }: LeadCore
     setSaving(false);
 
     if (!res.ok) {
-      setError(json.error ?? 'Failed to save');
+      setError(json.error ?? t('leads.saveFailed'));
       return;
     }
 
@@ -75,20 +78,26 @@ export function LeadCoreFieldsForm({ lead, leadId, onSaved, embedded }: LeadCore
   const formBody = (
     <>
       <FormSelect
-        label="Student stage"
+        label={t('leads.studentStage')}
         id="student_stage"
         value={studentStage}
         onValueChange={setStudentStage}
-        options={STUDENT_STAGES.map((s) => ({ value: s, label: s }))}
+        options={STUDENT_STAGES.map((s) => ({
+          value: s,
+          label: formatEnumLabel(locale, 'stage', s),
+        }))}
       />
       <FormSelect
-        label="Language"
+        label={t('filters.language')}
         id="language"
         value={language}
         onValueChange={setLanguage}
-        options={LANGUAGES.map((l) => ({ value: l, label: l }))}
+        options={LANGUAGES.map((l) => ({
+          value: l,
+          label: formatEnumLabel(locale, 'language', l),
+        }))}
       />
-      <FormField label="Lead score (0–100)" htmlFor="lead_score">
+      <FormField label={t('leads.leadScoreRange')} htmlFor="lead_score">
         <Input
           id="lead_score"
           type="number"
@@ -99,26 +108,32 @@ export function LeadCoreFieldsForm({ lead, leadId, onSaved, embedded }: LeadCore
         />
       </FormField>
       <FormSelect
-        label="Persona"
+        label={t('filters.persona')}
         id="persona_type"
         value={personaType || '__none__'}
         onValueChange={(v) => setPersonaType(v === '__none__' ? '' : v)}
         options={[
-          { value: '__none__', label: '—' },
-          ...PERSONA_TYPES.map((p) => ({ value: p, label: p })),
+          { value: '__none__', label: t('common.emDash') },
+          ...PERSONA_TYPES.map((p) => ({
+            value: p,
+            label: formatEnumLabel(locale, 'persona', p),
+          })),
         ]}
       />
       <FormSelect
-        label="Special state"
+        label={t('filters.specialState')}
         id="special_state"
         value={specialState || '__none__'}
         onValueChange={(v) => setSpecialState(v === '__none__' ? '' : v)}
         options={[
-          { value: '__none__', label: '—' },
-          ...SPECIAL_STATES.map((s) => ({ value: s, label: s })),
+          { value: '__none__', label: t('common.emDash') },
+          ...SPECIAL_STATES.map((s) => ({
+            value: s,
+            label: formatEnumLabel(locale, 'special', s),
+          })),
         ]}
       />
-      <FormField label="Notes" htmlFor="lead_notes">
+      <FormField label={t('leads.notes')} htmlFor="lead_notes">
         <Textarea
           id="lead_notes"
           value={notes}
@@ -128,7 +143,7 @@ export function LeadCoreFieldsForm({ lead, leadId, onSaved, embedded }: LeadCore
       </FormField>
       {error && <p className="text-xs text-brand-red">{error}</p>}
       <Button type="button" onClick={handleSave} disabled={saving}>
-        {saving ? 'Saving...' : 'Save profile'}
+        {saving ? t('common.saving') : t('leads.saveProfile')}
       </Button>
     </>
   );
@@ -140,7 +155,7 @@ export function LeadCoreFieldsForm({ lead, leadId, onSaved, embedded }: LeadCore
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Lead profile</CardTitle>
+        <CardTitle>{t('leads.leadProfile')}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">{formBody}</CardContent>
     </Card>

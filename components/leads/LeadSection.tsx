@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { IconChevronDown, IconPencil } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import { CollapsiblePanel } from '@/components/ui/collapsible-panel';
+import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
 
 interface LeadSectionProps {
@@ -28,6 +29,7 @@ export function LeadSection({
   defaultExpanded = false,
   resetKey,
 }: LeadSectionProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [editing, setEditing] = useState(false);
 
@@ -62,7 +64,7 @@ export function LeadSection({
             onClick={() => setEditing(true)}
           >
             <IconPencil className="size-3.5" />
-            Edit
+            {t('common.edit')}
           </Button>
         )}
         {editing && (
@@ -73,7 +75,7 @@ export function LeadSection({
             className="h-7 px-2 text-xs"
             onClick={() => setEditing(false)}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
         )}
       </div>

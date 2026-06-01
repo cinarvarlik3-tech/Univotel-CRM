@@ -10,9 +10,6 @@ export const SLA_BUSINESS_HOUR_END = '17:00';
 /** Standard SLA duration in minutes once counting starts (within business hours). */
 export const SLA_DEADLINE_MINUTES = 60;
 
-/** Minutes before deadline when a lead is marked at-risk in application code. */
-export const SLA_AT_RISK_OFFSET_MINUTES = 15;
-
 /** Manual toggle for August peak season — reduces all SLAs to 30 minutes. */
 /** Poll interval while active lead Conversation tab is open (Chatwoot live sync). */
 export const LEAD_CHAT_SYNC_POLL_MS = 15_000;

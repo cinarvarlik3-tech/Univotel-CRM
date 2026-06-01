@@ -5,6 +5,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
+import { isManagerOrAbove } from '@/lib/auth/roles';
 import { validateCampaignSegment } from '@/lib/campaigns/resolve-segment';
 import { createServerSupabase } from '@/lib/supabase/server';
 import type { CampaignSegment } from '@/types/domain';
@@ -39,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    if (session.role !== 'manager') return sendError(res, 'Forbidden', 403);
+    if (!isManagerOrAbove(session.role)) return sendError(res, 'Forbidden', 403);
     return handlePost(req, res, session.userId);
   }
 
@@ -60,7 +61,7 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse, role: string
     .order('created_at', { ascending: false })
     .limit(limit + 1);
 
-  if (role !== 'manager') {
+  if (!isManagerOrAbove(role)) {
     query = query.eq('created_by', userId);
   }
 

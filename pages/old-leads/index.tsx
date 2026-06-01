@@ -1,5 +1,5 @@
 /**
- * Old leads list page — historical Chatwoot imports, manager/superadmin only.
+ * Old leads list page — filters, sort, search, and cursor pagination.
  */
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -15,25 +15,12 @@ import { OldLeadTable } from '@/components/leads/OldLeadTable';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
+import { useTranslation } from '@/hooks/useTranslation';
 import { useOldLeads } from '@/hooks/useOldLeads';
+import { useSalespeople } from '@/hooks/useSalespeople';
 import { isManagerOrAbove } from '@/lib/auth/roles';
-import { buildOldLeadsQueryString } from '@/lib/ui/build-old-leads-query-string';
+import { buildQueryFromOldLeadListState } from '@/lib/ui/old-lead-list-query';
 import type { OldLeadRow } from '@/types/domain';
-
-/**
- * Builds query string from old lead list filter state.
- * @param state - Applied filter state.
- * @param cursor - Optional pagination cursor.
- * @returns Query string for GET /api/old-leads.
- */
-function buildQueryFromState(state: OldLeadListFilterState, cursor?: string) {
-  return buildOldLeadsQueryString({
-    search: state.search,
-    leadSource: state.leadSource || undefined,
-    messageFrom: state.messageFrom || undefined,
-    cursor,
-  });
-}
 
 /**
  * Renders paginated old leads list with filters.
@@ -41,7 +28,9 @@ function buildQueryFromState(state: OldLeadListFilterState, cursor?: string) {
  */
 export default function OldLeadsPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { user } = useAuth();
+  const { data: salespeople } = useSalespeople();
 
   const [listState, setListState] = useState<OldLeadListFilterState>(DEFAULT_OLD_LEAD_LIST_STATE);
   const [appliedState, setAppliedState] = useState<OldLeadListFilterState>(
@@ -55,7 +44,7 @@ export default function OldLeadsPage() {
   const [panelOpen, setPanelOpen] = useState(false);
 
   const canAccess = isManagerOrAbove(user?.role);
-  const queryString = buildQueryFromState(appliedState);
+  const queryString = buildQueryFromOldLeadListState(appliedState);
   const { data, error, isLoading, mutate } = useOldLeads(queryString, canAccess);
 
   useEffect(() => {
@@ -83,7 +72,7 @@ export default function OldLeadsPage() {
     if (!nextCursor) return;
     setLoadingMore(true);
 
-    const moreQuery = buildQueryFromState(appliedState, nextCursor);
+    const moreQuery = buildQueryFromOldLeadListState(appliedState, { cursor: nextCursor });
     const res = await fetch(`/api/old-leads${moreQuery}`);
     const json = await res.json();
 
@@ -117,23 +106,25 @@ export default function OldLeadsPage() {
 
   return (
     <AppShell
-      title="Old leads"
+      title={t('oldLeads.title')}
       count={accumulatedLeads.length || undefined}
       actions={
         <Link href="/leads" className="text-sm text-brand-blue hover:underline">
-          Back to active leads
+          {t('oldLeads.backToActive')}
         </Link>
       }
     >
-      <p className="mb-4 text-sm text-text-secondary">
-        Historical leads imported from Chatwoot. Read-only archive separate from the active
-        pipeline.
-      </p>
+      <p className="mb-4 text-sm text-text-secondary">{t('oldLeads.description')}</p>
 
-      <OldLeadListToolbar state={listState} onChange={setListState} onApply={handleApply} />
+      <OldLeadListToolbar
+        state={listState}
+        onChange={setListState}
+        onApply={handleApply}
+        salespeople={salespeople}
+      />
 
       {isLoading && <Skeleton className="h-64 w-full" />}
-      {error && <p className="text-sm text-brand-red">Failed to load old leads</p>}
+      {error && <p className="text-sm text-brand-red">{t('oldLeads.failedToLoad')}</p>}
 
       {!isLoading && (
         <OldLeadTable
@@ -146,7 +137,7 @@ export default function OldLeadsPage() {
       {nextCursor && (
         <div className="mt-4 flex justify-center">
           <Button type="button" variant="secondary" onClick={loadMore} disabled={loadingMore}>
-            {loadingMore ? 'Loading...' : 'Load more'}
+            {loadingMore ? t('common.loading') : t('common.loadMore')}
           </Button>
         </div>
       )}

@@ -6,10 +6,12 @@ import { AppShell } from '@/components/layout/AppShell';
 import { WebhookLogTable } from '@/components/webhook-logs/WebhookLogTable';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
+import { useTranslation } from '@/hooks/useTranslation';
 import { useWebhookLogs } from '@/hooks/useWebhookLogs';
 import { isManagerOrAbove } from '@/lib/auth/roles';
 
 export default function WebhookLogsPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const router = useRouter();
   const { data, mutate, error, isLoading } = useWebhookLogs('?limit=50');
@@ -25,9 +27,9 @@ export default function WebhookLogsPage() {
   }
 
   return (
-    <AppShell title="Webhook Logs">
+    <AppShell title={t('webhooks.title')}>
       {isLoading && <Skeleton className="h-64 w-full" />}
-      {error && <p className="text-sm text-brand-red">Failed to load webhook logs.</p>}
+      {error && <p className="text-sm text-brand-red">{t('webhooks.failedToLoad')}</p>}
       {data && <WebhookLogTable items={data.items} onReplay={handleReplay} />}
     </AppShell>
   );

@@ -4,6 +4,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
+import { isManagerOrAbove } from '@/lib/auth/roles';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -19,7 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   let query = supabase.from('campaigns').select('*').eq('id', id);
 
-  if (session.role !== 'manager') {
+  if (!isManagerOrAbove(session.role)) {
     query = query.eq('created_by', session.userId);
   }
 

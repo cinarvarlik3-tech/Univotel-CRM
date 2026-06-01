@@ -5,6 +5,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
+import { isManagerOrAbove } from '@/lib/auth/roles';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 const CreateTaskSchema = z.object({
@@ -23,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'GET') {
     let query = supabase.from('tasks').select('*').order('due_when', { ascending: true });
 
-    if (session.role !== 'manager') {
+    if (!isManagerOrAbove(session.role)) {
       query = query.eq('assigned_to', session.userId);
     }
 
@@ -39,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const assignedTo =
-      session.role === 'manager' && req.body.assigned_to
+      isManagerOrAbove(session.role) && req.body.assigned_to
         ? req.body.assigned_to
         : session.userId;
 
@@ -48,7 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .insert({
         ...parsed.data,
         assigned_to: assignedTo,
-        created_by: session.role === 'manager' ? 'manager' : 'salesperson',
+        created_by: isManagerOrAbove(session.role) ? 'manager' : 'salesperson',
       })
       .select('*')
       .single();

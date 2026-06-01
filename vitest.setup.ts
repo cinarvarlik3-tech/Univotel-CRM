@@ -19,3 +19,4 @@ process.env.TELEGRAM_BOT_TOKEN = 'test-telegram-token';
 process.env.TELEGRAM_MANAGER_CHAT_IDS = '123456';
 process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';
 process.env.CRON_SECRET = 'test-cron-secret-minimum-32-characters';
+process.env.MAKE_WEBHOOK_URL = 'https://hook.eu1.make.com/test-webhook';

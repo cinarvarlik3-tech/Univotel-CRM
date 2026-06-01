@@ -10,6 +10,7 @@ import { FormField } from '@/components/ui/form-field';
 import { FormSelect } from '@/components/ui/form-select';
 import { Input } from '@/components/ui/input';
 import { useSalespeople } from '@/hooks/useSalespeople';
+import { useTranslation } from '@/hooks/useTranslation';
 import {
   audienceStateToSegment,
   DEFAULT_CAMPAIGN_AUDIENCE,
@@ -19,6 +20,7 @@ import {
   type CampaignAudienceState,
   type TemplateVariableSlot,
 } from '@/lib/campaigns/campaign-form-ui';
+import { formatEnumLabel } from '@/lib/i18n';
 import { LANGUAGES } from '@/lib/constants';
 
 interface CampaignFormProps {
@@ -30,6 +32,7 @@ interface CampaignFormProps {
  * @param props - Callback when campaign is created.
  */
 export function CampaignForm({ onCreated }: CampaignFormProps) {
+  const { locale, t } = useTranslation();
   const { data: salespeople } = useSalespeople();
 
   const [templateId, setTemplateId] = useState('');
@@ -61,12 +64,12 @@ export function CampaignForm({ onCreated }: CampaignFormProps) {
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? 'Could not preview audience');
+        setError(json.error ?? t('campaigns.previewFailed'));
         return;
       }
       setPreviewCount(json.data.count);
     } catch {
-      setError('Could not preview audience');
+      setError(t('campaigns.previewFailed'));
     } finally {
       setPreviewLoading(false);
     }
@@ -76,7 +79,7 @@ export function CampaignForm({ onCreated }: CampaignFormProps) {
     e.preventDefault();
     setError(null);
 
-    const slotError = validateTemplateSlots(templateSlots);
+    const slotError = validateTemplateSlots(templateSlots, locale);
     if (slotError) {
       setError(slotError);
       return;
@@ -86,7 +89,7 @@ export function CampaignForm({ onCreated }: CampaignFormProps) {
     const templateVariables = templateSlotsToVariables(templateSlots);
 
     if (segment.filters.length === 0 && !campaignLanguage) {
-      setError('Choose at least one audience filter or a campaign language.');
+      setError(t('campaigns.filterRequired'));
       return;
     }
 
@@ -106,7 +109,7 @@ export function CampaignForm({ onCreated }: CampaignFormProps) {
 
     const json = await res.json();
     if (!res.ok) {
-      setError(json.error ?? 'Create failed');
+      setError(json.error ?? t('campaigns.createFailed'));
       return;
     }
 
@@ -116,12 +119,12 @@ export function CampaignForm({ onCreated }: CampaignFormProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>WhatsApp template</CardTitle>
+        <CardTitle>{t('campaigns.whatsappTemplate')}</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
           <div className="flex flex-col gap-4">
-            <FormField label="Template name (Meta)" htmlFor="template_id">
+            <FormField label={t('campaigns.templateName')} htmlFor="template_id">
               <Input
                 id="template_id"
                 value={templateId}
@@ -129,7 +132,7 @@ export function CampaignForm({ onCreated }: CampaignFormProps) {
                 required
               />
             </FormField>
-            <FormField label="Template language" htmlFor="template_language">
+            <FormField label={t('campaigns.templateLanguage')} htmlFor="template_language">
               <Input
                 id="template_language"
                 value={templateLanguage}
@@ -138,19 +141,20 @@ export function CampaignForm({ onCreated }: CampaignFormProps) {
               />
             </FormField>
             <FormSelect
-              label="Extra language filter (optional)"
+              label={t('campaigns.extraLanguageFilter')}
               id="campaign_extra_language"
               value={campaignLanguage || '__none__'}
               onValueChange={(v) => setCampaignLanguage(v === '__none__' ? '' : v)}
               options={[
-                { value: '__none__', label: 'No extra filter' },
-                ...LANGUAGES.map((l) => ({ value: l, label: l })),
+                { value: '__none__', label: t('common.noExtraFilter') },
+                ...LANGUAGES.map((l) => ({
+                  value: l,
+                  label: formatEnumLabel(locale, 'language', l),
+                })),
               ]}
             />
-            <p className="text-xs text-text-secondary">
-              Applies on top of audience filters — only leads with this language are included.
-            </p>
-            <FormField label="Delay between messages (milliseconds)" htmlFor="send_delay_ms">
+            <p className="text-xs text-text-secondary">{t('campaigns.languageFilterHelp')}</p>
+            <FormField label={t('campaigns.delayMs')} htmlFor="send_delay_ms">
               <Input
                 id="send_delay_ms"
                 type="number"
@@ -174,7 +178,7 @@ export function CampaignForm({ onCreated }: CampaignFormProps) {
           <CampaignTemplateVariablesEditor slots={templateSlots} onChange={setTemplateSlots} />
 
           {error && <p className="text-xs text-brand-red">{error}</p>}
-          <Button type="submit">Create draft</Button>
+          <Button type="submit">{t('campaigns.createDraft')}</Button>
         </form>
       </CardContent>
     </Card>

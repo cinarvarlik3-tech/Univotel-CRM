@@ -19,13 +19,15 @@ import {
   IconWebhook,
 } from '@tabler/icons-react';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatRoleLabel } from '@/lib/i18n/enum-labels';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { UnivotelLogoWhite } from '@/components/layout/UnivotelLogo';
 
 interface NavItem {
   href: string;
-  label: string;
+  labelKey: string;
   icon: React.ComponentType<{ className?: string; size?: number }>;
   managerOnly?: boolean;
   salespersonOnly?: boolean;
@@ -33,19 +35,21 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: '/leads', label: 'Leads', icon: IconUsers },
-  { href: '/leads/mine', label: 'My Leads', icon: IconUserCheck },
-  { href: '/tasks', label: 'Tasks', icon: IconCheckbox },
-  { href: '/properties', label: 'Properties', icon: IconBuilding },
-  { href: '/dashboard', label: 'Analytics', icon: IconChartBar, managerOnly: true },
-  { href: '/campaigns', label: 'Campaigns', icon: IconSpeakerphone, managerOnly: true },
-  { href: '/webhook-logs', label: 'Webhook Logs', icon: IconWebhook, managerOnly: true },
-  { href: '/leads/archived', label: 'Archive', icon: IconArchive, managerOnly: true },
-  { href: '/old-leads', label: 'Old leads', icon: IconHistory, managerOnly: true },
-  { href: '/admin/dni-numbers', label: 'DNI Numbers', icon: IconPhone, superadminOnly: true },
+  { href: '/leads', labelKey: 'nav.leads', icon: IconUsers },
+  { href: '/leads/mine', labelKey: 'nav.myLeads', icon: IconUserCheck },
+  { href: '/tasks', labelKey: 'nav.tasks', icon: IconCheckbox },
+  { href: '/properties', labelKey: 'nav.properties', icon: IconBuilding },
+  { href: '/dashboard', labelKey: 'nav.analytics', icon: IconChartBar, managerOnly: true },
+  { href: '/campaigns', labelKey: 'nav.campaigns', icon: IconSpeakerphone, managerOnly: true },
+  { href: '/webhook-logs', labelKey: 'nav.webhookLogs', icon: IconWebhook, managerOnly: true },
+  { href: '/leads/archived', labelKey: 'nav.archive', icon: IconArchive, managerOnly: true },
+  { href: '/old-leads', labelKey: 'nav.oldLeads', icon: IconHistory, managerOnly: true },
+  { href: '/admin/dni-numbers', labelKey: 'nav.dniNumbers', icon: IconPhone, superadminOnly: true },
 ];
 
-const BOTTOM_ITEMS: NavItem[] = [{ href: '/settings', label: 'Settings', icon: IconSettings }];
+const BOTTOM_ITEMS: NavItem[] = [
+  { href: '/settings', labelKey: 'nav.settings', icon: IconSettings },
+];
 
 interface SidebarProps {
   userName: string;
@@ -75,6 +79,7 @@ function getInitials(name: string): string {
  */
 export function Sidebar({ userName, userRole, isManager, isSuperadminUser }: SidebarProps) {
   const router = useRouter();
+  const { t, locale } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [pinned, setPinned] = useState(false);
 
@@ -132,7 +137,7 @@ export function Sidebar({ userName, userRole, isManager, isSuperadminUser }: Sid
             type="button"
             className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[var(--sidebar-text)] hover:bg-[var(--sidebar-icon-hover-bg)]"
             onClick={() => setPinned((p) => !p)}
-            aria-label="Toggle sidebar"
+            aria-label={t('nav.toggleSidebar')}
           >
             <IconMenu2 size={20} className="opacity-80" />
           </button>
@@ -171,7 +176,7 @@ export function Sidebar({ userName, userRole, isManager, isSuperadminUser }: Sid
                     isOpen ? 'max-w-[160px] opacity-100' : 'max-w-0 opacity-0',
                   )}
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </span>
               </Link>
             );
@@ -202,7 +207,7 @@ export function Sidebar({ userName, userRole, isManager, isSuperadminUser }: Sid
                     isOpen ? 'max-w-[160px] opacity-100' : 'max-w-0 opacity-0',
                   )}
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </span>
               </Link>
             );
@@ -227,7 +232,7 @@ export function Sidebar({ userName, userRole, isManager, isSuperadminUser }: Sid
             >
               <p className="truncate text-xs font-medium text-[var(--sidebar-text)]">{userName}</p>
               <p className="truncate text-[11px] capitalize text-[var(--sidebar-icon-idle)]">
-                {userRole}
+                {formatRoleLabel(locale, userRole)}
               </p>
             </div>
           </div>

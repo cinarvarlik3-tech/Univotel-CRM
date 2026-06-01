@@ -3,6 +3,7 @@
  * Validates column names against whitelist before applying PostgREST filters.
  */
 import { FILTERABLE_COLUMNS } from '@/lib/constants';
+import type { RootFilterableQuery } from '@/lib/query/supabase-query-types';
 
 /** Parsed filter condition from query string. */
 export interface FilterCondition {
@@ -17,14 +18,28 @@ export interface FilterError {
 }
 
 /** Supported PostgREST filter operators. */
-const VALID_OPERATORS = new Set(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'ilike', 'in', 'is']);
+const VALID_OPERATORS = new Set([
+  'eq',
+  'neq',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+  'ilike',
+  'in',
+  'is',
+  'cs',
+  'ov',
+]);
 
 /**
  * Parses filter query params in format filter[field][operator]=value.
  * @param query - URL query record from Next.js API route.
  * @returns Array of parsed filter conditions.
  */
-export function parseFilterParams(query: Record<string, string | string[] | undefined>): FilterCondition[] {
+export function parseFilterParams(
+  query: Record<string, string | string[] | undefined>,
+): FilterCondition[] {
   const filters: FilterCondition[] = [];
 
   for (const [key, rawValue] of Object.entries(query)) {
@@ -44,11 +59,15 @@ export function parseFilterParams(query: Record<string, string | string[] | unde
 /**
  * Validates filter conditions against column whitelist and operator set.
  * @param filters - Parsed filter conditions.
+ * @param allowedColumns - Whitelist of filterable column names.
  * @returns FilterError if invalid, null if valid.
  */
-export function validateFilters(filters: FilterCondition[]): FilterError | null {
+export function validateFilters(
+  filters: FilterCondition[],
+  allowedColumns: ReadonlySet<string> = FILTERABLE_COLUMNS,
+): FilterError | null {
   for (const filter of filters) {
-    if (!FILTERABLE_COLUMNS.has(filter.field)) {
+    if (!allowedColumns.has(filter.field)) {
       return { error: `Unknown filter field: ${filter.field}` };
     }
     if (!VALID_OPERATORS.has(filter.operator)) {
@@ -64,12 +83,11 @@ export function validateFilters(filters: FilterCondition[]): FilterError | null 
  * @param filters - Validated filter conditions.
  * @returns Modified query builder.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function applyFilters<T extends { filter: (...args: any[]) => T }>(
+export function applyFilters<T extends RootFilterableQuery>(
   query: T,
   filters: FilterCondition[],
 ): T {
-  let result = query;
+  let result: RootFilterableQuery = query;
 
   for (const { field, operator, value } of filters) {
     switch (operator) {
@@ -98,10 +116,20 @@ export function applyFilters<T extends { filter: (...args: any[]) => T }>(
         result = result.filter(field, 'in', `(${value})`);
         break;
       case 'is':
-        result = result.filter(field, 'is', value);
+        if (value === 'not.null') {
+          result = result.not(field, 'is', null);
+        } else {
+          result = result.filter(field, 'is', value === 'null' ? null : value);
+        }
+        break;
+      case 'cs':
+        result = result.filter(field, 'cs', value);
+        break;
+      case 'ov':
+        result = result.filter(field, 'ov', value);
         break;
     }
   }
 
-  return result;
+  return result as T;
 }

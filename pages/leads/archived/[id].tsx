@@ -12,9 +12,12 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { KvList } from '@/components/ui/kv-list';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatDateTime, formatEnumLabel } from '@/lib/i18n';
 import { normalizeLeadDetails } from '@/lib/leads/normalize-lead-details';
 import { displayLeadPhone } from '@/lib/ui/display-phone';
 import { useAuth } from '@/hooks/useAuth';
+import { isManagerOrAbove } from '@/lib/auth/roles';
 import type { ArchivedLeadRow, ContactHistoryEntry, LeadDetailRow } from '@/types/domain';
 
 /**
@@ -24,6 +27,7 @@ import type { ArchivedLeadRow, ContactHistoryEntry, LeadDetailRow } from '@/type
 export default function ArchivedLeadDetailPage() {
   const router = useRouter();
   const { id } = router.query;
+  const { locale, t } = useTranslation();
   const { user } = useAuth();
 
   const [lead, setLead] = useState<ArchivedLeadRow | null>(null);
@@ -52,64 +56,79 @@ export default function ArchivedLeadDetailPage() {
   }, [loadLead]);
 
   useEffect(() => {
-    if (user && user.role !== 'manager') {
+    if (user && !isManagerOrAbove(user.role)) {
       router.replace('/leads');
     }
   }, [user, router]);
 
-  if (user && user.role !== 'manager') {
+  if (user && !isManagerOrAbove(user.role)) {
     return null;
   }
 
   if (loading || !lead) {
     return (
-      <AppShell title="Archived lead">
+      <AppShell title={t('archived.leadTitle')}>
         <Skeleton className="h-64 w-full" />
       </AppShell>
     );
   }
 
   const leadId = String(id);
+  const emDash = t('common.emDash');
 
   return (
     <AppShell
       title={lead.lead_name ?? displayLeadPhone(lead)}
       actions={
         <Link href="/leads/archived" className="text-sm text-brand-blue hover:underline">
-          Back to archived list
+          {t('archived.backToList')}
         </Link>
       }
     >
       <div className="flex flex-col gap-4">
         <Card>
           <CardHeader>
-            <CardTitle>Archive summary</CardTitle>
+            <CardTitle>{t('archived.archiveSummary')}</CardTitle>
           </CardHeader>
           <CardContent>
             <KvList
               items={[
                 {
-                  term: 'Outcome',
+                  term: t('filters.outcome'),
                   value: (
                     <Badge variant={lead.archive_reason === 'won' ? 'success' : 'danger'}>
-                      {lead.archive_reason === 'won' ? 'Won' : 'Lost'}
+                      {formatEnumLabel(locale, 'archive', lead.archive_reason)}
                     </Badge>
                   ),
                 },
                 ...(lead.archive_reason === 'lost' && lead.loss_reason
-                  ? [{ term: 'Loss reason', value: lead.loss_reason }]
+                  ? [
+                      {
+                        term: t('filters.lossReason'),
+                        value: formatEnumLabel(locale, 'loss', lead.loss_reason),
+                      },
+                    ]
                   : []),
                 {
-                  term: 'Archived',
-                  value: new Date(lead.archived_at).toLocaleString('tr-TR'),
+                  term: t('archived.tableArchived'),
+                  value: formatDateTime(lead.archived_at, locale),
                 },
-                { term: 'Funnel status at archive', value: lead.funnel_status },
-                { term: 'Source', value: lead.lead_source },
-                { term: 'Phone', value: displayLeadPhone(lead) },
-                { term: 'Assignee', value: lead.salespeople?.full_name ?? '—' },
                 {
-                  term: 'Created',
-                  value: new Date(lead.created_at).toLocaleString('tr-TR'),
+                  term: t('archived.funnelAtArchive'),
+                  value: formatEnumLabel(locale, 'funnel', lead.funnel_status),
+                },
+                {
+                  term: t('filters.source'),
+                  value: formatEnumLabel(locale, 'source', lead.lead_source),
+                },
+                { term: t('leads.phone'), value: displayLeadPhone(lead) },
+                {
+                  term: t('filters.assignee'),
+                  value: lead.salespeople?.full_name ?? emDash,
+                },
+                {
+                  term: t('leads.created'),
+                  value: formatDateTime(lead.created_at, locale),
                 },
               ]}
             />
@@ -121,18 +140,18 @@ export default function ArchivedLeadDetailPage() {
         {details && (
           <Card>
             <CardHeader>
-              <CardTitle>Lead details</CardTitle>
+              <CardTitle>{t('archived.leadDetails')}</CardTitle>
             </CardHeader>
             <CardContent>
               <KvList
                 items={[
-                  { term: 'University', value: details.university ?? '—' },
+                  { term: t('filters.university'), value: details.university ?? emDash },
                   {
-                    term: 'Budget',
-                    value: `${details.budget_min ?? '—'} – ${details.budget_max ?? '—'}`,
+                    term: t('leads.budget'),
+                    value: `${details.budget_min ?? emDash} – ${details.budget_max ?? emDash}`,
                   },
-                  { term: 'Move in', value: details.move_in ?? '—' },
-                  { term: 'Uni year', value: details.uni_year ?? '—' },
+                  { term: t('leads.moveIn'), value: details.move_in ?? emDash },
+                  { term: t('filters.uniYear'), value: details.uni_year ?? emDash },
                 ]}
               />
             </CardContent>
@@ -143,7 +162,7 @@ export default function ArchivedLeadDetailPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Contact history</CardTitle>
+            <CardTitle>{t('leads.contactHistory')}</CardTitle>
           </CardHeader>
           <CardContent>
             <ContactHistoryList entries={history} />

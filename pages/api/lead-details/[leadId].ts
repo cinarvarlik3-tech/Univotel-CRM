@@ -26,6 +26,9 @@ const UpdateLeadDetailsSchema = z.object({
   dorm_awaiting: z.array(z.enum(DORM_AWAITING_VALUES)).optional(),
   kvkk_opt_in: z.boolean().nullable().optional(),
   marketing_opt_in: z.boolean().nullable().optional(),
+  campus: z.string().nullable().optional(),
+  room_category: z.enum(['single', 'double', 'triple', 'quad']).nullable().optional(),
+  district_preference: z.string().nullable().optional(),
 });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

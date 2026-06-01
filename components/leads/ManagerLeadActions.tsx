@@ -7,6 +7,7 @@ import { ArchiveLeadModal } from '@/components/leads/ArchiveLeadModal';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FormSelect } from '@/components/ui/form-select';
+import { useTranslation } from '@/hooks/useTranslation';
 import type { LeadWithDetails, SalespersonOption } from '@/types/domain';
 
 interface ManagerLeadActionsProps {
@@ -33,6 +34,7 @@ export function ManagerLeadActions({
   onArchived,
 }: ManagerLeadActionsProps) {
   const router = useRouter();
+  const { t } = useTranslation();
   const [assignedTo, setAssignedTo] = useState(lead.assigned_to ?? '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -54,7 +56,7 @@ export function ManagerLeadActions({
     setSaving(false);
 
     if (!res.ok) {
-      setError(json.error ?? 'Reassign failed');
+      setError(json.error ?? t('leads.reassignFailed'));
       return;
     }
 
@@ -62,7 +64,7 @@ export function ManagerLeadActions({
   }
 
   async function handleDelete() {
-    if (!window.confirm('Soft-delete this lead? It will be hidden from lists.')) {
+    if (!window.confirm(t('leads.deleteConfirm'))) {
       return;
     }
 
@@ -70,7 +72,7 @@ export function ManagerLeadActions({
     const json = await res.json();
 
     if (!res.ok) {
-      setError(json.error ?? 'Delete failed');
+      setError(json.error ?? t('leads.deleteFailed'));
       return;
     }
 
@@ -92,24 +94,24 @@ export function ManagerLeadActions({
   const formBody = (
     <>
       <FormSelect
-        label="Reassign to"
+        label={t('leads.reassignTo')}
         id="assigned_to"
         value={assignedTo || '__none__'}
         onValueChange={(v) => setAssignedTo(v === '__none__' ? '' : v)}
         options={[
-          { value: '__none__', label: 'Unassigned' },
+          { value: '__none__', label: t('common.unassigned') },
           ...salespeople.map((sp) => ({ value: sp.id, label: sp.full_name })),
         ]}
       />
       <div className="flex flex-wrap gap-2">
         <Button type="button" onClick={handleReassign} disabled={saving}>
-          {saving ? 'Saving...' : 'Save assignment'}
+          {saving ? t('common.saving') : t('leads.saveAssignment')}
         </Button>
         <Button type="button" onClick={() => setArchiveOpen(true)}>
-          Archive lead
+          {t('leads.archiveLead')}
         </Button>
         <Button type="button" variant="destructive" onClick={handleDelete}>
-          Delete lead
+          {t('leads.deleteLead')}
         </Button>
       </div>
       {error && <p className="text-xs text-brand-red">{error}</p>}
@@ -129,7 +131,7 @@ export function ManagerLeadActions({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Manager actions</CardTitle>
+        <CardTitle>{t('leads.managerActions')}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">{formBody}</CardContent>
     </Card>

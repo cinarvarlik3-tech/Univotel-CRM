@@ -7,6 +7,7 @@ import {
   buildUniversityLookup,
   extractUniversityFromMessages,
 } from '@/lib/import/extract-university';
+import { extractGenderFromMessages } from '@/lib/import/extract-gender';
 import type {
   BuildOldLeadsResult,
   BuiltOldLeadRow,
@@ -182,6 +183,7 @@ function buildRowForGroup(
     inboundMessageContents(dump, primary.id),
     UNIVERSITY_LOOKUP,
   );
+  const genderResult = extractGenderFromMessages(inboundMessageContents(dump, primary.id));
 
   return {
     uuid,
@@ -208,6 +210,7 @@ function buildRowForGroup(
     details: {
       lead_uuid: uuid,
       university,
+      student_gender: genderResult.gender,
     },
     meta: {
       identifierKind: group.kind,
@@ -283,6 +286,7 @@ export function buildOldLeadRows(
       mergedInstagramGroups,
       normalizationFailed: rows.filter((r) => r.meta.normalizationFailed).length,
       universityExtracted: rows.filter((r) => r.details.university != null).length,
+      genderExtracted: rows.filter((r) => r.details.student_gender != null).length,
       byChannel,
     },
   };

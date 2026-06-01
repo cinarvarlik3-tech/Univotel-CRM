@@ -2,6 +2,8 @@
  * Status badge helpers — funnel and SLA status pill mapping.
  */
 import { Badge } from '@/components/ui/badge';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { cn } from '@/lib/utils';
 
 const FUNNEL_VARIANTS: Record<string, 'default' | 'call' | 'visit' | 'deal' | 'danger'> = {
@@ -23,7 +25,6 @@ const FUNNEL_VARIANTS: Record<string, 'default' | 'call' | 'visit' | 'deal' | 'd
 
 const SLA_VARIANTS: Record<string, 'success' | 'warning' | 'danger'> = {
   on_time: 'success',
-  at_risk: 'warning',
   breached: 'danger',
 };
 
@@ -39,17 +40,20 @@ interface StatusBadgeProps {
  * @returns Styled badge element.
  */
 export function StatusBadge({ status, type = 'funnel', className }: StatusBadgeProps) {
+  const { locale } = useTranslation();
+
   const variant =
     type === 'sla' ? (SLA_VARIANTS[status] ?? 'default') : (FUNNEL_VARIANTS[status] ?? 'default');
 
   const showPulse = type === 'sla' && status === 'breached';
+  const label = formatEnumLabel(locale, type, status);
 
   return (
     <Badge variant={variant as 'default'} className={cn('gap-1.5', className)}>
       {showPulse && (
         <span className="sla-pulse-dot inline-block size-1.5 rounded-full bg-brand-red" />
       )}
-      {status.replace(/-/g, ' ')}
+      {label}
     </Badge>
   );
 }

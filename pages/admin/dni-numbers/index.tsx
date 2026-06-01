@@ -15,7 +15,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useAuth } from '@/hooks/useAuth';
+import { useTranslation } from '@/hooks/useTranslation';
 import { canAccessDniAdmin } from '@/lib/auth/roles';
+import { formatDateTime, formatEnumLabel, formatYesNo } from '@/lib/i18n';
 import { useRouter } from 'next/router';
 
 interface DniNumberRow {
@@ -44,6 +46,7 @@ const SOURCE_OPTIONS = [
  */
 export default function AdminDniNumbersPage() {
   const router = useRouter();
+  const { locale, t } = useTranslation();
   const { user } = useAuth();
   const [rows, setRows] = useState<DniNumberRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,14 +60,14 @@ export default function AdminDniNumbersPage() {
     const res = await fetch('/api/admin/dni-numbers');
     const json = await res.json();
     if (!res.ok) {
-      setError(json.error ?? 'Failed to load');
+      setError(json.error ?? t('admin.failedToLoad'));
       setLoading(false);
       return;
     }
     setRows(json.data);
     setError(null);
     setLoading(false);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (user && !canAccessDniAdmin(user.role)) {
@@ -104,14 +107,16 @@ export default function AdminDniNumbersPage() {
 
   if (!user || !canAccessDniAdmin(user.role)) return null;
 
+  const emDash = t('common.emDash');
+
   return (
-    <AppShell title="DNI Numbers">
+    <AppShell title={t('admin.dniTitle')}>
       <form
         onSubmit={handleCreate}
         className="mb-6 grid gap-3 rounded-lg border p-4 md:grid-cols-4"
       >
         <Input
-          placeholder="Virtual number (+90850...)"
+          placeholder={t('admin.virtualNumberPlaceholder')}
           value={virtualNumber}
           onChange={(e) => setVirtualNumber(e.target.value)}
           required
@@ -119,43 +124,46 @@ export default function AdminDniNumbersPage() {
         <FormSelect
           value={source}
           onValueChange={setSource}
-          options={SOURCE_OPTIONS.map((opt) => ({ value: opt, label: opt }))}
+          options={SOURCE_OPTIONS.map((opt) => ({
+            value: opt,
+            label: formatEnumLabel(locale, 'source', opt),
+          }))}
         />
         <Input
-          placeholder="Display label"
+          placeholder={t('admin.displayLabelPlaceholder')}
           value={displayLabel}
           onChange={(e) => setDisplayLabel(e.target.value)}
           required
         />
-        <Button type="submit">Add number</Button>
+        <Button type="submit">{t('admin.addNumber')}</Button>
       </form>
 
       {error && <p className="mb-4 text-sm text-brand-red">{error}</p>}
-      {loading && <p className="text-sm text-text-secondary">Loading...</p>}
+      {loading && <p className="text-sm text-text-secondary">{t('common.loading')}</p>}
 
       {!loading && (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Source</TableHead>
-              <TableHead>Number</TableHead>
-              <TableHead>Label</TableHead>
-              <TableHead>Active</TableHead>
-              <TableHead>Leads</TableHead>
-              <TableHead>Last lead</TableHead>
+              <TableHead>{t('admin.tableSource')}</TableHead>
+              <TableHead>{t('admin.tableNumber')}</TableHead>
+              <TableHead>{t('admin.tableLabel')}</TableHead>
+              <TableHead>{t('admin.tableActive')}</TableHead>
+              <TableHead>{t('admin.tableLeads')}</TableHead>
+              <TableHead>{t('admin.tableLastLead')}</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((row) => (
               <TableRow key={row.id}>
-                <TableCell>{row.source}</TableCell>
+                <TableCell>{formatEnumLabel(locale, 'source', row.source)}</TableCell>
                 <TableCell>{row.virtual_number}</TableCell>
                 <TableCell>{row.display_label}</TableCell>
-                <TableCell>{row.is_active ? 'Yes' : 'No'}</TableCell>
+                <TableCell>{formatYesNo(row.is_active, locale)}</TableCell>
                 <TableCell>{row.lead_count}</TableCell>
                 <TableCell>
-                  {row.last_lead_at ? new Date(row.last_lead_at).toLocaleString('tr-TR') : '—'}
+                  {row.last_lead_at ? formatDateTime(row.last_lead_at, locale) : emDash}
                 </TableCell>
                 <TableCell>
                   <Button
@@ -164,7 +172,7 @@ export default function AdminDniNumbersPage() {
                     size="sm"
                     onClick={() => toggleActive(row)}
                   >
-                    {row.is_active ? 'Deactivate' : 'Activate'}
+                    {row.is_active ? t('common.deactivate') : t('common.activate')}
                   </Button>
                 </TableCell>
               </TableRow>

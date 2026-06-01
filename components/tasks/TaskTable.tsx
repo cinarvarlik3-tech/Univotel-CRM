@@ -13,6 +13,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatDateTime, formatEnumLabel, formatYesNo } from '@/lib/i18n';
 import type { TaskRow } from '@/types/domain';
 
 interface TaskTableProps {
@@ -26,8 +28,8 @@ interface TaskTableProps {
  * @param notes - Task notes or null.
  * @returns Truncated string.
  */
-function truncateNotes(notes: string | null): string {
-  if (!notes) return '—';
+function truncateNotes(notes: string | null, emDash: string): string {
+  if (!notes) return emDash;
   return notes.length > 60 ? `${notes.slice(0, 60)}…` : notes;
 }
 
@@ -37,9 +39,11 @@ function truncateNotes(notes: string | null): string {
  * @returns Tasks table element.
  */
 export function TaskTable({ tasks, onComplete, onNotesUpdated }: TaskTableProps) {
+  const { locale, t } = useTranslation();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const emDash = t('common.emDash');
 
   async function saveNotes(taskId: string) {
     setSaving(true);
@@ -57,7 +61,9 @@ export function TaskTable({ tasks, onComplete, onNotesUpdated }: TaskTableProps)
   }
 
   if (tasks.length === 0) {
-    return <p className="py-8 text-center text-sm text-text-secondary">No tasks found.</p>;
+    return (
+      <p className="py-8 text-center text-sm text-text-secondary">{t('tasks.noTasksFound')}</p>
+    );
   }
 
   return (
@@ -65,22 +71,24 @@ export function TaskTable({ tasks, onComplete, onNotesUpdated }: TaskTableProps)
       <Table>
         <TableHeader>
           <TableRow className="h-[34px] hover:bg-transparent">
-            <TableHead>Type</TableHead>
-            <TableHead>Due</TableHead>
-            <TableHead>Late</TableHead>
-            <TableHead>Notes</TableHead>
-            <TableHead>Lead</TableHead>
-            <TableHead>Action</TableHead>
+            <TableHead>{t('tasks.tableType')}</TableHead>
+            <TableHead>{t('tasks.tableDue')}</TableHead>
+            <TableHead>{t('tasks.tableLate')}</TableHead>
+            <TableHead>{t('tasks.tableNotes')}</TableHead>
+            <TableHead>{t('tasks.lead')}</TableHead>
+            <TableHead>{t('tasks.tableAction')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {tasks.map((task) => (
             <TableRow key={task.id}>
-              <TableCell>{task.task_type}</TableCell>
+              <TableCell>{formatEnumLabel(locale, 'task', task.task_type)}</TableCell>
               <TableCell className="text-text-secondary">
-                {new Date(task.due_when).toLocaleString('tr-TR')}
+                {formatDateTime(task.due_when, locale)}
               </TableCell>
-              <TableCell className="text-text-secondary">{task.is_late ? 'Yes' : 'No'}</TableCell>
+              <TableCell className="text-text-secondary">
+                {formatYesNo(task.is_late, locale)}
+              </TableCell>
               <TableCell>
                 {editingId === task.id ? (
                   <div className="flex flex-col gap-2">
@@ -91,10 +99,10 @@ export function TaskTable({ tasks, onComplete, onNotesUpdated }: TaskTableProps)
                     />
                     <div className="flex gap-2">
                       <Button type="button" onClick={() => saveNotes(task.id)} disabled={saving}>
-                        Save
+                        {t('common.save')}
                       </Button>
                       <Button type="button" variant="secondary" onClick={() => setEditingId(null)}>
-                        Cancel
+                        {t('common.cancel')}
                       </Button>
                     </div>
                   </div>
@@ -108,7 +116,7 @@ export function TaskTable({ tasks, onComplete, onNotesUpdated }: TaskTableProps)
                       setEditNotes(task.notes ?? '');
                     }}
                   >
-                    {truncateNotes(task.notes)}
+                    {truncateNotes(task.notes, emDash)}
                   </Button>
                 )}
               </TableCell>
@@ -118,16 +126,18 @@ export function TaskTable({ tasks, onComplete, onNotesUpdated }: TaskTableProps)
                 </Link>
                 {' · '}
                 <Link href={`/tasks/${task.id}`} className="text-brand-blue hover:underline">
-                  view
+                  {t('common.view')}
                 </Link>
               </TableCell>
               <TableCell>
                 {!task.is_completed && (
                   <Button type="button" onClick={() => onComplete(task.id)}>
-                    Complete
+                    {t('common.complete')}
                   </Button>
                 )}
-                {task.is_completed && <span className="text-text-secondary">Done</span>}
+                {task.is_completed && (
+                  <span className="text-text-secondary">{t('common.done')}</span>
+                )}
               </TableCell>
             </TableRow>
           ))}

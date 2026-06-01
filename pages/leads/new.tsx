@@ -4,6 +4,7 @@
 import { useRouter } from 'next/router';
 import { AppShell } from '@/components/layout/AppShell';
 import { LeadForm } from '@/components/leads/LeadForm';
+import { useTranslation } from '@/hooks/useTranslation';
 
 /**
  * Renders form for manually creating a new lead.
@@ -11,6 +12,7 @@ import { LeadForm } from '@/components/leads/LeadForm';
  */
 export default function NewLeadPage() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   async function handleSubmit(data: {
     lead_name: string;
@@ -30,7 +32,7 @@ export default function NewLeadPage() {
     const json = await res.json();
 
     if (!res.ok) {
-      throw new Error(json.error ?? 'Failed to create lead');
+      throw new Error(json.error ?? t('leads.failedToCreate'));
     }
 
     if (json.data.duplicate) {
@@ -41,7 +43,7 @@ export default function NewLeadPage() {
   }
 
   return (
-    <AppShell title="New Lead">
+    <AppShell title={t('leads.newLead')}>
       <LeadForm onSubmit={handleSubmit} />
     </AppShell>
   );

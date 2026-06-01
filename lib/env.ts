@@ -36,6 +36,7 @@ const envSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url(),
   CF_REQUIRE_SUPABASE: z.string().optional(),
   CRON_SECRET: z.string().min(32),
+  MAKE_WEBHOOK_URL: z.string().url(),
   GOOGLE_SERVICE_ACCOUNT_JSON: z.string().min(1).optional(),
   GA4_PROPERTY_ID: z.string().min(1).optional(),
 });

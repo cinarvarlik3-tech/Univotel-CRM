@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
+import { useTranslation } from '@/hooks/useTranslation';
 import type { LeadWithDetails } from '@/types/domain';
 
 interface LeadContactFieldsFormProps {
@@ -26,6 +27,7 @@ export function LeadContactFieldsForm({
   onSaved,
   embedded,
 }: LeadContactFieldsFormProps) {
+  const { t } = useTranslation();
   const [parentPhone, setParentPhone] = useState(lead.parent_phone ?? '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -48,7 +50,7 @@ export function LeadContactFieldsForm({
     setSaving(false);
 
     if (!res.ok) {
-      setError(json.error ?? 'Failed to save');
+      setError(json.error ?? t('leads.saveFailed'));
       return;
     }
 
@@ -57,7 +59,7 @@ export function LeadContactFieldsForm({
 
   const formBody = (
     <>
-      <FormField label="Parent phone" htmlFor="parent_phone">
+      <FormField label={t('leads.parentPhone')} htmlFor="parent_phone">
         <Input
           id="parent_phone"
           value={parentPhone}
@@ -66,7 +68,7 @@ export function LeadContactFieldsForm({
       </FormField>
       {error && <p className="text-xs text-brand-red">{error}</p>}
       <Button type="button" onClick={handleSave} disabled={saving}>
-        {saving ? 'Saving...' : 'Save contact'}
+        {saving ? t('common.saving') : t('leads.saveContact')}
       </Button>
     </>
   );
@@ -78,7 +80,7 @@ export function LeadContactFieldsForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Contact</CardTitle>
+        <CardTitle>{t('leads.contact')}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">{formBody}</CardContent>
     </Card>

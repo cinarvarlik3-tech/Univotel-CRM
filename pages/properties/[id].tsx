@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { KvList } from '@/components/ui/kv-list';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatYesNo } from '@/lib/i18n';
 import type { PropertyRow } from '@/types/domain';
 
 /**
@@ -16,6 +18,7 @@ import type { PropertyRow } from '@/types/domain';
 export default function PropertyDetailPage() {
   const router = useRouter();
   const { id } = router.query;
+  const { locale, t } = useTranslation();
   const [property, setProperty] = useState<PropertyRow | null>(null);
   const [error, setError] = useState('');
 
@@ -28,14 +31,14 @@ export default function PropertyDetailPage() {
         if (json.data) {
           setProperty(json.data);
         } else {
-          setError(json.error ?? 'Property not found');
+          setError(json.error ?? t('properties.notFound'));
         }
       });
-  }, [id]);
+  }, [id, t]);
 
   if (!property && !error) {
     return (
-      <AppShell title="Property">
+      <AppShell title={t('properties.property')}>
         <Skeleton className="h-32 w-full max-w-md" />
       </AppShell>
     );
@@ -43,28 +46,33 @@ export default function PropertyDetailPage() {
 
   if (error || !property) {
     return (
-      <AppShell title="Property">
-        <p className="text-sm text-brand-red">{error || 'Property not found'}</p>
+      <AppShell title={t('properties.property')}>
+        <p className="text-sm text-brand-red">{error || t('properties.notFound')}</p>
       </AppShell>
     );
   }
+
+  const emDash = t('common.emDash');
 
   return (
     <AppShell title={property.hotel_name}>
       <KvList
         items={[
-          { term: 'District', value: property.district ?? '—' },
-          { term: 'Address', value: property.address ?? '—' },
-          { term: 'Gender', value: property.serviced_gender ?? '—' },
-          { term: 'Status', value: property.status },
-          { term: 'Beds', value: property.total_beds ?? '—' },
-          { term: 'Schools', value: property.serviced_schools?.join(', ') || '—' },
-          { term: 'Non-students', value: property.accepts_non_students ? 'Yes' : 'No' },
+          { term: t('properties.district'), value: property.district ?? emDash },
+          { term: t('properties.address'), value: property.address ?? emDash },
+          { term: t('properties.gender'), value: property.serviced_gender ?? emDash },
+          { term: t('properties.status'), value: property.status },
+          { term: t('properties.beds'), value: property.total_beds ?? emDash },
+          { term: t('properties.schools'), value: property.serviced_schools?.join(', ') || emDash },
+          {
+            term: t('properties.nonStudents'),
+            value: formatYesNo(property.accepts_non_students, locale),
+          },
         ]}
       />
       <p className="mt-4">
         <Link href="/properties" className="text-brand-blue hover:underline">
-          Back to properties
+          {t('properties.backToProperties')}
         </Link>
       </p>
     </AppShell>

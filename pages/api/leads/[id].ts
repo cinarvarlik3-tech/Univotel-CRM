@@ -5,6 +5,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
+import { isManagerOrAbove } from '@/lib/auth/roles';
 import { FUNNEL_STATUSES, LANGUAGES, LOSS_REASONS, SPECIAL_STATES } from '@/lib/constants';
 import { normalizePhone } from '@/lib/leads/normalize-phone';
 import { updateLeadRecord } from '@/lib/leads/update-lead';
@@ -66,7 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       updates.parent_phone = failed ? original : phone;
     }
 
-    if (updates.assigned_to !== undefined && session.role !== 'manager') {
+    if (updates.assigned_to !== undefined && !isManagerOrAbove(session.role)) {
       return sendError(res, 'Only managers can reassign leads', 403);
     }
 
@@ -105,7 +106,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'DELETE') {
-    if (session.role !== 'manager') {
+    if (!isManagerOrAbove(session.role)) {
       return sendError(res, 'Only managers can delete leads', 403);
     }
 

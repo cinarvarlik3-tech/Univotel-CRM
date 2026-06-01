@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { AUTO_ARCHIVE_CUTOFF_DAYS } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface ArchivedLeadActionsProps {
   leadId: string;
@@ -18,13 +19,12 @@ interface ArchivedLeadActionsProps {
  */
 export function ArchivedLeadActions({ leadId }: ArchivedLeadActionsProps) {
   const router = useRouter();
+  const { t } = useTranslation();
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
   async function handleUnarchive() {
-    if (
-      !window.confirm('Restore this lead to active lists? It will keep its current funnel status.')
-    ) {
+    if (!window.confirm(t('archived.unarchiveConfirm'))) {
       return;
     }
 
@@ -36,7 +36,7 @@ export function ArchivedLeadActions({ leadId }: ArchivedLeadActionsProps) {
     setSaving(false);
 
     if (!res.ok) {
-      setError(json.error ?? 'Unarchive failed');
+      setError(json.error ?? t('archived.unarchiveFailed'));
       return;
     }
 
@@ -46,15 +46,14 @@ export function ArchivedLeadActions({ leadId }: ArchivedLeadActionsProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Manager actions</CardTitle>
+        <CardTitle>{t('leads.managerActions')}</CardTitle>
         <CardDescription>
-          Unarchived leads return with the same assignee and funnel status. Terminal leads may be
-          auto-archived again after {AUTO_ARCHIVE_CUTOFF_DAYS} days.
+          {t('archived.unarchiveDesc', { days: AUTO_ARCHIVE_CUTOFF_DAYS })}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <Button type="button" onClick={handleUnarchive} disabled={saving}>
-          {saving ? 'Restoring...' : 'Unarchive lead'}
+          {saving ? t('common.restoring') : t('archived.unarchiveLead')}
         </Button>
         {error && <p className="text-xs text-brand-red">{error}</p>}
       </CardContent>

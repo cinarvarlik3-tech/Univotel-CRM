@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { FormField } from '@/components/ui/form-field';
 import { FormSelect } from '@/components/ui/form-select';
 import { Input } from '@/components/ui/input';
+import { useTranslation } from '@/hooks/useTranslation';
 import {
   DEFAULT_CAMPAIGN_AUDIENCE,
   type CampaignAudienceState,
@@ -17,6 +18,7 @@ import {
   STUDENT_STAGES,
   UNI_YEARS,
 } from '@/lib/constants';
+import { formatEnumLabel, formatNumber } from '@/lib/i18n';
 import type { SalespersonOption } from '@/types/domain';
 
 interface CampaignAudienceFiltersProps {
@@ -39,6 +41,8 @@ export function CampaignAudienceFilters({
   previewLoading,
   onPreview,
 }: CampaignAudienceFiltersProps) {
+  const { locale, t } = useTranslation();
+
   function setFilter(field: string, value: string) {
     const filters = { ...state.filters };
     if (value) {
@@ -53,122 +57,138 @@ export function CampaignAudienceFilters({
     onChange(DEFAULT_CAMPAIGN_AUDIENCE);
   }
 
+  const allOption = { value: 'all', label: t('common.all') };
+
   return (
     <fieldset className="space-y-4 rounded-lg border border-border-default p-4">
       <legend className="px-1 text-sm font-medium text-text-primary">
-        Audience — who receives this campaign
+        {t('campaigns.audienceLegend')}
       </legend>
-      <p className="text-xs text-text-secondary">
-        Only leads matching all selected filters are included. Leave a filter on &quot;All&quot; to
-        ignore it.
-      </p>
+      <p className="text-xs text-text-secondary">{t('campaigns.audienceHelp')}</p>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
         <FormSelect
-          label="Funnel status"
+          label={t('campaigns.funnelStatus')}
           id="campaign_funnel"
           value={state.filters.funnel_status ?? 'all'}
           onValueChange={(v) => setFilter('funnel_status', v === 'all' ? '' : v)}
           options={[
-            { value: 'all', label: 'All' },
-            ...FUNNEL_STATUSES.map((s) => ({ value: s, label: s })),
+            allOption,
+            ...FUNNEL_STATUSES.map((s) => ({
+              value: s,
+              label: formatEnumLabel(locale, 'funnel', s),
+            })),
           ]}
         />
 
         <FormSelect
-          label="Student stage"
+          label={t('campaigns.studentStage')}
           id="campaign_stage"
           value={state.filters.student_stage ?? 'all'}
           onValueChange={(v) => setFilter('student_stage', v === 'all' ? '' : v)}
           options={[
-            { value: 'all', label: 'All' },
-            ...STUDENT_STAGES.map((s) => ({ value: s, label: s })),
+            allOption,
+            ...STUDENT_STAGES.map((s) => ({
+              value: s,
+              label: formatEnumLabel(locale, 'stage', s),
+            })),
           ]}
         />
 
         <FormSelect
-          label="Lead source"
+          label={t('campaigns.leadSource')}
           id="campaign_source"
           value={state.filters.lead_source ?? 'all'}
           onValueChange={(v) => setFilter('lead_source', v === 'all' ? '' : v)}
           options={[
-            { value: 'all', label: 'All' },
-            ...LEAD_SOURCES.map((s) => ({ value: s, label: s })),
+            allOption,
+            ...LEAD_SOURCES.map((s) => ({
+              value: s,
+              label: formatEnumLabel(locale, 'source', s),
+            })),
           ]}
         />
 
         <FormSelect
-          label="SLA status"
+          label={t('campaigns.slaStatus')}
           id="campaign_sla"
           value={state.filters.sla_status ?? 'all'}
           onValueChange={(v) => setFilter('sla_status', v === 'all' ? '' : v)}
           options={[
-            { value: 'all', label: 'All' },
-            { value: 'on_time', label: 'On time' },
-            { value: 'at_risk', label: 'At risk' },
-            { value: 'breached', label: 'Breached' },
+            allOption,
+            { value: 'on_time', label: formatEnumLabel(locale, 'sla', 'on_time') },
+            { value: 'breached', label: formatEnumLabel(locale, 'sla', 'breached') },
           ]}
         />
 
         <FormSelect
-          label="Persona"
+          label={t('filters.persona')}
           id="campaign_persona"
           value={state.filters.persona_type ?? 'all'}
           onValueChange={(v) => setFilter('persona_type', v === 'all' ? '' : v)}
           options={[
-            { value: 'all', label: 'All' },
-            ...PERSONA_TYPES.map((p) => ({ value: p, label: p })),
+            allOption,
+            ...PERSONA_TYPES.map((p) => ({
+              value: p,
+              label: formatEnumLabel(locale, 'persona', p),
+            })),
           ]}
         />
 
         <FormSelect
-          label="Lead language"
+          label={t('campaigns.leadLanguage')}
           id="campaign_lead_lang"
           value={state.filters.language ?? 'all'}
           onValueChange={(v) => setFilter('language', v === 'all' ? '' : v)}
           options={[
-            { value: 'all', label: 'All' },
-            ...LANGUAGES.map((l) => ({ value: l, label: l })),
+            allOption,
+            ...LANGUAGES.map((l) => ({
+              value: l,
+              label: formatEnumLabel(locale, 'language', l),
+            })),
           ]}
         />
 
         <FormSelect
-          label="Organic"
+          label={t('filters.organic')}
           id="campaign_organic"
           value={state.filters.is_organic ?? 'all'}
           onValueChange={(v) => setFilter('is_organic', v === 'all' ? '' : v)}
           options={[
-            { value: 'all', label: 'All' },
-            { value: 'true', label: 'Yes' },
-            { value: 'false', label: 'No' },
+            allOption,
+            { value: 'true', label: t('common.yes') },
+            { value: 'false', label: t('common.no') },
           ]}
         />
 
         <FormSelect
-          label="University year"
+          label={t('campaigns.universityYear')}
           id="campaign_uni_year"
           value={state.filters.uni_year ?? 'all'}
           onValueChange={(v) => setFilter('uni_year', v === 'all' ? '' : v)}
           options={[
-            { value: 'all', label: 'All' },
-            ...UNI_YEARS.map((y) => ({ value: y, label: y })),
+            allOption,
+            ...UNI_YEARS.map((y) => ({
+              value: y,
+              label: formatEnumLabel(locale, 'uniYear', y),
+            })),
           ]}
         />
 
         {salespeople && salespeople.length > 0 && (
           <FormSelect
-            label="Assigned to"
+            label={t('filters.assignee')}
             id="campaign_assignee"
             value={state.filters.assigned_to ?? 'all'}
             onValueChange={(v) => setFilter('assigned_to', v === 'all' ? '' : v)}
             options={[
-              { value: 'all', label: 'All' },
+              allOption,
               ...salespeople.map((sp) => ({ value: sp.id, label: sp.full_name })),
             ]}
           />
         )}
 
-        <FormField label="University (exact match)" htmlFor="campaign_university">
+        <FormField label={t('campaigns.universityExact')} htmlFor="campaign_university">
           <Input
             id="campaign_university"
             value={state.filters.university ?? ''}
@@ -176,7 +196,7 @@ export function CampaignAudienceFilters({
           />
         </FormField>
 
-        <FormField label="Minimum lead score" htmlFor="campaign_score_min">
+        <FormField label={t('campaigns.minimumLeadScore')} htmlFor="campaign_score_min">
           <Input
             id="campaign_score_min"
             type="number"
@@ -187,7 +207,7 @@ export function CampaignAudienceFilters({
           />
         </FormField>
 
-        <FormField label="Created from" htmlFor="campaign_created_from">
+        <FormField label={t('filters.createdFrom')} htmlFor="campaign_created_from">
           <Input
             id="campaign_created_from"
             type="date"
@@ -195,7 +215,7 @@ export function CampaignAudienceFilters({
             onChange={(e) => onChange({ ...state, createdFrom: e.target.value })}
           />
         </FormField>
-        <FormField label="Created to" htmlFor="campaign_created_to">
+        <FormField label={t('filters.createdTo')} htmlFor="campaign_created_to">
           <Input
             id="campaign_created_to"
             type="date"
@@ -203,7 +223,7 @@ export function CampaignAudienceFilters({
             onChange={(e) => onChange({ ...state, createdTo: e.target.value })}
           />
         </FormField>
-        <FormField label="SLA deadline from" htmlFor="campaign_sla_from">
+        <FormField label={t('campaigns.slaDeadlineFrom')} htmlFor="campaign_sla_from">
           <Input
             id="campaign_sla_from"
             type="date"
@@ -211,7 +231,7 @@ export function CampaignAudienceFilters({
             onChange={(e) => onChange({ ...state, slaFrom: e.target.value })}
           />
         </FormField>
-        <FormField label="SLA deadline to" htmlFor="campaign_sla_to">
+        <FormField label={t('campaigns.slaDeadlineTo')} htmlFor="campaign_sla_to">
           <Input
             id="campaign_sla_to"
             type="date"
@@ -223,15 +243,17 @@ export function CampaignAudienceFilters({
 
       <div className="flex flex-wrap items-center gap-3">
         <Button type="button" onClick={onPreview} disabled={previewLoading}>
-          {previewLoading ? 'Counting…' : 'Preview audience size'}
+          {previewLoading ? t('common.counting') : t('campaigns.previewAudience')}
         </Button>
         <Button type="button" variant="secondary" onClick={clearAudience}>
-          Reset filters
+          {t('campaigns.resetFilters')}
         </Button>
         {previewCount !== null && (
           <span className="text-sm text-text-secondary">
-            <strong className="text-text-primary">{previewCount}</strong> lead
-            {previewCount === 1 ? '' : 's'} match
+            <strong className="text-text-primary">{formatNumber(previewCount, locale)}</strong>{' '}
+            {previewCount === 1
+              ? t('common.leadMatch', { count: previewCount })
+              : t('common.leadsMatch', { count: previewCount })}
           </span>
         )}
       </div>

@@ -21,6 +21,8 @@
     "import:old-leads:write": "tsx scripts/import-old-leads.ts --write",
     "import:old-lead-messages": "tsx scripts/import-old-lead-messages.ts",
     "import:old-lead-messages:write": "tsx scripts/import-old-lead-messages.ts --write",
+    "backfill:old-lead-gender": "tsx scripts/backfill-old-lead-gender.ts",
+    "backfill:old-lead-gender:write": "tsx scripts/backfill-old-lead-gender.ts --write",
     "supabase": "supabase",
     "prepare": "husky"
   },

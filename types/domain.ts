@@ -31,6 +31,14 @@ export interface LeadRow {
   updated_at?: string;
 }
 
+/** Hotel recommendation contender from Make.com workflow. */
+export interface RecHotelItem {
+  property_id: string;
+  hotel_name: string;
+  district: string;
+  tags: string[];
+}
+
 /** Lead details profile fields editable via API. */
 export interface LeadDetailRow {
   lead_uuid: string;
@@ -43,12 +51,15 @@ export interface LeadDetailRow {
   preferred_district: string | null;
   student_gender: string | null;
   nationality: string | null;
+  campus?: string | null;
+  room_category?: string | null;
+  district_preference?: string | null;
   interested_hotel?: string[];
   room_type?: string[];
   dorm_awaiting?: string[];
   kvkk_opt_in?: boolean | null;
   marketing_opt_in?: boolean | null;
-  rec_hotel?: string | null;
+  rec_hotel?: RecHotelItem[] | unknown | null;
   updated_at?: string;
 }
 

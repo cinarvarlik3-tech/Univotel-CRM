@@ -7,6 +7,7 @@ import { LeadCoreFieldsForm } from '@/components/leads/LeadCoreFieldsForm';
 import { LeadDetailHeader } from '@/components/leads/LeadDetailHeader';
 import { LeadDetailOverview } from '@/components/leads/LeadDetailOverview';
 import { LeadDetailsForm } from '@/components/leads/LeadDetailsForm';
+import { LeadRecommendationPanel } from '@/components/leads/LeadRecommendationPanel';
 import { LeadSection } from '@/components/leads/LeadSection';
 import { LeadStatusForm } from '@/components/leads/LeadStatusForm';
 import { ManagerLeadActions } from '@/components/leads/ManagerLeadActions';
@@ -17,7 +18,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KvList } from '@/components/ui/kv-list';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatEnumLabel } from '@/lib/i18n/enum-labels';
+import { formatYesNo } from '@/lib/i18n/format-date';
+import type { TranslateFn } from '@/lib/i18n/create-translator';
+import type { Locale } from '@/lib/i18n/types';
+import { localeToBcp47 } from '@/lib/i18n/types';
 import { displayParentPhone } from '@/lib/ui/display-phone';
+import { formatStudentGender } from '@/lib/ui/format-student-gender';
 import { useLeadDetail } from '@/hooks/useLeadDetail';
 import type { LeadDetailRow, LeadWithDetails, SalespersonOption } from '@/types/domain';
 
@@ -32,48 +40,74 @@ interface LeadDetailPanelProps {
 /**
  * Builds read-only KvList items for student details.
  * @param details - Lead detail row.
+ * @param t - Translator function.
+ * @param locale - Active UI locale.
  * @returns Key-value items for display.
  */
-function studentDetailsViewItems(details: LeadDetailRow | null) {
-  if (!details) return [{ term: 'Details', value: 'No profile data yet' }];
+function studentDetailsViewItems(details: LeadDetailRow | null, t: TranslateFn, locale: Locale) {
+  if (!details) return [{ term: t('leads.details'), value: t('leads.noProfileData') }];
 
   const items = [
-    { term: 'University', value: details.university ?? '—' },
+    { term: t('filters.university'), value: details.university ?? t('common.emDash') },
     {
-      term: 'Budget',
+      term: t('leads.budget'),
       value:
         details.budget_min != null || details.budget_max != null
-          ? `${details.budget_min ?? '—'} – ${details.budget_max ?? '—'}`
-          : '—',
+          ? `${details.budget_min ?? t('common.emDash')} – ${details.budget_max ?? t('common.emDash')}`
+          : t('common.emDash'),
     },
     {
-      term: 'Move-in',
-      value: details.move_in ? new Date(details.move_in).toLocaleDateString('tr-TR') : '—',
-    },
-    { term: 'Uni year', value: details.uni_year ?? '—' },
-    { term: 'Parent name', value: details.parent_name ?? '—' },
-    { term: 'Preferred district', value: details.preferred_district ?? '—' },
-    { term: 'Gender', value: details.student_gender ?? '—' },
-    { term: 'Nationality', value: details.nationality ?? '—' },
-    {
-      term: 'Hotels',
-      value: details.interested_hotel?.length ? details.interested_hotel.join(', ') : '—',
+      term: t('leads.moveIn'),
+      value: details.move_in
+        ? new Date(details.move_in).toLocaleDateString(localeToBcp47(locale))
+        : t('common.emDash'),
     },
     {
-      term: 'Room types',
-      value: details.room_type?.length ? details.room_type.join(', ') : '—',
+      term: t('filters.uniYear'),
+      value: details.uni_year
+        ? formatEnumLabel(locale, 'uniYear', details.uni_year)
+        : t('common.emDash'),
+    },
+    { term: t('leads.parentName'), value: details.parent_name ?? t('common.emDash') },
+    {
+      term: t('filters.preferredDistrict'),
+      value: details.preferred_district ?? t('common.emDash'),
     },
     {
-      term: 'Dorm awaiting',
-      value: details.dorm_awaiting?.length ? details.dorm_awaiting.join(', ') : '—',
+      term: t('filters.gender'),
+      value: formatStudentGender(details.student_gender, locale),
     },
-    { term: 'KVKK opt-in', value: details.kvkk_opt_in ? 'Yes' : 'No' },
-    { term: 'Marketing opt-in', value: details.marketing_opt_in ? 'Yes' : 'No' },
+    { term: t('filters.nationality'), value: details.nationality ?? t('common.emDash') },
+    {
+      term: t('leads.hotels'),
+      value: details.interested_hotel?.length
+        ? details.interested_hotel.join(', ')
+        : t('common.emDash'),
+    },
+    {
+      term: t('leads.roomTypes'),
+      value: details.room_type?.length ? details.room_type.join(', ') : t('common.emDash'),
+    },
+    {
+      term: t('leads.dormAwaiting'),
+      value: details.dorm_awaiting?.length
+        ? details.dorm_awaiting.map((v) => formatEnumLabel(locale, 'dorm', v)).join(', ')
+        : t('common.emDash'),
+    },
+    { term: t('filters.kvkkOptIn'), value: formatYesNo(details.kvkk_opt_in, locale) },
+    { term: t('filters.marketingOptIn'), value: formatYesNo(details.marketing_opt_in, locale) },
+    { term: t('leads.recCampus'), value: details.campus ?? t('common.emDash') },
+    {
+      term: t('leads.recRoomType'),
+      value: details.room_category
+        ? formatEnumLabel(locale, 'room', details.room_category)
+        : t('common.emDash'),
+    },
+    {
+      term: t('leads.recDistrictPref'),
+      value: details.district_preference ?? t('common.emDash'),
+    },
   ];
-
-  if (details.rec_hotel) {
-    items.unshift({ term: 'Recommended hotel', value: details.rec_hotel });
-  }
 
   return items;
 }
@@ -90,6 +124,7 @@ export function LeadDetailPanel({
   isManager,
   salespeople,
 }: LeadDetailPanelProps) {
+  const { locale, t } = useTranslation();
   const { lead, details, history, loading, error, reload } = useLeadDetail(
     open ? (leadId ?? undefined) : undefined,
   );
@@ -135,11 +170,11 @@ export function LeadDetailPanel({
 
             <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
               <TabsList className="h-auto shrink-0 px-5 pt-2">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="profile">Profile</TabsTrigger>
-                <TabsTrigger value="conversation">Conversation</TabsTrigger>
-                <TabsTrigger value="history">History</TabsTrigger>
-                {isManager && <TabsTrigger value="actions">Actions</TabsTrigger>}
+                <TabsTrigger value="overview">{t('leads.overview')}</TabsTrigger>
+                <TabsTrigger value="profile">{t('leads.profile')}</TabsTrigger>
+                <TabsTrigger value="conversation">{t('leads.conversation')}</TabsTrigger>
+                <TabsTrigger value="history">{t('leads.history')}</TabsTrigger>
+                {isManager && <TabsTrigger value="actions">{t('leads.actions')}</TabsTrigger>}
               </TabsList>
 
               <TabsContent
@@ -226,16 +261,23 @@ interface ProfileTabProps {
  * @returns Profile tab content.
  */
 function ProfileTab({ lead, leadId, details, detailsKey, resetKey, onSaved }: ProfileTabProps) {
+  const { locale, t } = useTranslation();
+
   return (
     <div>
       <LeadSection
-        title="Contact"
+        title={t('leads.contact')}
         defaultExpanded
         resetKey={resetKey}
         view={
           <KvList
             layout="stacked"
-            items={[{ term: 'Parent phone', value: displayParentPhone(lead.parent_phone) }]}
+            items={[
+              {
+                term: t('leads.parentPhone'),
+                value: displayParentPhone(lead.parent_phone),
+              },
+            ]}
           />
         }
       >
@@ -243,18 +285,34 @@ function ProfileTab({ lead, leadId, details, detailsKey, resetKey, onSaved }: Pr
       </LeadSection>
 
       <LeadSection
-        title="Classification"
+        title={t('leads.classification')}
         resetKey={resetKey}
         view={
           <KvList
             layout="stacked"
             items={[
-              { term: 'Student stage', value: lead.student_stage },
-              { term: 'Language', value: lead.language },
-              { term: 'Lead score', value: String(lead.lead_score ?? 0) },
-              { term: 'Persona', value: lead.persona_type ?? '—' },
-              { term: 'Special state', value: lead.special_state ?? '—' },
-              { term: 'Notes', value: lead.notes ?? '—' },
+              {
+                term: t('leads.studentStage'),
+                value: formatEnumLabel(locale, 'stage', lead.student_stage),
+              },
+              {
+                term: t('filters.language'),
+                value: formatEnumLabel(locale, 'language', lead.language),
+              },
+              { term: t('leads.leadScore'), value: String(lead.lead_score ?? 0) },
+              {
+                term: t('filters.persona'),
+                value: lead.persona_type
+                  ? formatEnumLabel(locale, 'persona', lead.persona_type)
+                  : t('common.emDash'),
+              },
+              {
+                term: t('filters.specialState'),
+                value: lead.special_state
+                  ? formatEnumLabel(locale, 'special', lead.special_state)
+                  : t('common.emDash'),
+              },
+              { term: t('leads.notes'), value: lead.notes ?? t('common.emDash') },
             ]}
           />
         }
@@ -263,9 +321,9 @@ function ProfileTab({ lead, leadId, details, detailsKey, resetKey, onSaved }: Pr
       </LeadSection>
 
       <LeadSection
-        title="Student details"
+        title={t('leads.studentDetails')}
         resetKey={resetKey}
-        view={<KvList layout="stacked" items={studentDetailsViewItems(details)} />}
+        view={<KvList layout="stacked" items={studentDetailsViewItems(details, t, locale)} />}
       >
         <LeadDetailsForm
           key={detailsKey}
@@ -276,18 +334,32 @@ function ProfileTab({ lead, leadId, details, detailsKey, resetKey, onSaved }: Pr
         />
       </LeadSection>
 
+      <section className="border-b border-border-default py-3">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
+          {t('leads.hotelRecommendation')}
+        </p>
+        <div className="mt-3 pl-5">
+          <LeadRecommendationPanel leadId={leadId} details={details} onRecLoaded={onSaved} />
+        </div>
+      </section>
+
       <LeadSection
-        title="Pipeline"
+        title={t('leads.pipeline')}
         resetKey={resetKey}
         view={
           <KvList
             layout="stacked"
             items={[
               {
-                term: 'Funnel status',
+                term: t('leads.funnelStatus'),
                 value: <StatusBadge status={lead.funnel_status} type="funnel" />,
               },
-              { term: 'Loss reason', value: lead.loss_reason ?? '—' },
+              {
+                term: t('filters.lossReason'),
+                value: lead.loss_reason
+                  ? formatEnumLabel(locale, 'loss', lead.loss_reason)
+                  : t('common.emDash'),
+              },
             ]}
           />
         }

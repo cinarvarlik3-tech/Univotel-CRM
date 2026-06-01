@@ -84,6 +84,15 @@ You MUST ensure that your code adheres to ALL of the following principles:
 
 * **Readability:** Use intuitive naming conventions and maintain a logical, organized structure throughout your code.
 
+## 4. Documentation Standards
+* Along with any and all changes to the code, you must look at the runbook.md document; infer from there what is usually
+written there and what is not worth writing. 
+* If the change you made has elements that are worth writing to the runbook, edit the runbook alongside the code as well.
+* Keep the formatting and scope in alignment with the current runbook schema.
+* If the user rejects your change, they will have rejected the runbook edit as well. If they accept, they will have accepted
+the runbook edit alongside it. Runbook and code edits must always be part of the same request.
+
+
 Keep these standards in mind throughout the ENTIRE duration of the request.
 
 ```

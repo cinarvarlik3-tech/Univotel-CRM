@@ -8,15 +8,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { KvList } from '@/components/ui/kv-list';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
+import { useTranslation } from '@/hooks/useTranslation';
+import { isManagerOrAbove } from '@/lib/auth/roles';
+import { formatNumber } from '@/lib/i18n/format-date';
 import { useCampaign } from '@/hooks/useCampaigns';
 
 export default function CampaignDetailPage() {
   const router = useRouter();
   const id = typeof router.query.id === 'string' ? router.query.id : undefined;
+  const { locale, t } = useTranslation();
   const { user } = useAuth();
   const { data, mutate, error, isLoading } = useCampaign(id);
 
-  if (user && user.role !== 'manager') {
+  if (user && !isManagerOrAbove(user.role)) {
     if (typeof window !== 'undefined') router.replace('/leads');
     return null;
   }
@@ -37,9 +41,9 @@ export default function CampaignDetailPage() {
   const summary = data?.summary;
 
   return (
-    <AppShell title="Campaign">
+    <AppShell title={t('campaigns.campaign')}>
       {isLoading && <Skeleton className="h-64 w-full" />}
-      {error && <p className="text-sm text-brand-red">Failed to load campaign.</p>}
+      {error && <p className="text-sm text-brand-red">{t('campaigns.failedToLoadOne')}</p>}
       {campaign && (
         <div className="flex flex-col gap-4">
           <Card>
@@ -49,30 +53,39 @@ export default function CampaignDetailPage() {
             <CardContent className="flex flex-col gap-4">
               <KvList
                 items={[
-                  { term: 'Status', value: campaign.status },
-                  { term: 'Template', value: campaign.template_id },
+                  { term: t('campaigns.status'), value: campaign.status },
+                  { term: t('campaigns.template'), value: campaign.template_id },
                 ]}
               />
               {summary && (
                 <KvList
                   items={[
-                    { term: 'Total', value: String(summary.total) },
-                    { term: 'Pending', value: String(summary.pending) },
-                    { term: 'Sent', value: String(summary.sent) },
-                    { term: 'Failed', value: String(summary.failed) },
-                    { term: 'Skipped', value: String(summary.skipped) },
+                    { term: t('campaigns.total'), value: formatNumber(summary.total, locale) },
+                    {
+                      term: t('campaigns.pending'),
+                      value: formatNumber(summary.pending, locale),
+                    },
+                    { term: t('campaigns.sent'), value: formatNumber(summary.sent, locale) },
+                    {
+                      term: t('campaigns.failed'),
+                      value: formatNumber(summary.failed, locale),
+                    },
+                    {
+                      term: t('campaigns.skipped'),
+                      value: formatNumber(summary.skipped, locale),
+                    },
                   ]}
                 />
               )}
               <div className="flex gap-2">
                 {campaign.status === 'draft' && (
                   <Button type="button" onClick={startCampaign}>
-                    Start
+                    {t('common.start')}
                   </Button>
                 )}
                 {campaign.status === 'running' && (
                   <Button type="button" variant="destructive" onClick={cancelCampaign}>
-                    Cancel
+                    {t('common.cancel')}
                   </Button>
                 )}
               </div>

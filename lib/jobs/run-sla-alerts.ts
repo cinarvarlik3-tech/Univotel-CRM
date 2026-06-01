@@ -2,6 +2,7 @@
  * SLA breach alert job logic — queries breached leads and sends throttled Telegram alerts.
  */
 import { TERMINAL_FUNNEL_STATUSES } from '@/lib/constants';
+import { isWithinSlaBusinessHours } from '@/lib/leads/sla';
 import { sendManagerNotification } from '@/lib/notifications/send-manager-alert';
 import { createServiceClient } from '@/lib/supabase/service';
 
@@ -10,6 +11,10 @@ import { createServiceClient } from '@/lib/supabase/service';
  * @returns Count of alert attempts (including throttled sends).
  */
 export async function runSlaAlerts(): Promise<number> {
+  if (!isWithinSlaBusinessHours()) {
+    return 0;
+  }
+
   const client = createServiceClient();
   const terminalList = `(${TERMINAL_FUNNEL_STATUSES.map((s) => `"${s}"`).join(',')})`;
 

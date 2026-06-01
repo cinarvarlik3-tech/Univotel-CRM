@@ -1,8 +1,9 @@
 /**
  * Single chat bubble for old lead message thread.
  */
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatChatMessageTime } from '@/lib/i18n/format-date';
 import { cn } from '@/lib/utils';
-import { formatChatMessageTime } from '@/lib/ui/format-chat-timestamp';
 import type { ChatMessageRow } from '@/types/domain';
 
 interface OldLeadChatBubbleProps {
@@ -15,11 +16,13 @@ interface OldLeadChatBubbleProps {
  * @param props - Message row and fallback lead name.
  */
 export function OldLeadChatBubble({ message, fallbackLeadName }: OldLeadChatBubbleProps) {
+  const { locale, t } = useTranslation();
+
   if (message.messageType === 'activity') {
     return (
       <div className="flex justify-center px-2 py-1">
         <p className="max-w-[90%] text-center text-[11px] text-text-tertiary">
-          {message.content ?? 'Activity'}
+          {message.content ?? t('leads.chatActivity')}
         </p>
       </div>
     );
@@ -29,9 +32,9 @@ export function OldLeadChatBubble({ message, fallbackLeadName }: OldLeadChatBubb
   const label =
     message.senderName ??
     (isIncoming ? fallbackLeadName : null) ??
-    (isIncoming ? 'Contact' : 'Agent');
+    (isIncoming ? t('leads.chatContact') : t('leads.chatAgent'));
 
-  const body = message.content?.trim() ? message.content : '(Attachment or empty message)';
+  const body = message.content?.trim() ? message.content : t('leads.chatAttachmentEmpty');
 
   return (
     <div
@@ -49,7 +52,7 @@ export function OldLeadChatBubble({ message, fallbackLeadName }: OldLeadChatBubb
         {body}
       </div>
       <span className="px-1 text-[10px] text-text-tertiary">
-        {formatChatMessageTime(message.createdAt)}
+        {formatChatMessageTime(message.createdAt, locale)}
       </span>
     </div>
   );

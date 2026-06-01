@@ -8,6 +8,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { FormField } from '@/components/ui/form-field';
 import { FormSelect } from '@/components/ui/form-select';
 import { Input } from '@/components/ui/input';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import type { SalespersonOption } from '@/types/domain';
 
 /** Filter state for archived lead list. */
@@ -50,6 +52,8 @@ export function ArchivedLeadListToolbar({
   onApply,
   salespeople,
 }: ArchivedLeadListToolbarProps) {
+  const { locale, t } = useTranslation();
+
   function update<K extends keyof ArchivedLeadListFilterState>(
     key: K,
     value: ArchivedLeadListFilterState[K],
@@ -61,7 +65,7 @@ export function ArchivedLeadListToolbar({
     <Card className="mb-4">
       <CardContent className="flex flex-col gap-4 pt-4">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-          <FormField label="Search name or phone" htmlFor="archived_search">
+          <FormField label={t('filters.searchNameOrPhone')} htmlFor="archived_search">
             <Input
               id="archived_search"
               value={state.search}
@@ -75,41 +79,44 @@ export function ArchivedLeadListToolbar({
               onCheckedChange={(checked) => update('fuzzy', checked === true)}
             />
             <label htmlFor="archived_fuzzy" className="text-xs text-text-secondary">
-              Fuzzy search
+              {t('filters.fuzzySearch')}
             </label>
           </div>
           <FormSelect
-            label="Outcome"
+            label={t('filters.outcome')}
             id="archive_reason"
             value={state.archiveReason || 'all'}
             onValueChange={(v) => update('archiveReason', v === 'all' ? '' : v)}
             options={[
-              { value: 'all', label: 'All' },
-              { value: 'won', label: 'Won' },
-              { value: 'lost', label: 'Lost' },
+              { value: 'all', label: t('common.all') },
+              { value: 'won', label: formatEnumLabel(locale, 'archive', 'won') },
+              { value: 'lost', label: formatEnumLabel(locale, 'archive', 'lost') },
             ]}
           />
           <FormSelect
-            label="Source"
+            label={t('filters.source')}
             id="archived_lead_source"
             value={state.leadSource || 'all'}
             onValueChange={(v) => update('leadSource', v === 'all' ? '' : v)}
             options={[
-              { value: 'all', label: 'All' },
-              ...LEAD_SOURCES.map((source) => ({ value: source, label: source })),
+              { value: 'all', label: t('common.all') },
+              ...LEAD_SOURCES.map((source) => ({
+                value: source,
+                label: formatEnumLabel(locale, 'source', source),
+              })),
             ]}
           />
           <FormSelect
-            label="Assigned to"
+            label={t('archived.tableAssignedTo')}
             id="archived_assigned_to"
             value={state.assignedTo || 'all'}
             onValueChange={(v) => update('assignedTo', v === 'all' ? '' : v)}
             options={[
-              { value: 'all', label: 'All' },
+              { value: 'all', label: t('common.all') },
               ...salespeople.map((sp) => ({ value: sp.id, label: sp.full_name })),
             ]}
           />
-          <FormField label="Archived from" htmlFor="archived_from">
+          <FormField label={t('filters.archivedFrom')} htmlFor="archived_from">
             <Input
               id="archived_from"
               type="date"
@@ -117,7 +124,7 @@ export function ArchivedLeadListToolbar({
               onChange={(e) => update('archivedFrom', e.target.value)}
             />
           </FormField>
-          <FormField label="Archived to" htmlFor="archived_to">
+          <FormField label={t('filters.archivedTo')} htmlFor="archived_to">
             <Input
               id="archived_to"
               type="date"
@@ -127,7 +134,7 @@ export function ArchivedLeadListToolbar({
           </FormField>
         </div>
         <Button type="button" onClick={onApply}>
-          Apply filters
+          {t('common.applyFilters')}
         </Button>
       </CardContent>
     </Card>

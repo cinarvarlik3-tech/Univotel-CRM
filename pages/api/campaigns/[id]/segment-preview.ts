@@ -4,6 +4,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
+import { isManagerOrAbove } from '@/lib/auth/roles';
 import { countSegmentLeads } from '@/lib/campaigns/resolve-segment';
 import { createServerSupabase } from '@/lib/supabase/server';
 import type { CampaignSegment } from '@/types/domain';
@@ -12,7 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await getSessionUser(req, res);
   if (!session) return sendError(res, 'Unauthorized', 401);
 
-  if (session.role !== 'manager') return sendError(res, 'Forbidden', 403);
+  if (!isManagerOrAbove(session.role)) return sendError(res, 'Forbidden', 403);
 
   if (req.method !== 'GET') return sendError(res, 'Method not allowed', 405);
 

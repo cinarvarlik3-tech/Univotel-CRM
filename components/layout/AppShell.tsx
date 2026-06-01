@@ -8,6 +8,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { Topbar } from '@/components/layout/Topbar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
+import { useTranslation } from '@/hooks/useTranslation';
 import { isManagerOrAbove, isSuperadmin } from '@/lib/auth/roles';
 
 interface AppShellProps {
@@ -25,6 +26,7 @@ interface AppShellProps {
 export function AppShell({ children, title, count, actions }: AppShellProps) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const { t } = useTranslation();
 
   if (loading) {
     return (
@@ -45,12 +47,14 @@ export function AppShell({ children, title, count, actions }: AppShellProps) {
     return null;
   }
 
-  const pageTitle = title ?? 'Univotel CRM';
+  const pageTitle = title ?? t('app.name');
 
   return (
     <>
       <Head>
-        <title>{pageTitle} — Univotel CRM</title>
+        <title>
+          {pageTitle} — {t('app.titleSuffix')}
+        </title>
       </Head>
 
       <Sidebar

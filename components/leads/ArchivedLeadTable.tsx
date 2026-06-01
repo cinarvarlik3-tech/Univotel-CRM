@@ -11,6 +11,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatEnumLabel } from '@/lib/i18n/enum-labels';
+import { formatDateTime } from '@/lib/i18n/format-date';
 import { displayLeadPhone } from '@/lib/ui/display-phone';
 import { cn } from '@/lib/utils';
 import type { ArchivedLeadRow } from '@/types/domain';
@@ -21,21 +24,13 @@ interface ArchivedLeadTableProps {
 }
 
 /**
- * Formats archive outcome as a badge label.
- * @param reason - won or lost.
- * @returns Display label.
- */
-function outcomeLabel(reason: string): string {
-  return reason === 'won' ? 'Won' : 'Lost';
-}
-
-/**
  * Resolves assignee display name from row join.
  * @param lead - Archived lead row.
+ * @param emDash - Localized empty placeholder.
  * @returns Assignee name or em dash.
  */
-function assigneeLabel(lead: ArchivedLeadRow): string {
-  return lead.salespeople?.full_name ?? '—';
+function assigneeLabel(lead: ArchivedLeadRow, emDash: string): string {
+  return lead.salespeople?.full_name ?? emDash;
 }
 
 /**
@@ -44,8 +39,13 @@ function assigneeLabel(lead: ArchivedLeadRow): string {
  * @returns HTML table.
  */
 export function ArchivedLeadTable({ leads, onRowClick }: ArchivedLeadTableProps) {
+  const { locale, t } = useTranslation();
+  const emDash = t('common.emDash');
+
   if (leads.length === 0) {
-    return <p className="py-8 text-center text-sm text-text-secondary">No archived leads found.</p>;
+    return (
+      <p className="py-8 text-center text-sm text-text-secondary">{t('archived.noLeadsFound')}</p>
+    );
   }
 
   return (
@@ -53,14 +53,14 @@ export function ArchivedLeadTable({ leads, onRowClick }: ArchivedLeadTableProps)
       <Table>
         <TableHeader>
           <TableRow className="h-[34px] hover:bg-transparent">
-            <TableHead>Name</TableHead>
-            <TableHead>Phone</TableHead>
-            <TableHead>Source</TableHead>
-            <TableHead>Outcome</TableHead>
-            <TableHead>Loss reason</TableHead>
-            <TableHead>Assigned to</TableHead>
-            <TableHead>Archived</TableHead>
-            <TableHead>Original created</TableHead>
+            <TableHead>{t('archived.tableName')}</TableHead>
+            <TableHead>{t('archived.tablePhone')}</TableHead>
+            <TableHead>{t('leads.tableSource')}</TableHead>
+            <TableHead>{t('archived.tableOutcome')}</TableHead>
+            <TableHead>{t('archived.tableLossReason')}</TableHead>
+            <TableHead>{t('archived.tableAssignedTo')}</TableHead>
+            <TableHead>{t('archived.tableArchived')}</TableHead>
+            <TableHead>{t('archived.originalCreated')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -76,25 +76,29 @@ export function ArchivedLeadTable({ leads, onRowClick }: ArchivedLeadTableProps)
                   onClick={(e) => e.stopPropagation()}
                   className="font-medium text-brand-blue hover:underline"
                 >
-                  {lead.lead_name ?? '—'}
+                  {lead.lead_name ?? emDash}
                 </Link>
               </TableCell>
               <TableCell className="text-text-secondary">{displayLeadPhone(lead)}</TableCell>
-              <TableCell className="text-text-secondary">{lead.lead_source}</TableCell>
+              <TableCell className="text-text-secondary">
+                {formatEnumLabel(locale, 'source', lead.lead_source)}
+              </TableCell>
               <TableCell>
                 <Badge variant={lead.archive_reason === 'won' ? 'success' : 'danger'}>
-                  {outcomeLabel(lead.archive_reason)}
+                  {formatEnumLabel(locale, 'archive', lead.archive_reason)}
                 </Badge>
               </TableCell>
               <TableCell className="text-text-secondary">
-                {lead.archive_reason === 'lost' ? (lead.loss_reason ?? '—') : '—'}
+                {lead.archive_reason === 'lost' && lead.loss_reason
+                  ? formatEnumLabel(locale, 'loss', lead.loss_reason)
+                  : emDash}
               </TableCell>
-              <TableCell className="text-text-secondary">{assigneeLabel(lead)}</TableCell>
+              <TableCell className="text-text-secondary">{assigneeLabel(lead, emDash)}</TableCell>
               <TableCell className="text-text-secondary">
-                {new Date(lead.archived_at).toLocaleString('tr-TR')}
+                {formatDateTime(lead.archived_at, locale)}
               </TableCell>
               <TableCell className="text-text-secondary">
-                {new Date(lead.created_at).toLocaleString('tr-TR')}
+                {formatDateTime(lead.created_at, locale)}
               </TableCell>
             </TableRow>
           ))}

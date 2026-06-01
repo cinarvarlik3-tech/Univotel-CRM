@@ -85,6 +85,7 @@ export interface BuiltOldLeadRow {
   details: {
     lead_uuid: string;
     university: string | null;
+    student_gender: 'male' | 'female' | null;
   };
   meta: {
     identifierKind: 'phone' | 'instagram';
@@ -105,6 +106,7 @@ export interface BuildOldLeadsResult {
     mergedInstagramGroups: number;
     normalizationFailed: number;
     universityExtracted: number;
+    genderExtracted: number;
     byChannel: { whatsapp: number; instagram: number };
   };
 }

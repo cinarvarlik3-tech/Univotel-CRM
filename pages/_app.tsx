@@ -3,6 +3,7 @@
  */
 import type { AppProps } from 'next/app';
 import { AuthProvider } from '@/hooks/useAuth';
+import { LocaleProvider } from '@/components/layout/LocaleProvider';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import '@/styles/globals.css';
 
@@ -13,10 +14,12 @@ import '@/styles/globals.css';
  */
 export default function App({ Component, pageProps }: AppProps) {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <Component {...pageProps} />
-      </AuthProvider>
-    </ThemeProvider>
+    <LocaleProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <Component {...pageProps} />
+        </AuthProvider>
+      </ThemeProvider>
+    </LocaleProvider>
   );
 }

@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FormSelect } from '@/components/ui/form-select';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { FUNNEL_STATUSES, LOSS_REASONS } from '@/lib/constants';
 import type { LeadWithDetails } from '@/types/domain';
 
@@ -21,6 +23,7 @@ interface LeadStatusFormProps {
  * @returns Status form card.
  */
 export function LeadStatusForm({ lead, leadId, onSaved, embedded }: LeadStatusFormProps) {
+  const { locale, t } = useTranslation();
   const [funnelStatus, setFunnelStatus] = useState(lead.funnel_status);
   const [lossReason, setLossReason] = useState(lead.loss_reason ?? '');
   const [error, setError] = useState('');
@@ -28,7 +31,7 @@ export function LeadStatusForm({ lead, leadId, onSaved, embedded }: LeadStatusFo
 
   async function handleStatusUpdate() {
     if (funnelStatus === 'ziyaret-ama-almayacak' && !lossReason) {
-      setError('Loss reason is required when status is ziyaret-ama-almayacak');
+      setError(t('leads.lossReasonRequiredError'));
       return;
     }
 
@@ -50,7 +53,7 @@ export function LeadStatusForm({ lead, leadId, onSaved, embedded }: LeadStatusFo
     setSaving(false);
 
     if (!res.ok) {
-      setError(json.error ?? 'Update failed');
+      setError(json.error ?? t('leads.updateFailed'));
       return;
     }
 
@@ -60,25 +63,31 @@ export function LeadStatusForm({ lead, leadId, onSaved, embedded }: LeadStatusFo
   const formBody = (
     <>
       <FormSelect
-        label="Funnel status"
+        label={t('leads.funnelStatus')}
         id="funnel_status"
         value={funnelStatus}
         onValueChange={setFunnelStatus}
-        options={FUNNEL_STATUSES.map((s) => ({ value: s, label: s }))}
+        options={FUNNEL_STATUSES.map((s) => ({
+          value: s,
+          label: formatEnumLabel(locale, 'funnel', s),
+        }))}
       />
       {funnelStatus === 'ziyaret-ama-almayacak' && (
         <FormSelect
-          label="Loss reason *"
+          label={t('leads.lossReasonRequired')}
           id="loss_reason"
           value={lossReason}
           onValueChange={setLossReason}
-          placeholder="Select reason..."
-          options={LOSS_REASONS.map((r) => ({ value: r, label: r }))}
+          placeholder={t('leads.selectReason')}
+          options={LOSS_REASONS.map((r) => ({
+            value: r,
+            label: formatEnumLabel(locale, 'loss', r),
+          }))}
         />
       )}
       {error && <p className="text-xs text-brand-red">{error}</p>}
       <Button type="button" onClick={handleStatusUpdate} disabled={saving}>
-        {saving ? 'Saving...' : 'Save status'}
+        {saving ? t('common.saving') : t('leads.saveStatus')}
       </Button>
     </>
   );
@@ -90,7 +99,7 @@ export function LeadStatusForm({ lead, leadId, onSaved, embedded }: LeadStatusFo
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Update status</CardTitle>
+        <CardTitle>{t('leads.updateStatus')}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">{formBody}</CardContent>
     </Card>

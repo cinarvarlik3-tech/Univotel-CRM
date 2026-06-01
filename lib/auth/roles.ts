@@ -7,6 +7,7 @@ export type UserRole = 'salesperson' | 'manager' | 'superadmin';
 
 /**
  * Returns true for manager and superadmin roles.
+ * Use this for manager-level API and UI access checks (superadmin inherits manager powers).
  * @param role - Salesperson role string.
  * @returns Whether role has manager-level access.
  */

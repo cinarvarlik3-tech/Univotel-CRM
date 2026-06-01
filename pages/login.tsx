@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { UnivotelLogo } from '@/components/layout/UnivotelLogo';
 import { createBrowserSupabase } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useTranslation } from '@/hooks/useTranslation';
 
 /**
  * Renders login form for CRM access.
@@ -23,6 +24,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { refresh } = useAuth();
+  const { t } = useTranslation();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,18 +47,18 @@ export default function LoginPage() {
   return (
     <>
       <Head>
-        <title>Sign in — Univotel CRM</title>
+        <title>{t('auth.signInTitle')}</title>
       </Head>
       <div className="flex min-h-screen items-center justify-center bg-surface-page p-4">
         <Card className="w-full max-w-sm">
           <CardHeader className="items-center text-center">
             <UnivotelLogo size={48} className="mb-2" />
-            <CardTitle className="font-heading text-[22px]">Univotel CRM</CardTitle>
-            <CardDescription>Sign in to manage leads and tasks</CardDescription>
+            <CardTitle className="font-heading text-[22px]">{t('app.name')}</CardTitle>
+            <CardDescription>{t('auth.signInHeading')}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <FormField label="Email" htmlFor="email">
+              <FormField label={t('auth.email')} htmlFor="email">
                 <Input
                   id="email"
                   type="email"
@@ -66,7 +68,7 @@ export default function LoginPage() {
                   autoComplete="email"
                 />
               </FormField>
-              <FormField label="Password" htmlFor="password">
+              <FormField label={t('auth.password')} htmlFor="password">
                 <Input
                   id="password"
                   type="password"
@@ -78,7 +80,7 @@ export default function LoginPage() {
               </FormField>
               {error && <p className="text-xs text-brand-red">{error}</p>}
               <Button type="submit" disabled={loading} className="w-full">
-                {loading ? 'Signing in...' : 'Sign In'}
+                {loading ? t('auth.signingIn') : t('auth.signIn')}
               </Button>
             </form>
           </CardContent>

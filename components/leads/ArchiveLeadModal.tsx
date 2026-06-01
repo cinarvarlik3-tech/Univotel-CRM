@@ -12,6 +12,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { FormSelect } from '@/components/ui/form-select';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 
 interface ArchiveLeadModalProps {
   leadId: string;
@@ -26,6 +28,7 @@ interface ArchiveLeadModalProps {
  * @returns Dialog modal element.
  */
 export function ArchiveLeadModal({ leadId, open, onClose, onArchived }: ArchiveLeadModalProps) {
+  const { locale, t } = useTranslation();
   const [archiveReason, setArchiveReason] = useState<(typeof ARCHIVE_REASONS)[number]>('won');
   const [lossReason, setLossReason] = useState('');
   const [error, setError] = useState('');
@@ -33,7 +36,7 @@ export function ArchiveLeadModal({ leadId, open, onClose, onArchived }: ArchiveL
 
   async function handleSubmit() {
     if (archiveReason === 'lost' && !lossReason) {
-      setError('Loss reason is required when outcome is Lost');
+      setError(t('leads.lossReasonRequiredLost'));
       return;
     }
 
@@ -52,7 +55,7 @@ export function ArchiveLeadModal({ leadId, open, onClose, onArchived }: ArchiveL
     setSaving(false);
 
     if (!res.ok) {
-      setError(json.error ?? 'Archive failed');
+      setError(json.error ?? t('leads.archiveFailed'));
       return;
     }
 
@@ -63,37 +66,40 @@ export function ArchiveLeadModal({ leadId, open, onClose, onArchived }: ArchiveL
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Archive lead</DialogTitle>
+          <DialogTitle>{t('leads.archiveModalTitle')}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <FormSelect
-            label="Outcome"
+            label={t('filters.outcome')}
             id="archive_reason"
             value={archiveReason}
             onValueChange={(v) => setArchiveReason(v as (typeof ARCHIVE_REASONS)[number])}
             options={[
-              { value: 'won', label: 'Won' },
-              { value: 'lost', label: 'Lost' },
+              { value: 'won', label: formatEnumLabel(locale, 'archive', 'won') },
+              { value: 'lost', label: formatEnumLabel(locale, 'archive', 'lost') },
             ]}
           />
           {archiveReason === 'lost' && (
             <FormSelect
-              label="Loss reason"
+              label={t('filters.lossReason')}
               id="archive_loss_reason"
               value={lossReason}
               onValueChange={setLossReason}
-              placeholder="Select..."
-              options={MANUAL_LOSS_REASONS.map((reason) => ({ value: reason, label: reason }))}
+              placeholder={t('common.select')}
+              options={MANUAL_LOSS_REASONS.map((reason) => ({
+                value: reason,
+                label: formatEnumLabel(locale, 'loss', reason),
+              }))}
             />
           )}
           {error && <p className="text-xs text-brand-red">{error}</p>}
         </div>
         <DialogFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="button" onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Archiving...' : 'Archive'}
+            {saving ? t('common.archiving') : t('leads.archive')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,20 +1,25 @@
 /**
- * KPI metric card — colored (blue/red) or neutral variants.
+ * KPI metric card — colored (blue/red/amber) or neutral variants.
  */
+import Link from 'next/link';
+import { IconArrowUpRight } from '@tabler/icons-react';
+
 import { cn } from '@/lib/utils';
 
 interface KpiCardProps {
   label: string;
   value: string | number;
   sub?: string;
-  variant?: 'blue' | 'red' | 'neutral';
+  variant?: 'blue' | 'red' | 'amber' | 'neutral';
   valueClassName?: string;
   className?: string;
+  href?: string;
+  navigable?: boolean;
 }
 
 /**
  * Renders a dashboard KPI card per style guide spec.
- * @param props - Label, value, subtext, and color variant.
+ * @param props - Label, value, subtext, color variant, and optional navigation.
  * @returns KPI card element.
  */
 export function KpiCard({
@@ -24,23 +29,41 @@ export function KpiCard({
   variant = 'neutral',
   valueClassName,
   className,
+  href,
+  navigable = false,
 }: KpiCardProps) {
-  const isColored = variant === 'blue' || variant === 'red';
+  const isColored = variant === 'blue' || variant === 'red' || variant === 'amber';
 
-  return (
+  const card = (
     <div
       className={cn(
-        'rounded-[10px] border px-4 py-3.5',
+        'relative rounded-[10px] border px-4 py-3.5',
         variant === 'blue' && 'border-brand-blue bg-brand-blue',
         variant === 'red' && 'border-brand-red bg-brand-red',
+        variant === 'amber' && 'border-[var(--badge-warning-text)] bg-[var(--badge-warning-bg)]',
         variant === 'neutral' && 'border-border-default bg-surface-card',
+        href && 'transition-opacity hover:opacity-90',
         className,
       )}
     >
+      {navigable && (
+        <IconArrowUpRight
+          className={cn(
+            'absolute top-3.5 right-3.5 size-4',
+            variant === 'amber' && 'text-[var(--badge-warning-text)]',
+            variant !== 'amber' && isColored && 'text-current opacity-70',
+            variant === 'neutral' && 'text-text-tertiary',
+          )}
+          aria-hidden
+        />
+      )}
       <p
         className={cn(
           'text-[11px] font-medium uppercase tracking-wide',
-          isColored ? 'text-white/75' : 'text-text-secondary',
+          variant === 'blue' && 'text-white/75',
+          variant === 'red' && 'text-white/75',
+          variant === 'amber' && 'text-[var(--badge-warning-text)]/80',
+          variant === 'neutral' && 'text-text-secondary',
         )}
       >
         {label}
@@ -48,16 +71,37 @@ export function KpiCard({
       <p
         className={cn(
           'font-heading text-2xl font-bold',
-          isColored ? 'text-white' : (valueClassName ?? 'text-text-primary'),
+          variant === 'blue' && 'text-white',
+          variant === 'red' && 'text-white',
+          variant === 'amber' && 'text-[var(--badge-warning-text)]',
+          variant === 'neutral' && (valueClassName ?? 'text-text-primary'),
         )}
       >
         {value}
       </p>
       {sub && (
-        <p className={cn('mt-0.5 text-[11px]', isColored ? 'text-white/60' : 'text-text-tertiary')}>
+        <p
+          className={cn(
+            'mt-0.5 text-[11px]',
+            variant === 'blue' && 'text-white/60',
+            variant === 'red' && 'text-white/60',
+            variant === 'amber' && 'text-[var(--badge-warning-text)]/70',
+            variant === 'neutral' && 'text-text-tertiary',
+          )}
+        >
           {sub}
         </p>
       )}
     </div>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className="block">
+        {card}
+      </Link>
+    );
+  }
+
+  return card;
 }

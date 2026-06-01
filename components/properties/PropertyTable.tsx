@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { useTranslation } from '@/hooks/useTranslation';
 import type { PropertyRow } from '@/types/domain';
 
 interface PropertyTableProps {
@@ -22,8 +23,13 @@ interface PropertyTableProps {
  * @returns Properties table element.
  */
 export function PropertyTable({ properties }: PropertyTableProps) {
+  const { t } = useTranslation();
+  const emDash = t('common.emDash');
+
   if (properties.length === 0) {
-    return <p className="py-8 text-center text-sm text-text-secondary">No properties found.</p>;
+    return (
+      <p className="py-8 text-center text-sm text-text-secondary">{t('properties.noProperties')}</p>
+    );
   }
 
   return (
@@ -31,12 +37,12 @@ export function PropertyTable({ properties }: PropertyTableProps) {
       <Table>
         <TableHeader>
           <TableRow className="h-[34px] hover:bg-transparent">
-            <TableHead>Hotel</TableHead>
-            <TableHead>District</TableHead>
-            <TableHead>Gender</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Beds</TableHead>
-            <TableHead>Schools</TableHead>
+            <TableHead>{t('properties.tableHotel')}</TableHead>
+            <TableHead>{t('properties.tableDistrict')}</TableHead>
+            <TableHead>{t('properties.tableGender')}</TableHead>
+            <TableHead>{t('properties.tableStatus')}</TableHead>
+            <TableHead>{t('properties.tableBeds')}</TableHead>
+            <TableHead>{t('properties.tableSchools')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -50,12 +56,12 @@ export function PropertyTable({ properties }: PropertyTableProps) {
                   {p.hotel_name}
                 </Link>
               </TableCell>
-              <TableCell className="text-text-secondary">{p.district ?? '—'}</TableCell>
-              <TableCell className="text-text-secondary">{p.serviced_gender ?? '—'}</TableCell>
+              <TableCell className="text-text-secondary">{p.district ?? emDash}</TableCell>
+              <TableCell className="text-text-secondary">{p.serviced_gender ?? emDash}</TableCell>
               <TableCell className="text-text-secondary">{p.status}</TableCell>
-              <TableCell className="text-text-secondary">{p.total_beds ?? '—'}</TableCell>
+              <TableCell className="text-text-secondary">{p.total_beds ?? emDash}</TableCell>
               <TableCell className="text-text-secondary">
-                {p.serviced_schools?.join(', ') || '—'}
+                {p.serviced_schools?.join(', ') || emDash}
               </TableCell>
             </TableRow>
           ))}

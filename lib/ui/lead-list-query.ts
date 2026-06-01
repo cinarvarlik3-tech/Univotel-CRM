@@ -32,11 +32,28 @@ export function buildQueryFromLeadListState(
     });
   }
 
+  if (state.lastContactFrom || state.lastContactTo) {
+    dateFilters.push({
+      field: 'last_contact_at',
+      from: state.lastContactFrom ? `${state.lastContactFrom}T00:00:00Z` : undefined,
+      to: state.lastContactTo ? `${state.lastContactTo}T23:59:59Z` : undefined,
+    });
+  }
+
+  if (state.moveInFrom || state.moveInTo) {
+    dateFilters.push({
+      field: 'move_in',
+      from: state.moveInFrom || undefined,
+      to: state.moveInTo || undefined,
+    });
+  }
+
   return buildLeadsQueryString({
     sort: state.sort,
     search: state.search,
     fuzzy: state.fuzzy,
     filters: state.filters,
+    extended: state,
     dateFilters,
     scoreMin: state.scoreMin || undefined,
     cursor: options?.cursor,

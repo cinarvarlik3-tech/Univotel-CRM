@@ -1,6 +1,9 @@
 /**
  * Contact history timeline list component.
  */
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatEnumLabel } from '@/lib/i18n/enum-labels';
+import { formatDateTime } from '@/lib/i18n/format-date';
 import type { ContactHistoryEntry } from '@/types/domain';
 
 interface ContactHistoryListProps {
@@ -28,8 +31,10 @@ function MetadataBlock({ metadata }: { metadata: Record<string, unknown> | null 
  * @returns Timeline list element.
  */
 export function ContactHistoryList({ entries }: ContactHistoryListProps) {
+  const { locale, t } = useTranslation();
+
   if (entries.length === 0) {
-    return <p className="text-sm text-text-secondary">No contact history yet.</p>;
+    return <p className="text-sm text-text-secondary">{t('leads.noContactHistory')}</p>;
   }
 
   return (
@@ -38,9 +43,11 @@ export function ContactHistoryList({ entries }: ContactHistoryListProps) {
         <li key={entry.id} className="relative pb-5 last:pb-0">
           <span className="absolute -left-[5px] top-1.5 size-2 rounded-full bg-brand-blue-mid" />
           <time className="block text-[11px] text-text-tertiary">
-            {new Date(entry.created_at).toLocaleString('tr-TR')}
+            {formatDateTime(entry.created_at, locale)}
           </time>
-          <p className="mt-0.5 text-sm font-medium text-text-primary">{entry.interaction_type}</p>
+          <p className="mt-0.5 text-sm font-medium text-text-primary">
+            {formatEnumLabel(locale, 'interaction', entry.interaction_type)}
+          </p>
           {entry.interaction_source && (
             <p className="text-xs text-text-secondary">{entry.interaction_source}</p>
           )}
@@ -51,7 +58,8 @@ export function ContactHistoryList({ entries }: ContactHistoryListProps) {
           )}
           {entry.status_changed && entry.previous_status && (
             <p className="mt-1 text-xs text-text-secondary">
-              {entry.previous_status} → {entry.funnel_status_at_time}
+              {formatEnumLabel(locale, 'funnel', entry.previous_status)} →{' '}
+              {formatEnumLabel(locale, 'funnel', entry.funnel_status_at_time ?? '')}
             </p>
           )}
           <MetadataBlock metadata={entry.metadata} />

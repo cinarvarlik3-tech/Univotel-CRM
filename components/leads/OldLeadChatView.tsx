@@ -6,7 +6,8 @@ import { OldLeadChatBubble } from '@/components/leads/OldLeadChatBubble';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useOldLeadMessages } from '@/hooks/useOldLeadMessages';
-import { formatChatDateSeparator, isDifferentChatDay } from '@/lib/ui/format-chat-timestamp';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatChatDateSeparator, isDifferentChatDay } from '@/lib/i18n/format-date';
 
 interface OldLeadChatViewProps {
   leadId: string;
@@ -19,6 +20,7 @@ interface OldLeadChatViewProps {
  * @param props - Lead ID, display name, optional Chatwoot link.
  */
 export function OldLeadChatView({ leadId, leadName, chatwootUrl }: OldLeadChatViewProps) {
+  const { locale, t } = useTranslation();
   const { messages, loading, loadingMore, error, hasMore, loadMore } = useOldLeadMessages(
     leadId,
     true,
@@ -75,7 +77,7 @@ export function OldLeadChatView({ leadId, leadName, chatwootUrl }: OldLeadChatVi
   if (messages.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 p-4 text-center">
-        <p className="text-sm text-text-secondary">No messages imported for this lead.</p>
+        <p className="text-sm text-text-secondary">{t('leads.noMessagesImported')}</p>
         {chatwootUrl && (
           <a
             href={chatwootUrl}
@@ -83,7 +85,7 @@ export function OldLeadChatView({ leadId, leadName, chatwootUrl }: OldLeadChatVi
             rel="noopener noreferrer"
             className="text-xs text-brand-blue hover:underline"
           >
-            Open in Chatwoot
+            {t('leads.openInChatwoot')}
           </a>
         )}
       </div>
@@ -103,7 +105,7 @@ export function OldLeadChatView({ leadId, leadName, chatwootUrl }: OldLeadChatVi
               onClick={handleLoadMore}
               disabled={loadingMore}
             >
-              {loadingMore ? 'Loading…' : 'Load older messages'}
+              {loadingMore ? t('common.loading') : t('leads.loadOlderMessages')}
             </Button>
           </div>
         )}
@@ -117,7 +119,7 @@ export function OldLeadChatView({ leadId, leadName, chatwootUrl }: OldLeadChatVi
               {showDate && (
                 <div className="my-3 flex justify-center">
                   <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10px] font-medium text-text-tertiary">
-                    {formatChatDateSeparator(message.createdAt)}
+                    {formatChatDateSeparator(message.createdAt, locale)}
                   </span>
                 </div>
               )}
@@ -135,7 +137,7 @@ export function OldLeadChatView({ leadId, leadName, chatwootUrl }: OldLeadChatVi
             rel="noopener noreferrer"
             className="text-xs text-brand-blue hover:underline"
           >
-            Open in Chatwoot
+            {t('leads.openInChatwoot')}
           </a>
         </div>
       )}

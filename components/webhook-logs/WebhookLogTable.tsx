@@ -10,6 +10,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatDateTime } from '@/lib/i18n';
 import type { WebhookLogListItem } from '@/hooks/useWebhookLogs';
 
 interface WebhookLogTableProps {
@@ -22,8 +24,11 @@ interface WebhookLogTableProps {
  * @param props - Log items and replay handler.
  */
 export function WebhookLogTable({ items, onReplay }: WebhookLogTableProps) {
+  const { locale, t } = useTranslation();
+  const emDash = t('common.emDash');
+
   if (items.length === 0) {
-    return <p className="py-8 text-center text-sm text-text-secondary">No webhook logs found.</p>;
+    return <p className="py-8 text-center text-sm text-text-secondary">{t('webhooks.noLogs')}</p>;
   }
 
   return (
@@ -31,12 +36,12 @@ export function WebhookLogTable({ items, onReplay }: WebhookLogTableProps) {
       <Table>
         <TableHeader>
           <TableRow className="h-[34px] hover:bg-transparent">
-            <TableHead>Source</TableHead>
-            <TableHead>Event</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Error</TableHead>
-            <TableHead>Retries</TableHead>
-            <TableHead>Created</TableHead>
+            <TableHead>{t('webhooks.tableSource')}</TableHead>
+            <TableHead>{t('webhooks.tableEvent')}</TableHead>
+            <TableHead>{t('webhooks.tableStatus')}</TableHead>
+            <TableHead>{t('webhooks.tableError')}</TableHead>
+            <TableHead>{t('webhooks.tableRetries')}</TableHead>
+            <TableHead>{t('webhooks.tableCreated')}</TableHead>
             <TableHead />
           </TableRow>
         </TableHeader>
@@ -46,15 +51,15 @@ export function WebhookLogTable({ items, onReplay }: WebhookLogTableProps) {
               <TableCell>{row.source}</TableCell>
               <TableCell className="text-text-secondary">{row.event_type}</TableCell>
               <TableCell>{row.status}</TableCell>
-              <TableCell className="text-text-secondary">{row.error_message ?? '—'}</TableCell>
+              <TableCell className="text-text-secondary">{row.error_message ?? emDash}</TableCell>
               <TableCell className="text-text-secondary">{row.retry_count}</TableCell>
               <TableCell className="text-text-secondary">
-                {new Date(row.created_at).toLocaleString()}
+                {formatDateTime(row.created_at, locale)}
               </TableCell>
               <TableCell>
                 {row.status === 'failed' && (
                   <Button type="button" onClick={() => onReplay(row.id)}>
-                    Replay
+                    {t('webhooks.replay')}
                   </Button>
                 )}
               </TableCell>

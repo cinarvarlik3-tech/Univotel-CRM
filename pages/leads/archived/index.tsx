@@ -15,6 +15,8 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useArchivedLeads } from '@/hooks/useArchivedLeads';
 import { useAuth } from '@/hooks/useAuth';
+import { useTranslation } from '@/hooks/useTranslation';
+import { isManagerOrAbove } from '@/lib/auth/roles';
 import { useSalespeople } from '@/hooks/useSalespeople';
 import { buildArchivedLeadsQueryString } from '@/lib/ui/build-archived-leads-query-string';
 import type { ArchivedLeadRow } from '@/types/domain';
@@ -44,6 +46,7 @@ function buildQueryFromState(state: ArchivedLeadListFilterState, cursor?: string
  */
 export default function ArchivedLeadsPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { data: salespeople } = useSalespeople();
 
@@ -60,11 +63,11 @@ export default function ArchivedLeadsPage() {
   const queryString = buildQueryFromState(appliedState);
   const { data, error, isLoading, mutate } = useArchivedLeads(
     queryString,
-    user?.role === 'manager',
+    isManagerOrAbove(user?.role),
   );
 
   useEffect(() => {
-    if (user && user.role !== 'manager') {
+    if (user && !isManagerOrAbove(user.role)) {
       router.replace('/leads');
     }
   }, [user, router]);
@@ -99,16 +102,16 @@ export default function ArchivedLeadsPage() {
     setLoadingMore(false);
   }, [nextCursor, appliedState]);
 
-  if (user && user.role !== 'manager') {
+  if (user && !isManagerOrAbove(user.role)) {
     return null;
   }
 
   return (
     <AppShell
-      title="Archived leads"
+      title={t('archived.title')}
       actions={
         <Link href="/leads" className="text-sm text-brand-blue hover:underline">
-          Back to active leads
+          {t('archived.backToActive')}
         </Link>
       }
     >
@@ -120,7 +123,7 @@ export default function ArchivedLeadsPage() {
       />
 
       {isLoading && <Skeleton className="h-64 w-full" />}
-      {error && <p className="text-sm text-brand-red">Failed to load archived leads</p>}
+      {error && <p className="text-sm text-brand-red">{t('archived.failedToLoad')}</p>}
 
       <ArchivedLeadTable
         leads={accumulatedLeads}
@@ -130,7 +133,7 @@ export default function ArchivedLeadsPage() {
       {nextCursor && (
         <div className="mt-4 flex justify-center">
           <Button type="button" variant="secondary" onClick={loadMore} disabled={loadingMore}>
-            {loadingMore ? 'Loading...' : 'Load more'}
+            {loadingMore ? t('common.loading') : t('common.loadMore')}
           </Button>
         </div>
       )}

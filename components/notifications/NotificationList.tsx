@@ -11,6 +11,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatDateTime } from '@/lib/i18n';
 import type { NotificationRow } from '@/types/domain';
 import { displayLeadPhone } from '@/lib/ui/display-phone';
 
@@ -24,8 +26,13 @@ interface NotificationListProps {
  * @param props - Notification rows and resolve handler.
  */
 export function NotificationList({ items, onResolve }: NotificationListProps) {
+  const { locale, t } = useTranslation();
+  const emDash = t('common.emDash');
+
   if (items.length === 0) {
-    return <p className="py-8 text-center text-sm text-text-secondary">No unresolved alerts.</p>;
+    return (
+      <p className="py-8 text-center text-sm text-text-secondary">{t('notifications.noAlerts')}</p>
+    );
   }
 
   return (
@@ -33,10 +40,10 @@ export function NotificationList({ items, onResolve }: NotificationListProps) {
       <Table>
         <TableHeader>
           <TableRow className="h-[34px] hover:bg-transparent">
-            <TableHead>Type</TableHead>
-            <TableHead>Message</TableHead>
-            <TableHead>Lead</TableHead>
-            <TableHead>Created</TableHead>
+            <TableHead>{t('notifications.tableType')}</TableHead>
+            <TableHead>{t('notifications.tableMessage')}</TableHead>
+            <TableHead>{t('notifications.tableLead')}</TableHead>
+            <TableHead>{t('notifications.tableCreated')}</TableHead>
             <TableHead />
           </TableRow>
         </TableHeader>
@@ -61,15 +68,15 @@ export function NotificationList({ items, onResolve }: NotificationListProps) {
                       : row.lead_uuid}
                   </Link>
                 ) : (
-                  '—'
+                  emDash
                 )}
               </TableCell>
               <TableCell className="text-text-secondary">
-                {new Date(row.created_at).toLocaleString()}
+                {formatDateTime(row.created_at, locale)}
               </TableCell>
               <TableCell>
                 <Button type="button" onClick={() => onResolve(row.id)}>
-                  Resolve
+                  {t('notifications.resolve')}
                 </Button>
               </TableCell>
             </TableRow>

@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { KvList } from '@/components/ui/kv-list';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatDateTime, formatEnumLabel, formatYesNo } from '@/lib/i18n';
 import type { TaskRow } from '@/types/domain';
 
 /**
@@ -16,6 +18,7 @@ import type { TaskRow } from '@/types/domain';
 export default function TaskDetailPage() {
   const router = useRouter();
   const { id } = router.query;
+  const { locale, t } = useTranslation();
   const [task, setTask] = useState<TaskRow | null>(null);
   const [error, setError] = useState('');
 
@@ -28,14 +31,14 @@ export default function TaskDetailPage() {
         if (json.data) {
           setTask(json.data);
         } else {
-          setError(json.error ?? 'Task not found');
+          setError(json.error ?? t('tasks.notFound'));
         }
       });
-  }, [id]);
+  }, [id, t]);
 
   if (!task && !error) {
     return (
-      <AppShell title="Task">
+      <AppShell title={t('tasks.task')}>
         <Skeleton className="h-32 w-full max-w-md" />
       </AppShell>
     );
@@ -43,22 +46,26 @@ export default function TaskDetailPage() {
 
   if (error || !task) {
     return (
-      <AppShell title="Task">
-        <p className="text-sm text-brand-red">{error || 'Task not found'}</p>
+      <AppShell title={t('tasks.task')}>
+        <p className="text-sm text-brand-red">{error || t('tasks.notFound')}</p>
       </AppShell>
     );
   }
 
+  const emDash = t('common.emDash');
+
   return (
-    <AppShell title={`Task: ${task.task_type}`}>
+    <AppShell
+      title={t('tasks.taskTitle', { type: formatEnumLabel(locale, 'task', task.task_type) })}
+    >
       <KvList
         items={[
-          { term: 'Due', value: new Date(task.due_when).toLocaleString('tr-TR') },
-          { term: 'Completed', value: task.is_completed ? 'Yes' : 'No' },
-          { term: 'Late', value: task.is_late ? 'Yes' : 'No' },
-          { term: 'Notes', value: task.notes ?? '—' },
+          { term: t('tasks.due'), value: formatDateTime(task.due_when, locale) },
+          { term: t('tasks.completed'), value: formatYesNo(task.is_completed, locale) },
+          { term: t('tasks.late'), value: formatYesNo(task.is_late, locale) },
+          { term: t('tasks.notes'), value: task.notes ?? emDash },
           {
-            term: 'Lead',
+            term: t('tasks.lead'),
             value: (
               <Link href={`/leads/${task.lead_uuid}`} className="text-brand-blue hover:underline">
                 {task.lead_uuid}
@@ -69,7 +76,7 @@ export default function TaskDetailPage() {
       />
       <p className="mt-4">
         <Link href="/tasks" className="text-brand-blue hover:underline">
-          Back to tasks
+          {t('tasks.backToTasks')}
         </Link>
       </p>
     </AppShell>

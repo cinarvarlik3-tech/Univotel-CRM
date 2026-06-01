@@ -1,6 +1,8 @@
 /**
  * UI state helpers for campaign creation (audience filters → segment, template slots).
  */
+import { validateTemplateSlotsLocalized } from '@/lib/i18n/enum-labels';
+import type { Locale } from '@/lib/i18n/types';
 import type { FilterCondition } from '@/lib/query/filter-builder';
 import type { CampaignSegment } from '@/types/domain';
 
@@ -113,27 +115,13 @@ export function templateSlotsToVariables(slots: TemplateVariableSlot[]): Record<
 
 /**
  * Validates template slots before submit.
- * @returns Error message or null if valid.
+ * @param slots - Template variable rows.
+ * @param locale - UI locale for error messages.
+ * @returns Localized error message or null if valid.
  */
-export function validateTemplateSlots(slots: TemplateVariableSlot[]): string | null {
-  if (slots.length === 0) {
-    return 'Add at least one template variable.';
-  }
-
-  const slotNumbers = slots.map((s) => s.slot);
-  if (new Set(slotNumbers).size !== slotNumbers.length) {
-    return 'Each template placeholder number must be unique.';
-  }
-
-  for (const row of slots) {
-    if (!row.field.trim()) {
-      return 'Choose a CRM field for every template placeholder.';
-    }
-    const allowed = TEMPLATE_VARIABLE_FIELD_OPTIONS.some((o) => o.value === row.field);
-    if (!allowed) {
-      return `Unknown template field: ${row.field}`;
-    }
-  }
-
-  return null;
+export function validateTemplateSlots(
+  slots: TemplateVariableSlot[],
+  locale: Locale = 'en',
+): string | null {
+  return validateTemplateSlotsLocalized(slots, locale);
 }

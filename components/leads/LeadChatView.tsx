@@ -6,7 +6,8 @@ import { OldLeadChatBubble } from '@/components/leads/OldLeadChatBubble';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useLeadMessages } from '@/hooks/useLeadMessages';
-import { formatChatDateSeparator, isDifferentChatDay } from '@/lib/ui/format-chat-timestamp';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatChatDateSeparator, isDifferentChatDay } from '@/lib/i18n/format-date';
 
 interface LeadChatViewProps {
   leadId: string;
@@ -19,6 +20,7 @@ interface LeadChatViewProps {
  * @param props - Lead id, name, optional Chatwoot URL.
  */
 export function LeadChatView({ leadId, leadName, chatwootUrl }: LeadChatViewProps) {
+  const { locale, t } = useTranslation();
   const { messages, loading, loadingMore, syncing, error, hasMore, loadMore } = useLeadMessages(
     leadId,
     true,
@@ -60,9 +62,7 @@ export function LeadChatView({ leadId, leadName, chatwootUrl }: LeadChatViewProp
         <Skeleton className="h-10 w-3/4" />
         <Skeleton className="ml-auto h-10 w-2/3" />
         <Skeleton className="h-10 w-3/5" />
-        <p className="text-center text-xs text-text-tertiary">
-          Loading conversation from Chatwoot…
-        </p>
+        <p className="text-center text-xs text-text-tertiary">{t('leads.loadingConversation')}</p>
       </div>
     );
   }
@@ -78,7 +78,7 @@ export function LeadChatView({ leadId, leadName, chatwootUrl }: LeadChatViewProp
             rel="noopener noreferrer"
             className="text-xs text-brand-blue hover:underline"
           >
-            Open in Chatwoot
+            {t('leads.openInChatwoot')}
           </a>
         )}
       </div>
@@ -88,7 +88,7 @@ export function LeadChatView({ leadId, leadName, chatwootUrl }: LeadChatViewProp
   if (messages.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 p-4 text-center">
-        <p className="text-sm text-text-secondary">No messages in this conversation yet.</p>
+        <p className="text-sm text-text-secondary">{t('leads.noMessages')}</p>
         {chatwootUrl && (
           <a
             href={chatwootUrl}
@@ -96,7 +96,7 @@ export function LeadChatView({ leadId, leadName, chatwootUrl }: LeadChatViewProp
             rel="noopener noreferrer"
             className="text-xs text-brand-blue hover:underline"
           >
-            Open in Chatwoot
+            {t('leads.openInChatwoot')}
           </a>
         )}
       </div>
@@ -107,7 +107,7 @@ export function LeadChatView({ leadId, leadName, chatwootUrl }: LeadChatViewProp
     <div className="flex min-h-0 flex-1 flex-col">
       {syncing && (
         <p className="shrink-0 border-b border-border-default px-4 py-1 text-center text-[10px] text-text-tertiary">
-          Syncing…
+          {t('leads.syncing')}
         </p>
       )}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto py-3">
@@ -121,7 +121,7 @@ export function LeadChatView({ leadId, leadName, chatwootUrl }: LeadChatViewProp
               onClick={handleLoadMore}
               disabled={loadingMore}
             >
-              {loadingMore ? 'Loading…' : 'Load older messages'}
+              {loadingMore ? t('common.loading') : t('leads.loadOlderMessages')}
             </Button>
           </div>
         )}
@@ -135,7 +135,7 @@ export function LeadChatView({ leadId, leadName, chatwootUrl }: LeadChatViewProp
               {showDate && (
                 <div className="my-3 flex justify-center">
                   <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10px] font-medium text-text-tertiary">
-                    {formatChatDateSeparator(message.createdAt)}
+                    {formatChatDateSeparator(message.createdAt, locale)}
                   </span>
                 </div>
               )}
@@ -153,7 +153,7 @@ export function LeadChatView({ leadId, leadName, chatwootUrl }: LeadChatViewProp
             rel="noopener noreferrer"
             className="text-xs text-brand-blue hover:underline"
           >
-            Open in Chatwoot
+            {t('leads.openInChatwoot')}
           </a>
         </div>
       )}

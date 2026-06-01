@@ -5,10 +5,9 @@ import { Button } from '@/components/ui/button';
 import { FormField } from '@/components/ui/form-field';
 import { FormSelect } from '@/components/ui/form-select';
 import { Input } from '@/components/ui/input';
-import {
-  TEMPLATE_VARIABLE_FIELD_OPTIONS,
-  type TemplateVariableSlot,
-} from '@/lib/campaigns/campaign-form-ui';
+import { useTranslation } from '@/hooks/useTranslation';
+import { getTemplateVariableFieldOptions } from '@/lib/i18n';
+import type { TemplateVariableSlot } from '@/lib/campaigns/campaign-form-ui';
 
 interface CampaignTemplateVariablesEditorProps {
   slots: TemplateVariableSlot[];
@@ -27,6 +26,9 @@ export function CampaignTemplateVariablesEditor({
   slots,
   onChange,
 }: CampaignTemplateVariablesEditorProps) {
+  const { locale, t } = useTranslation();
+  const fieldOptions = getTemplateVariableFieldOptions(locale);
+
   function updateSlot(id: string, patch: Partial<TemplateVariableSlot>) {
     onChange(slots.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   }
@@ -44,19 +46,14 @@ export function CampaignTemplateVariablesEditor({
   return (
     <fieldset className="space-y-4 rounded-lg border border-border-default p-4">
       <legend className="px-1 text-sm font-medium text-text-primary">
-        Template variables — fill Meta placeholders
+        {t('campaigns.templateVariablesLegend')}
       </legend>
-      <p className="text-xs text-text-secondary">
-        Match each number to a field from your CRM. In Meta, placeholder{' '}
-        <code className="rounded bg-muted px-1 py-0.5 text-text-primary">{'{{1}}'}</code> is slot 1,{' '}
-        <code className="rounded bg-muted px-1 py-0.5 text-text-primary">{'{{2}}'}</code> is slot 2,
-        and so on. Leads missing a value are skipped when sending.
-      </p>
+      <p className="text-xs text-text-secondary">{t('campaigns.templateVariablesHelp')}</p>
 
       <ul className="space-y-3">
         {slots.map((row) => (
           <li key={row.id} className="flex flex-wrap items-end gap-3">
-            <FormField label="Placeholder #" htmlFor={`template_slot_${row.id}`}>
+            <FormField label={t('campaigns.placeholderNumber')} htmlFor={`template_slot_${row.id}`}>
               <Input
                 id={`template_slot_${row.id}`}
                 type="number"
@@ -66,15 +63,15 @@ export function CampaignTemplateVariablesEditor({
                 onChange={(e) =>
                   updateSlot(row.id, { slot: Math.max(1, Number(e.target.value) || 1) })
                 }
-                aria-label={`Placeholder number for row ${row.id}`}
+                aria-label={t('campaigns.placeholderNumberAria', { id: row.id })}
               />
             </FormField>
             <FormSelect
-              label="CRM field"
+              label={t('campaigns.crmField')}
               id={`template_field_${row.id}`}
               value={row.field}
               onValueChange={(v) => updateSlot(row.id, { field: v })}
-              options={TEMPLATE_VARIABLE_FIELD_OPTIONS.map((opt) => ({
+              options={fieldOptions.map((opt) => ({
                 value: opt.value,
                 label: opt.label,
               }))}
@@ -85,14 +82,14 @@ export function CampaignTemplateVariablesEditor({
               onClick={() => removeSlot(row.id)}
               disabled={slots.length <= 1}
             >
-              Remove
+              {t('common.remove')}
             </Button>
           </li>
         ))}
       </ul>
 
       <Button type="button" variant="secondary" onClick={addSlot}>
-        Add placeholder
+        {t('campaigns.addPlaceholder')}
       </Button>
     </fieldset>
   );

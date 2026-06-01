@@ -4,8 +4,11 @@
 import type { ReactNode } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { KvList } from '@/components/ui/kv-list';
+import { useTranslation } from '@/hooks/useTranslation';
+import { formatSourceDetailsLabel } from '@/lib/i18n/enum-labels';
+import { formatYesNo } from '@/lib/i18n/format-date';
 import type { SourceDetails } from '@/lib/leads/source-details';
-import { SOURCE_DETAILS_KEYS, SOURCE_DETAILS_LABELS } from '@/lib/leads/source-details';
+import { SOURCE_DETAILS_KEYS } from '@/lib/leads/source-details';
 
 interface SourceDetailsPanelProps {
   sourceDetails: SourceDetails | Record<string, unknown> | null | undefined;
@@ -19,6 +22,8 @@ interface SourceDetailsPanelProps {
  * @returns Panel element or null if empty.
  */
 export function SourceDetailsPanel({ sourceDetails, embedded = false }: SourceDetailsPanelProps) {
+  const { locale, t } = useTranslation();
+
   if (!sourceDetails || typeof sourceDetails !== 'object') {
     return null;
   }
@@ -33,7 +38,7 @@ export function SourceDetailsPanel({ sourceDetails, embedded = false }: SourceDe
     const value = details[key];
     if (value === null || value === undefined || value === '') continue;
 
-    const label = SOURCE_DETAILS_LABELS[key] ?? key;
+    const label = formatSourceDetailsLabel(locale, key);
 
     if (key === 'chatwoot_url' && typeof value === 'string') {
       items.push({
@@ -45,7 +50,7 @@ export function SourceDetailsPanel({ sourceDetails, embedded = false }: SourceDe
             rel="noreferrer"
             className="text-brand-blue hover:underline"
           >
-            Open conversation
+            {t('leads.openConversation')}
           </a>
         ),
       });
@@ -53,7 +58,7 @@ export function SourceDetailsPanel({ sourceDetails, embedded = false }: SourceDe
     }
 
     if (key === 'is_organic' && typeof value === 'boolean') {
-      items.push({ term: label, value: value ? 'Yes' : 'No' });
+      items.push({ term: label, value: formatYesNo(value, locale) });
       continue;
     }
 
@@ -68,7 +73,7 @@ export function SourceDetailsPanel({ sourceDetails, embedded = false }: SourceDe
     <>
       {details.normalization_failed === true && (
         <p className="mb-3 text-sm text-brand-red">
-          Phone normalization failed — verify number manually.
+          {t('leads.phoneNormalizationWarning')}
           {typeof details.raw_phone === 'string' && details.raw_phone.length > 0 && (
             <span className="mt-1 block font-mono text-text-primary">{details.raw_phone}</span>
           )}
@@ -84,7 +89,7 @@ export function SourceDetailsPanel({ sourceDetails, embedded = false }: SourceDe
     return (
       <div>
         <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-tertiary">
-          Source attribution
+          {t('leads.sourceAttribution')}
         </h3>
         {content}
       </div>
@@ -94,7 +99,7 @@ export function SourceDetailsPanel({ sourceDetails, embedded = false }: SourceDe
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Source details</CardTitle>
+        <CardTitle>{t('leads.sourceDetails')}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">{content}</CardContent>
     </Card>

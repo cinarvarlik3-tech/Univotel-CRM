@@ -2,6 +2,8 @@
 
 Lead management CRM for Univotel. Phase 1 scaffold with Supabase backend, webhook ingestion, and minimal testing UI.
 
+**New engineers:** start with [`docs/engineering-onboarding.md`](docs/engineering-onboarding.md) (architecture, phases, local setup). Production ops: [`docs/runbook.md`](docs/runbook.md).
+
 ## Prerequisites
 
 - Node.js 20+
