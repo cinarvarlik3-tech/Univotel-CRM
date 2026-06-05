@@ -60,6 +60,7 @@ export interface LeadDetailRow {
   kvkk_opt_in?: boolean | null;
   marketing_opt_in?: boolean | null;
   rec_hotel?: RecHotelItem[] | unknown | null;
+  school_shortname?: string | null;
   updated_at?: string;
 }
 

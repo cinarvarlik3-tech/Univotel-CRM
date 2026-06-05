@@ -29,6 +29,7 @@ const UpdateLeadDetailsSchema = z.object({
   campus: z.string().nullable().optional(),
   room_category: z.enum(['single', 'double', 'triple', 'quad']).nullable().optional(),
   district_preference: z.string().nullable().optional(),
+  school_shortname: z.string().nullable().optional(),
 });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -71,7 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!data) return sendError(res, 'Lead details not found', 404);
 
     if (isChatwootLabelSyncEnabled() && hasLabelMappedDetailUpdates(parsed.data)) {
-      await pushLabelsToChatwoot(leadId);
+      void pushLabelsToChatwoot(leadId);
     }
 
     return sendSuccess(res, data);

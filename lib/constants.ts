@@ -183,7 +183,16 @@ export const TASK_TYPES = [
 ] as const;
 
 /** Valid uni_year values for lead_details. */
-export const UNI_YEARS = ['1-sinif', '2-sinif', '3-sinif', '4-sinif', 'universitede'] as const;
+export const UNI_YEARS = [
+  'hazirlik',
+  '1-sinif',
+  '2-sinif',
+  '3-sinif',
+  '4-sinif',
+  '5-sinif',
+  '6-sinif',
+  'universitede',
+] as const;
 
 /** Valid student_gender values for lead_details. */
 export const STUDENT_GENDER_VALUES = ['male', 'female', 'other'] as const;

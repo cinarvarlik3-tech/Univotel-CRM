@@ -1,7 +1,7 @@
 /**
  * Lead list page — filters, sort, search, and cursor pagination.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { IconPlus } from '@tabler/icons-react';
@@ -61,10 +61,24 @@ export default function LeadsPage() {
 
   const { data, error, isLoading, mutate } = useLeads(queryString);
 
+  // Tracks whether the first response for the current queryString has been applied.
+  // Prevents SWR background revalidations (focus, reconnect) from resetting
+  // accumulated leads that the user loaded via "Load More".
+  const initialLoadApplied = useRef(false);
+
+  // When the query changes (new filters applied), mark the next data response
+  // as a fresh initial load.
   useEffect(() => {
-    if (data) {
+    initialLoadApplied.current = false;
+  }, [queryString]);
+
+  // Only apply SWR data on the first response after each query change.
+  // Subsequent revalidations are ignored so accumulated pages are preserved.
+  useEffect(() => {
+    if (data && !initialLoadApplied.current) {
       setAccumulatedLeads(data.leads);
       setNextCursor(data.nextCursor);
+      initialLoadApplied.current = true;
     }
   }, [data]);
 

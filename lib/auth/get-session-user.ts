@@ -32,16 +32,16 @@ export async function getSessionUser(
   const supabase = createServerSupabase(req, res);
 
   const {
-    data: { user },
+    data: { session },
     error: authError,
-  } = await supabase.auth.getUser();
+  } = await supabase.auth.getSession();
 
-  if (authError || !user) return null;
+  if (authError || !session) return null;
 
   const { data: salespersonData, error: spError } = await supabase
     .from('salespeople')
     .select('id, full_name, email, role')
-    .eq('id', user.id)
+    .eq('id', session.user.id)
     .maybeSingle();
 
   const salesperson = salespersonData as {
@@ -57,8 +57,8 @@ export async function getSessionUser(
   if (!role) return null;
 
   return {
-    userId: user.id,
-    email: user.email ?? salesperson.email,
+    userId: session.user.id,
+    email: session.user.email ?? salesperson.email,
     role,
     salesperson,
   };

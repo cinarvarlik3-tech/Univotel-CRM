@@ -23,7 +23,12 @@ export interface CursorResponse<T> {
 export function parseCursorParams(
   query: Record<string, string | string[] | undefined>,
 ): CursorParams {
-  const cursor = typeof query.cursor === 'string' ? query.cursor : undefined;
+  const rawCursor = typeof query.cursor === 'string' ? query.cursor : undefined;
+  // Cloudflare's Workers/OpenNext request pipeline double-decodes the query
+  // string, turning the URL-encoded '+' in a timestamp's timezone offset
+  // (e.g. "...726659+00:00") into a space. Restore it so PostgREST receives a
+  // valid timestamp. A valid ISO cursor never contains a space, so this is safe.
+  const cursor = rawCursor ? rawCursor.replace(' ', '+') : undefined;
   const rawLimit = typeof query.limit === 'string' ? parseInt(query.limit, 10) : DEFAULT_PAGE_LIMIT;
   const limit = Number.isNaN(rawLimit)
     ? DEFAULT_PAGE_LIMIT
@@ -47,8 +52,12 @@ export function buildCursorResponse<T extends Record<string, unknown>>(
   const hasMore = rows.length > limit;
   const data = hasMore ? rows.slice(0, limit) : rows;
   const lastItem = data[data.length - 1];
+  // Emit the cursor with a 'Z' offset instead of '+00:00' so the '+' is never
+  // transported in the URL — this sidesteps the Cloudflare query-string
+  // double-decode that converts '+' into a space. Both forms are the same UTC
+  // instant, so the .lt() comparison is unaffected.
   const nextCursor =
-    hasMore && lastItem ? (String(lastItem[cursorField]) as string) : null;
+    hasMore && lastItem ? (String(lastItem[cursorField]).replace('+00:00', 'Z') as string) : null;
 
   return { data, nextCursor };
 }

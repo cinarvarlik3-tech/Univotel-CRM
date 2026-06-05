@@ -99,7 +99,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .select('id, message_type, content, sender_type, sender_name, created_at')
         .eq('lead_uuid', id)
         .eq('is_private', false)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .limit(1),
 
       supabase
         .from('tasks')

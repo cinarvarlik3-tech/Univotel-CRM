@@ -29,22 +29,6 @@ export async function updateLeadRecord(
 ): Promise<UpdateLeadResult> {
   const client = createServiceClient();
 
-  const { data: currentLead, error: leadError } = await client
-    .from('leads')
-    .select('is_archived')
-    .eq('uuid', leadUuid)
-    .maybeSingle();
-
-  if (leadError) {
-    throw new Error(`Failed to load lead: ${leadError.message}`);
-  }
-  if (!currentLead) {
-    throw new Error('Lead not found');
-  }
-  if (currentLead.is_archived) {
-    throw new Error('Lead is archived');
-  }
-
   const newAssignedTo =
     'assigned_to' in updates ? (updates.assigned_to as string | null) : undefined;
   const assignedToChanging = newAssignedTo !== undefined && newAssignedTo !== existing.assigned_to;
@@ -76,7 +60,7 @@ export async function updateLeadRecord(
   }
 
   if (isChatwootLabelSyncEnabled() && hasLabelMappedLeadUpdates(updates)) {
-    await pushLabelsToChatwoot(leadUuid);
+    void pushLabelsToChatwoot(leadUuid);
   }
 
   return { lead: updated, assignedToChanged: assignedToChanging };

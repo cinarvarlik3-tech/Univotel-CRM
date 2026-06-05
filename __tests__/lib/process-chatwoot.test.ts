@@ -220,7 +220,7 @@ describe('processChatwoot', () => {
       'existing-uuid',
       expect.objectContaining({
         external_id: 'conv_51_msg_224',
-        chatwoot_url: 'https://marketinguni.app/app/conversations/51',
+        chatwoot_url: 'https://marketinguni.app/app/accounts/1/conversations/51',
       }),
       expect.objectContaining({ messageFrom: 'whatsapp' }),
     );

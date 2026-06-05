@@ -27,7 +27,7 @@ const ChatwootMetaSchema = z
   .object({
     sender: ChatwootPhoneHolderSchema.optional(),
     assignee: ChatwootAssigneeSchema,
-    assignee_type: z.string().optional(),
+    assignee_type: z.string().nullable().optional(),
   })
   .optional();
 
@@ -93,7 +93,7 @@ export const ChatwootConversationUpdatedSchema = z.object({
   contact: ChatwootPhoneHolderSchema.optional(),
   sender: ChatwootPhoneHolderSchema.optional(),
   conversation: ChatwootConversationSchema,
-  changed_attributes: z.array(z.record(ChangedAttributeValueSchema)),
+  changed_attributes: z.array(z.record(z.unknown())).default([]),
   channel: z.string().optional(),
   inbox_id: z.number().optional(),
 });

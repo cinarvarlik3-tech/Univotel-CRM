@@ -73,10 +73,13 @@ const STAGE_KEY: Record<string, string> = {
 };
 
 const UNI_YEAR_KEY: Record<string, string> = {
+  hazirlik: 'uni_hazirlik',
   '1-sinif': 'uni_1_sinif',
   '2-sinif': 'uni_2_sinif',
   '3-sinif': 'uni_3_sinif',
   '4-sinif': 'uni_4_sinif',
+  '5-sinif': 'uni_5_sinif',
+  '6-sinif': 'uni_6_sinif',
   universitede: 'uni_universitede',
 };
 

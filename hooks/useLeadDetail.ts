@@ -12,6 +12,8 @@ interface UseLeadDetailResult {
   loading: boolean;
   error: string | null;
   reload: () => Promise<void>;
+  applyLeadPatch: (data: Partial<LeadWithDetails>) => void;
+  applyDetailsPatch: (data: LeadDetailRow) => void;
 }
 
 /**
@@ -83,5 +85,13 @@ export function useLeadDetail(leadId: string | undefined): UseLeadDetailResult {
     reload();
   }, [reload]);
 
-  return { lead, details, history, loading, error, reload };
+  function applyLeadPatch(data: Partial<LeadWithDetails>) {
+    setLead((prev) => (prev ? { ...prev, ...data } : prev));
+  }
+
+  function applyDetailsPatch(data: LeadDetailRow) {
+    setDetails(data);
+  }
+
+  return { lead, details, history, loading, error, reload, applyLeadPatch, applyDetailsPatch };
 }

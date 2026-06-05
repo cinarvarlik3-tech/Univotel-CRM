@@ -32,6 +32,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { sendTelegramToManagers } from '@/lib/telegram';
 import {
   ChatwootPayloadSchema,
+  ChatwootConversationUpdatedSchema,
   type ChatwootConversationCreated,
   type ChatwootConversationUpdated,
   type ChatwootMessageCreated,
@@ -120,6 +121,22 @@ export async function processChatwoot(body: unknown): Promise<void> {
   const parsed = ChatwootPayloadSchema.safeParse(body);
 
   if (!parsed.success) {
+    // Fallback: if the event is conversation_updated, try re-parsing with just the
+    // fields handleLeadUpdate needs. The strict schema occasionally rejects valid
+    // Chatwoot payloads due to unexpected field shapes in nested objects.
+    const rawEvent =
+      typeof body === 'object' && body !== null
+        ? (body as Record<string, unknown>).event
+        : undefined;
+
+    if (rawEvent === 'conversation_updated') {
+      const loose = ChatwootConversationUpdatedSchema.safeParse(body);
+      if (loose.success) {
+        await withRetry(() => handleLeadUpdate(loose.data), 'conversation update');
+        return;
+      }
+    }
+
     console.error('[chatwoot] invalid payload:', parsed.error.flatten());
     await sendTelegramToManagers(
       `[CRM] Chatwoot webhook validation failed.\n${parsed.error.message}`,
@@ -148,9 +165,13 @@ export async function processChatwoot(body: unknown): Promise<void> {
   }
 
   if (payload.event === 'message_created') {
-    // Sadece incoming mesajlar yeni lead yaratır
+    // Sadece incoming mesajlar yeni lead yaratır; konuşma zaten bağlıysa atla
     if (payload.message_type !== 'outgoing') {
-      await handleLeadCreate(payload);
+      const conversationId = payload.conversation?.id ?? payload.id;
+      const existingLead = await findLeadByChatwootConversation(conversationId);
+      if (!existingLead) {
+        await handleLeadCreate(payload);
+      }
     }
     // Hem incoming hem outgoing lead_messages'a yazılır
     await withRetry(() => handleMessageCreated(payload), 'message sync');
@@ -338,7 +359,9 @@ async function handleLeadCreate(payload: InboundChatwootPayload): Promise<void> 
   const messageId = resolveChatwootMessageId(payload);
   const externalId = `conv_${conversationId}_msg_${messageId}`;
   const baseUrl = env.CHATWOOT_BASE_URL.replace(/\/$/, '');
-  const chatwootUrl = `${baseUrl}/app/conversations/${conversationId}`;
+  const chatwootUrl = env.CHATWOOT_ACCOUNT_ID
+    ? `${baseUrl}/app/accounts/${env.CHATWOOT_ACCOUNT_ID}/conversations/${conversationId}`
+    : `${baseUrl}/app/conversations/${conversationId}`;
 
   const sourceDetails = buildChatwootSourceDetails(
     {

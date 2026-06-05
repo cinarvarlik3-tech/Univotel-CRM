@@ -5,7 +5,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
-import { isManagerOrAbove } from '@/lib/auth/roles';
+import { isManagerOrAbove, parseUserRole } from '@/lib/auth/roles';
 import { FUNNEL_STATUSES, LANGUAGES, LOSS_REASONS, SPECIAL_STATES } from '@/lib/constants';
 import { normalizePhone } from '@/lib/leads/normalize-phone';
 import { updateLeadRecord } from '@/lib/leads/update-lead';
@@ -30,15 +30,15 @@ const UpdateLeadSchema = z
   );
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await getSessionUser(req, res);
-  if (!session) return sendError(res, 'Unauthorized', 401);
-
   const { id } = req.query;
   if (typeof id !== 'string') return sendError(res, 'Invalid lead ID', 400);
 
   const supabase = createServerSupabase(req, res);
 
   if (req.method === 'GET') {
+    const session = await getSessionUser(req, res);
+    if (!session) return sendError(res, 'Unauthorized', 401);
+
     const { data: lead, error } = await supabase
       .from('leads')
       .select('*, lead_details(*), salespeople:assigned_to(full_name, email)')
@@ -59,6 +59,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return sendError(res, 'Invalid input', 400, parsed.error.flatten().fieldErrors);
     }
 
+    const {
+      data: { session: authSession },
+    } = await supabase.auth.getSession();
+    if (!authSession) return sendError(res, 'Unauthorized', 401);
+
+    const [{ data: salesperson }, { data: existing }] = await Promise.all([
+      supabase
+        .from('salespeople')
+        .select('id, full_name, email, role')
+        .eq('id', authSession.user.id)
+        .maybeSingle(),
+      supabase
+        .from('leads')
+        .select('funnel_status, assigned_to, is_archived')
+        .eq('uuid', id)
+        .maybeSingle(),
+    ]);
+
+    if (!salesperson) return sendError(res, 'Unauthorized', 401);
+    const role = parseUserRole(salesperson.role);
+    if (!role) return sendError(res, 'Unauthorized', 401);
+
+    if (!existing) return sendError(res, 'Lead not found', 404);
+    if (existing.is_archived) return sendError(res, 'Lead is archived', 409);
+
     const updates = { ...parsed.data };
 
     if (updates.parent_phone !== undefined && updates.parent_phone !== null) {
@@ -67,18 +92,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       updates.parent_phone = failed ? original : phone;
     }
 
-    if (updates.assigned_to !== undefined && !isManagerOrAbove(session.role)) {
+    if (updates.assigned_to !== undefined && !isManagerOrAbove(role)) {
       return sendError(res, 'Only managers can reassign leads', 403);
     }
-
-    const { data: existing } = await supabase
-      .from('leads')
-      .select('funnel_status, assigned_to, is_archived')
-      .eq('uuid', id)
-      .maybeSingle();
-
-    if (!existing) return sendError(res, 'Lead not found', 404);
-    if (existing.is_archived) return sendError(res, 'Lead is archived', 409);
 
     let updated: Record<string, unknown>;
     try {
@@ -90,14 +106,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (updates.funnel_status && updates.funnel_status !== existing.funnel_status) {
-      await supabase.from('contact_history').insert({
+      void supabase.from('contact_history').insert({
         lead_uuid: id,
         interaction_type: 'status_change',
         interaction_source: 'manual',
         funnel_status_at_time: updates.funnel_status,
-        previous_status: existing?.funnel_status ?? null,
+        previous_status: existing.funnel_status ?? null,
         status_changed: true,
-        salesperson_id: session.userId,
+        salesperson_id: authSession.user.id,
         notes: `Status changed to ${updates.funnel_status}`,
       });
     }
@@ -106,6 +122,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'DELETE') {
+    const session = await getSessionUser(req, res);
+    if (!session) return sendError(res, 'Unauthorized', 401);
+
     if (!isManagerOrAbove(session.role)) {
       return sendError(res, 'Only managers can delete leads', 403);
     }

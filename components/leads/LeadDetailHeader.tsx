@@ -8,15 +8,17 @@ import {
   IconExternalLink,
   IconX,
 } from '@tabler/icons-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { useTranslation } from '@/hooks/useTranslation';
 import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { displayLeadPhone } from '@/lib/ui/display-phone';
-import type { LeadWithDetails } from '@/types/domain';
+import type { LeadDetailRow, LeadWithDetails } from '@/types/domain';
 
 interface LeadDetailHeaderProps {
   lead: LeadWithDetails;
+  details?: LeadDetailRow | null;
   leadId: string;
   onClose?: () => void;
   isFullScreen?: boolean;
@@ -40,12 +42,20 @@ function assigneeLabel(lead: LeadWithDetails, unassignedLabel: string): string {
  */
 export function LeadDetailHeader({
   lead,
+  details,
   leadId,
   onClose,
   isFullScreen,
   onToggleFullScreen,
 }: LeadDetailHeaderProps) {
   const { locale, t } = useTranslation();
+
+  const genderLabel =
+    details?.student_gender === 'male'
+      ? formatEnumLabel(locale, 'gender', 'male')
+      : details?.student_gender === 'female'
+        ? formatEnumLabel(locale, 'gender', 'female')
+        : null;
 
   return (
     <div className="relative space-y-2 border-b border-border-default px-5 pb-3 pt-4">
@@ -84,8 +94,19 @@ export function LeadDetailHeader({
       </h2>
       <p className="font-mono text-sm text-text-primary">{displayLeadPhone(lead)}</p>
       <div className="flex flex-wrap items-center gap-1.5">
+        {details?.school_shortname && (
+          <Badge className="bg-[var(--badge-school-bg)] text-[var(--badge-school-text)]">
+            {details.school_shortname}
+          </Badge>
+        )}
+        {details?.uni_year && (
+          <Badge className="bg-[var(--badge-year-bg)] text-[var(--badge-year-text)]">
+            {formatEnumLabel(locale, 'uniYear', details.uni_year)}
+          </Badge>
+        )}
         <StatusBadge status={lead.funnel_status} type="funnel" />
         <StatusBadge status={lead.sla_status} type="sla" />
+        {genderLabel && <Badge variant="secondary">{genderLabel}</Badge>}
         <span className="text-xs text-text-tertiary">·</span>
         <span className="text-xs text-text-secondary">
           {formatEnumLabel(locale, 'source', lead.lead_source)}
@@ -94,12 +115,6 @@ export function LeadDetailHeader({
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-secondary">
         <span>
           {t('leads.assignee')}: {assigneeLabel(lead, t('common.unassigned'))}
-        </span>
-        <span>
-          {t('leads.score')}: {lead.lead_score ?? 0}
-        </span>
-        <span>
-          {t('leads.studentStage')}: {formatEnumLabel(locale, 'stage', lead.student_stage)}
         </span>
       </div>
       <Link

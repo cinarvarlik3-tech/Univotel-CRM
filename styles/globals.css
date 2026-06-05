@@ -40,6 +40,10 @@
   --badge-success-text: #1b6b2f;
   --badge-warning-bg: #fff3e0;
   --badge-warning-text: #b06000;
+  --badge-school-bg: #f3f0ff;
+  --badge-school-text: #6d28d9;
+  --badge-year-bg: #e0f7fa;
+  --badge-year-text: #0e7490;
 
   --sidebar-icon-idle: rgba(255, 255, 255, 0.55);
   --sidebar-icon-hover-bg: rgba(255, 255, 255, 0.08);
@@ -102,6 +106,10 @@
   --badge-success-text: #6fcf8a;
   --badge-warning-bg: rgba(176, 96, 0, 0.2);
   --badge-warning-text: #f0b040;
+  --badge-school-bg: rgba(109, 40, 217, 0.2);
+  --badge-school-text: #c4b5fd;
+  --badge-year-bg: rgba(14, 116, 144, 0.2);
+  --badge-year-text: #67e8f9;
 
   --background: var(--surface-page);
   --foreground: var(--text-primary);

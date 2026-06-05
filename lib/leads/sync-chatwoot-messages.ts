@@ -26,12 +26,25 @@ export async function syncLeadMessagesFromChatwoot(params: {
   const agentsById = new Map<number, ChatwootApiAgent>(agents.map((agent) => [agent.id, agent]));
 
   const now = new Date().toISOString();
-  const rows = apiMessages
-    .map((message) =>
-      mapChatwootApiMessage(message, params.conversationId, agentsById, params.leadName),
-    )
-    .filter((row): row is NonNullable<typeof row> => row != null)
-    .map((row) => ({
+  const rowMap = new Map<number, (typeof rows)[number]>();
+  const rows: {
+    lead_uuid: string;
+    chatwoot_message_id: number;
+    chatwoot_conversation_id: number;
+    message_type: string;
+    content: string | null;
+    sender_type: string | null;
+    sender_id: number | null;
+    sender_name: string | null;
+    is_private: boolean;
+    created_at: string;
+    synced_at: string;
+  }[] = [];
+
+  for (const message of apiMessages) {
+    const row = mapChatwootApiMessage(message, params.conversationId, agentsById, params.leadName);
+    if (row == null) continue;
+    rowMap.set(row.chatwoot_message_id, {
       lead_uuid: params.leadUuid,
       chatwoot_message_id: row.chatwoot_message_id,
       chatwoot_conversation_id: row.chatwoot_conversation_id,
@@ -43,7 +56,9 @@ export async function syncLeadMessagesFromChatwoot(params: {
       is_private: row.is_private,
       created_at: row.created_at,
       synced_at: now,
-    }));
+    });
+  }
+  rows.push(...rowMap.values());
 
   if (rows.length === 0) {
     return { syncedCount: 0, conversationId: params.conversationId };
