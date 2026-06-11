@@ -109,7 +109,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let updated: Record<string, unknown>;
     const lossTransition = applyLossReasonUpdate(existing, updates);
     try {
-      const result = await updateLeadRecord(id, updates as Record<string, unknown>, existing);
+      const result = await updateLeadRecord(
+        id,
+        updates as Record<string, unknown>,
+        existing,
+        authSession.user.id,
+        'manual',
+      );
       updated = result.lead;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Update failed';

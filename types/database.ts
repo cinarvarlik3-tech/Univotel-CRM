@@ -584,6 +584,7 @@ export type Database = {
       };
       lead_details: {
         Row: {
+          actual_move_in_date: string | null;
           budget_max: number | null;
           budget_tier: string | null;
           campus: string | null;
@@ -608,6 +609,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          actual_move_in_date?: string | null;
           budget_max?: number | null;
           budget_tier?: string | null;
           campus?: string | null;
@@ -632,6 +634,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          actual_move_in_date?: string | null;
           budget_max?: number | null;
           budget_tier?: string | null;
           campus?: string | null;
@@ -678,11 +681,13 @@ export type Database = {
           chatwoot_message_id: number;
           content: string | null;
           created_at: string;
+          direction: string | null;
           id: string;
           is_private: boolean;
           lead_uuid: string;
           message_type: string;
           notified_at: string | null;
+          sender_agent_id: string | null;
           sender_id: number | null;
           sender_name: string | null;
           sender_type: string | null;
@@ -693,11 +698,13 @@ export type Database = {
           chatwoot_message_id: number;
           content?: string | null;
           created_at: string;
+          direction?: string | null;
           id?: string;
           is_private?: boolean;
           lead_uuid: string;
           message_type: string;
           notified_at?: string | null;
+          sender_agent_id?: string | null;
           sender_id?: number | null;
           sender_name?: string | null;
           sender_type?: string | null;
@@ -708,11 +715,13 @@ export type Database = {
           chatwoot_message_id?: number;
           content?: string | null;
           created_at?: string;
+          direction?: string | null;
           id?: string;
           is_private?: boolean;
           lead_uuid?: string;
           message_type?: string;
           notified_at?: string | null;
+          sender_agent_id?: string | null;
           sender_id?: number | null;
           sender_name?: string | null;
           sender_type?: string | null;
@@ -735,6 +744,65 @@ export type Database = {
           },
         ];
       };
+      lead_stage_history: {
+        Row: {
+          changed_at: string;
+          changed_by: string | null;
+          from_status: string | null;
+          id: string;
+          lead_uuid: string;
+          source: string;
+          to_status: string;
+        };
+        Insert: {
+          changed_at?: string;
+          changed_by?: string | null;
+          from_status?: string | null;
+          id?: string;
+          lead_uuid: string;
+          source: string;
+          to_status: string;
+        };
+        Update: {
+          changed_at?: string;
+          changed_by?: string | null;
+          from_status?: string | null;
+          id?: string;
+          lead_uuid?: string;
+          source?: string;
+          to_status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'lead_stage_history_changed_by_fkey';
+            columns: ['changed_by'];
+            isOneToOne: false;
+            referencedRelation: 'mv_agent_performance';
+            referencedColumns: ['salesperson_id'];
+          },
+          {
+            foreignKeyName: 'lead_stage_history_changed_by_fkey';
+            columns: ['changed_by'];
+            isOneToOne: false;
+            referencedRelation: 'salespeople';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'lead_stage_history_lead_uuid_fkey';
+            columns: ['lead_uuid'];
+            isOneToOne: false;
+            referencedRelation: 'active_leads';
+            referencedColumns: ['uuid'];
+          },
+          {
+            foreignKeyName: 'lead_stage_history_lead_uuid_fkey';
+            columns: ['lead_uuid'];
+            isOneToOne: false;
+            referencedRelation: 'leads';
+            referencedColumns: ['uuid'];
+          },
+        ];
+      };
       leads: {
         Row: {
           archived_at: string | null;
@@ -743,11 +811,14 @@ export type Database = {
           assignee_synced_at: string | null;
           chatwoot_contact_id: number | null;
           chatwoot_conversation_id: number | null;
+          claimed_at: string | null;
           created_at: string;
-          deleted_at: string | null;
           deal_awaiting: boolean;
+          deleted_at: string | null;
           funnel_status: string;
           funnel_status_before_lost: string | null;
+          has_moved_in: boolean;
+          is_24h_restricted: boolean;
           is_archived: boolean;
           is_deleted: boolean;
           is_organic: boolean | null;
@@ -755,12 +826,14 @@ export type Database = {
           label_synced_at: string | null;
           language: string;
           last_contact_at: string | null;
+          last_inbound_message_at: string | null;
           lead_name: string | null;
           lead_phone: string;
           lead_score: number;
           lead_source: string;
           loss_reason: string | null;
           message_from: string | null;
+          move_in_date_set: boolean;
           notes: string | null;
           parent_phone: string | null;
           persona_type: string | null;
@@ -780,11 +853,14 @@ export type Database = {
           assignee_synced_at?: string | null;
           chatwoot_contact_id?: number | null;
           chatwoot_conversation_id?: number | null;
+          claimed_at?: string | null;
           created_at?: string;
-          deleted_at?: string | null;
           deal_awaiting?: boolean;
+          deleted_at?: string | null;
           funnel_status?: string;
           funnel_status_before_lost?: string | null;
+          has_moved_in?: boolean;
+          is_24h_restricted?: boolean;
           is_archived?: boolean;
           is_deleted?: boolean;
           is_organic?: boolean | null;
@@ -792,12 +868,14 @@ export type Database = {
           label_synced_at?: string | null;
           language?: string;
           last_contact_at?: string | null;
+          last_inbound_message_at?: string | null;
           lead_name?: string | null;
           lead_phone: string;
           lead_score?: number;
           lead_source: string;
           loss_reason?: string | null;
           message_from?: string | null;
+          move_in_date_set?: boolean;
           notes?: string | null;
           parent_phone?: string | null;
           persona_type?: string | null;
@@ -817,11 +895,14 @@ export type Database = {
           assignee_synced_at?: string | null;
           chatwoot_contact_id?: number | null;
           chatwoot_conversation_id?: number | null;
+          claimed_at?: string | null;
           created_at?: string;
-          deleted_at?: string | null;
           deal_awaiting?: boolean;
+          deleted_at?: string | null;
           funnel_status?: string;
           funnel_status_before_lost?: string | null;
+          has_moved_in?: boolean;
+          is_24h_restricted?: boolean;
           is_archived?: boolean;
           is_deleted?: boolean;
           is_organic?: boolean | null;
@@ -829,12 +910,14 @@ export type Database = {
           label_synced_at?: string | null;
           language?: string;
           last_contact_at?: string | null;
+          last_inbound_message_at?: string | null;
           lead_name?: string | null;
           lead_phone?: string;
           lead_score?: number;
           lead_source?: string;
           loss_reason?: string | null;
           message_from?: string | null;
+          move_in_date_set?: boolean;
           notes?: string | null;
           parent_phone?: string | null;
           persona_type?: string | null;
@@ -1376,45 +1459,6 @@ export type Database = {
         };
         Relationships: [];
       };
-      universities: {
-        Row: {
-          city: string;
-          country: string;
-          created_at: string;
-          district: string | null;
-          id: string;
-          is_active: boolean;
-          uni_name: string;
-          uni_shortname: string;
-          updated_at: string;
-          yok_code: string | null;
-        };
-        Insert: {
-          city?: string;
-          country?: string;
-          created_at?: string;
-          district?: string | null;
-          id?: string;
-          is_active?: boolean;
-          uni_name: string;
-          uni_shortname: string;
-          updated_at?: string;
-          yok_code?: string | null;
-        };
-        Update: {
-          city?: string;
-          country?: string;
-          created_at?: string;
-          district?: string | null;
-          id?: string;
-          is_active?: boolean;
-          uni_name?: string;
-          uni_shortname?: string;
-          updated_at?: string;
-          yok_code?: string | null;
-        };
-        Relationships: [];
-      };
       salespeople: {
         Row: {
           active_lead_count: number;
@@ -1481,11 +1525,13 @@ export type Database = {
       tasks: {
         Row: {
           assigned_to: string;
+          auto_task_type: string | null;
           completed_at: string | null;
           created_at: string;
           created_by: string;
           due_when: string;
           id: string;
+          is_auto_created: boolean;
           is_completed: boolean;
           is_late: boolean;
           lead_uuid: string;
@@ -1494,11 +1540,13 @@ export type Database = {
         };
         Insert: {
           assigned_to: string;
+          auto_task_type?: string | null;
           completed_at?: string | null;
           created_at?: string;
           created_by?: string;
           due_when: string;
           id?: string;
+          is_auto_created?: boolean;
           is_completed?: boolean;
           is_late?: boolean;
           lead_uuid: string;
@@ -1507,11 +1555,13 @@ export type Database = {
         };
         Update: {
           assigned_to?: string;
+          auto_task_type?: string | null;
           completed_at?: string | null;
           created_at?: string;
           created_by?: string;
           due_when?: string;
           id?: string;
+          is_auto_created?: boolean;
           is_completed?: boolean;
           is_late?: boolean;
           lead_uuid?: string;
@@ -1546,6 +1596,117 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: 'leads';
             referencedColumns: ['uuid'];
+          },
+        ];
+      };
+      universities: {
+        Row: {
+          city: string;
+          country: string;
+          created_at: string;
+          district: string | null;
+          id: string;
+          is_active: boolean;
+          uni_name: string;
+          uni_shortname: string;
+          updated_at: string;
+          yok_code: string | null;
+        };
+        Insert: {
+          city?: string;
+          country?: string;
+          created_at?: string;
+          district?: string | null;
+          id?: string;
+          is_active?: boolean;
+          uni_name: string;
+          uni_shortname: string;
+          updated_at?: string;
+          yok_code?: string | null;
+        };
+        Update: {
+          city?: string;
+          country?: string;
+          created_at?: string;
+          district?: string | null;
+          id?: string;
+          is_active?: boolean;
+          uni_name?: string;
+          uni_shortname?: string;
+          updated_at?: string;
+          yok_code?: string | null;
+        };
+        Relationships: [];
+      };
+      visits: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          lead_uuid: string;
+          notes: string | null;
+          property_id: string;
+          scheduled_date: string;
+          status: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          lead_uuid: string;
+          notes?: string | null;
+          property_id: string;
+          scheduled_date: string;
+          status?: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          lead_uuid?: string;
+          notes?: string | null;
+          property_id?: string;
+          scheduled_date?: string;
+          status?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'visits_created_by_fkey';
+            columns: ['created_by'];
+            isOneToOne: false;
+            referencedRelation: 'mv_agent_performance';
+            referencedColumns: ['salesperson_id'];
+          },
+          {
+            foreignKeyName: 'visits_created_by_fkey';
+            columns: ['created_by'];
+            isOneToOne: false;
+            referencedRelation: 'salespeople';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'visits_lead_uuid_fkey';
+            columns: ['lead_uuid'];
+            isOneToOne: false;
+            referencedRelation: 'active_leads';
+            referencedColumns: ['uuid'];
+          },
+          {
+            foreignKeyName: 'visits_lead_uuid_fkey';
+            columns: ['lead_uuid'];
+            isOneToOne: false;
+            referencedRelation: 'leads';
+            referencedColumns: ['uuid'];
+          },
+          {
+            foreignKeyName: 'visits_property_id_fkey';
+            columns: ['property_id'];
+            isOneToOne: false;
+            referencedRelation: 'properties';
+            referencedColumns: ['id'];
           },
         ];
       };

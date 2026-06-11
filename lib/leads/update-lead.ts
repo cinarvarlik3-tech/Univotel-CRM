@@ -8,6 +8,7 @@ import { applyLossReasonUpdate } from '@/lib/leads/apply-loss-reason-update';
 import { pushAssigneeToChatwoot, syncAssigneeToLead } from '@/lib/leads/sync-assignee';
 import { isChatwootAssigneeSyncEnabled, isChatwootLabelSyncEnabled } from '@/lib/env';
 import { cancelAutoTasksForLead, createAutoTasksForStage } from '@/lib/tasks/auto-tasks';
+import { writeStageHistory, type StageHistorySource } from '@/lib/leads/write-stage-history';
 import { createServiceClient } from '@/lib/supabase/service';
 import type { Database } from '@/types/database';
 
@@ -24,7 +25,8 @@ export interface UpdateLeadResult {
  * @param leadUuid - Lead UUID.
  * @param updates - Validated update payload.
  * @param existing - Existing lead row subset before update.
- * @param session - Authenticated user session.
+ * @param changedBy - Salesperson UUID performing the update (null for system/webhook).
+ * @param source - Origin of the change for stage history attribution.
  */
 export async function updateLeadRecord(
   leadUuid: string,
@@ -35,6 +37,8 @@ export async function updateLeadRecord(
     loss_reason?: string | null;
     funnel_status_before_lost?: string | null;
   },
+  changedBy: string | null = null,
+  source: StageHistorySource = 'manual',
 ): Promise<UpdateLeadResult> {
   const client = createServiceClient();
 
@@ -83,6 +87,13 @@ export async function updateLeadRecord(
 
   const newFunnelStatus = mergedUpdates.funnel_status as string | undefined;
   if (newFunnelStatus !== undefined && newFunnelStatus !== existing.funnel_status) {
+    await writeStageHistory({
+      leadUuid,
+      fromStatus: existing.funnel_status,
+      toStatus: newFunnelStatus,
+      changedBy,
+      source,
+    });
     await cancelAutoTasksForLead(leadUuid);
     void createAutoTasksForStage(leadUuid, newFunnelStatus, updated.assigned_to as string | null);
   }

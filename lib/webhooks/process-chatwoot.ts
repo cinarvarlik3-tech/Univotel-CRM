@@ -59,6 +59,7 @@ import {
   type ChatwootMessageCreated,
 } from '@/types/webhooks';
 import type { Database, Json } from '@/types/database';
+import { writeStageHistory } from '@/lib/leads/write-stage-history';
 
 type LeadsUpdate = Database['public']['Tables']['leads']['Update'];
 
@@ -153,8 +154,17 @@ async function reactivateLostLead(leadUuid: string, messageFrom: string | null):
       loss_reason: null,
       funnel_status_before_lost: null,
       assigned_to: null,
+      claimed_at: null,
     })
     .eq('uuid', leadUuid);
+
+  await writeStageHistory({
+    leadUuid,
+    fromStatus: 'lost',
+    toStatus: DEFAULT_FUNNEL_STATUS,
+    changedBy: null,
+    source: 'chatwoot',
+  });
 
   const interactionSource =
     messageFrom === 'instagram' || messageFrom === 'whatsapp' ? messageFrom : 'whatsapp';
@@ -1178,6 +1188,16 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
     if (leadError) {
       throw new Error(`leads update failed: ${leadError.message}`);
     }
+
+    if (finalFunnel !== undefined && finalFunnel !== leadRow.funnel_status) {
+      await writeStageHistory({
+        leadUuid: leadRow.uuid,
+        fromStatus: leadRow.funnel_status,
+        toStatus: finalFunnel,
+        changedBy: null,
+        source: 'chatwoot',
+      });
+    }
   }
 
   if (referralDomain !== undefined) {
@@ -1282,6 +1302,15 @@ async function handleMessageCreated(payload: ChatwootMessageCreated): Promise<vo
   const isPrivate = payload.message?.private ?? false;
   const messageType = payload.message_type ?? 'incoming';
 
+  // Map Chatwoot message_type integer to direction: 0=incoming, 1=outgoing.
+  const rawMessageTypeNum = payload.message?.message_type;
+  const direction: 'incoming' | 'outgoing' | null =
+    rawMessageTypeNum === 0 ? 'incoming' : rawMessageTypeNum === 1 ? 'outgoing' : null;
+
+  // Capture the Chatwoot agent id only for human-agent-sent messages (senderType === 'user').
+  // Campaign/bot sends have a different sender type and must NOT count toward personal metrics.
+  const senderAgentId = senderType === 'user' && senderId != null ? String(senderId) : null;
+
   await syncMessageToLeadMessages({
     leadUuid: lead.uuid,
     conversationId,
@@ -1293,6 +1322,8 @@ async function handleMessageCreated(payload: ChatwootMessageCreated): Promise<vo
     senderId,
     isPrivate,
     messageTimestamp,
+    direction,
+    senderAgentId,
   });
 
   // Incoming customer messages reset the WhatsApp 24h window and reopen restriction.
@@ -1326,6 +1357,8 @@ async function syncMessageToLeadMessages(params: {
   senderId: number | null;
   isPrivate: boolean;
   messageTimestamp: string;
+  direction: 'incoming' | 'outgoing' | null;
+  senderAgentId: string | null;
 }): Promise<void> {
   const client = createServiceClient();
   const { error } = await client.from('lead_messages').upsert(
@@ -1341,6 +1374,8 @@ async function syncMessageToLeadMessages(params: {
       is_private: params.isPrivate,
       created_at: params.messageTimestamp,
       synced_at: new Date().toISOString(),
+      direction: params.direction,
+      sender_agent_id: params.senderAgentId,
     },
     { onConflict: 'chatwoot_message_id' },
   );

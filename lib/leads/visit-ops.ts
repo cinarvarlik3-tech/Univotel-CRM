@@ -5,6 +5,7 @@
  */
 import { createServiceClient } from '@/lib/supabase/service';
 import { cancelAutoTasksForLead, createAutoTasksForStage } from '@/lib/tasks/auto-tasks';
+import { writeStageHistory } from '@/lib/leads/write-stage-history';
 
 const PRE_VISIT_STAGES = new Set([
   'yeni',
@@ -49,6 +50,13 @@ export async function scheduleVisit(opts: {
   const shouldAdvance = PRE_VISIT_STAGES.has(opts.leadFunnelStatus);
   if (shouldAdvance) {
     await client.from('leads').update({ funnel_status: 'ziyaret' }).eq('uuid', opts.leadUuid);
+    await writeStageHistory({
+      leadUuid: opts.leadUuid,
+      fromStatus: opts.leadFunnelStatus,
+      toStatus: 'ziyaret',
+      changedBy: opts.scheduledBy,
+      source: 'manual',
+    });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (client as any).from('contact_history').insert({
@@ -99,6 +107,13 @@ export async function resolveVisit(opts: {
     const nextStatus = opts.status === 'attended' ? 'ziyaret-etti' : 'ziyaret-etmedi';
 
     await client.from('leads').update({ funnel_status: nextStatus }).eq('uuid', opts.visitLeadUuid);
+    await writeStageHistory({
+      leadUuid: opts.visitLeadUuid,
+      fromStatus: opts.leadFunnelStatus,
+      toStatus: nextStatus,
+      changedBy: opts.resolvedBy,
+      source: 'manual',
+    });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (client as any).from('contact_history').insert({

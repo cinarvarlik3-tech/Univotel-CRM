@@ -25,7 +25,7 @@ export async function claimLead(
 
   const { data: updated, error } = await client
     .from('leads')
-    .update({ assigned_to: userId })
+    .update({ assigned_to: userId, claimed_at: new Date().toISOString() })
     .eq('uuid', leadUuid)
     .is('assigned_to', null)
     .select('*')
