@@ -50,6 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ...parsed.data,
         assigned_to: assignedTo,
         created_by: isManagerOrAbove(session.role) ? 'manager' : 'salesperson',
+        is_auto_created: false,
       })
       .select('*')
       .single();
