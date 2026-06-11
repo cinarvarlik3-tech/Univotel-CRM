@@ -7,10 +7,11 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
+import { MANUAL_INTERACTION_TYPES } from '@/lib/constants';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 const LogContactSchema = z.object({
-  interaction_type: z.enum(['call', 'message', 'contact', 'status_change', 'note']),
+  interaction_type: z.enum(MANUAL_INTERACTION_TYPES),
   interaction_source: z.string().optional(),
   notes: z.string().optional(),
 });

@@ -20,7 +20,7 @@ import { useSalespeople } from '@/hooks/useSalespeople';
 import { useTranslation } from '@/hooks/useTranslation';
 import { isManagerOrAbove } from '@/lib/auth/roles';
 import { buildQueryFromLeadListState } from '@/lib/ui/lead-list-query';
-import type { LeadRow } from '@/types/domain';
+import type { LeadRow, LeadWithDetails } from '@/types/domain';
 
 const HIDDEN_FILTER_FIELDS = new Set(['funnel_status', 'has_moved_in', 'is_24h_restricted']);
 
@@ -32,6 +32,8 @@ interface StageLeadPageProps {
   basePath: string;
   /** Whether to show assignee column (default: true for manager) */
   hideAssignee?: boolean;
+  /** Render a contextual action cell per row. Receives lead + a callback to refresh the list. */
+  renderRowActions?: (lead: LeadWithDetails, onDone: () => void) => React.ReactNode;
 }
 
 function selectedLeadFromQuery(
@@ -47,6 +49,7 @@ export function StageLeadPage({
   stageFilter,
   basePath,
   hideAssignee,
+  renderRowActions,
 }: StageLeadPageProps) {
   const router = useRouter();
   const { t } = useTranslation();
@@ -166,6 +169,7 @@ export function StageLeadPage({
           selectedId={selectedLeadId ?? undefined}
           onRowClick={openLead}
           hideAssignee={hideAssignee ?? !isManager}
+          renderRowActions={renderRowActions ? (lead) => renderRowActions(lead, mutate) : undefined}
         />
       )}
 

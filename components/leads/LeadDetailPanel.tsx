@@ -10,7 +10,12 @@ import { FunnelView } from '@/components/leads/FunnelView';
 import { ProfilTab } from '@/components/leads/ProfilTab';
 import { ManagerLeadActions } from '@/components/leads/ManagerLeadActions';
 import { ContactHistorySection } from '@/components/leads/ContactHistorySection';
+import { ActivityTimeline } from '@/components/leads/ActivityTimeline';
 import { VisitScheduleDialog } from '@/components/leads/VisitScheduleDialog';
+import { LogContactDialog } from '@/components/actions/LogContactDialog';
+import { CreateTaskDialog } from '@/components/actions/CreateTaskDialog';
+import { QuickStageAdvance } from '@/components/actions/QuickStageAdvance';
+import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -45,11 +50,15 @@ export function LeadDetailPanel({
   const [tab, setTab] = useState('genel');
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [visitDialogOpen, setVisitDialogOpen] = useState(false);
+  const [logContactOpen, setLogContactOpen] = useState(false);
+  const [createTaskOpen, setCreateTaskOpen] = useState(false);
 
   useEffect(() => {
     setTab('genel');
     setIsFullScreen(false);
     setVisitDialogOpen(false);
+    setLogContactOpen(false);
+    setCreateTaskOpen(false);
   }, [leadId]);
 
   const sourceDetails =
@@ -106,8 +115,38 @@ export function LeadDetailPanel({
                 <TabsTrigger value="conversation">{t('leads.conversation')}</TabsTrigger>
                 <TabsTrigger value="funnel-view">Funnel</TabsTrigger>
                 <TabsTrigger value="history">{t('leads.history')}</TabsTrigger>
+                <TabsTrigger value="activity">{t('actions.activityTimeline')}</TabsTrigger>
                 {isManager && <TabsTrigger value="actions">{t('leads.actions')}</TabsTrigger>}
               </TabsList>
+
+              {/* Quick-action bar — always visible, always one tap away */}
+              <div className="shrink-0 space-y-2 border-b border-border-default px-5 py-2">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setLogContactOpen(true)}
+                  >
+                    {t('actions.logContact')}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setCreateTaskOpen(true)}
+                  >
+                    {t('actions.createTask')}
+                  </Button>
+                </div>
+                {lead.funnel_status !== 'lost' && lead.funnel_status !== 'sozlesme-imzalandi' && (
+                  <QuickStageAdvance
+                    leadUuid={leadId}
+                    currentStatus={lead.funnel_status}
+                    onSuccess={reload}
+                  />
+                )}
+              </div>
 
               <TabsContent
                 value="genel"
@@ -188,6 +227,13 @@ export function LeadDetailPanel({
                 />
               </TabsContent>
 
+              <TabsContent
+                value="activity"
+                className="mt-0 min-h-0 flex-1 overflow-y-auto px-5 py-4 data-[state=inactive]:hidden"
+              >
+                {tab === 'activity' && <ActivityTimeline leadId={leadId} />}
+              </TabsContent>
+
               {isManager && salespeople && (
                 <TabsContent
                   value="actions"
@@ -209,6 +255,18 @@ export function LeadDetailPanel({
               open={visitDialogOpen}
               leadUuid={leadId}
               onClose={() => setVisitDialogOpen(false)}
+              onSuccess={reload}
+            />
+            <LogContactDialog
+              open={logContactOpen}
+              leadUuid={leadId}
+              onClose={() => setLogContactOpen(false)}
+              onSuccess={reload}
+            />
+            <CreateTaskDialog
+              open={createTaskOpen}
+              leadUuid={leadId}
+              onClose={() => setCreateTaskOpen(false)}
               onSuccess={reload}
             />
           </>

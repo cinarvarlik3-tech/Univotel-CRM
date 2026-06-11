@@ -21,6 +21,7 @@ interface LeadTableProps {
   selectedId?: string;
   onRowClick?: (uuid: string) => void;
   hideAssignee?: boolean;
+  renderRowActions?: (lead: LeadWithDetails) => React.ReactNode;
 }
 
 /**
@@ -51,7 +52,13 @@ function leadDetails(lead: LeadWithDetails): LeadDetailRow | null {
  * @param props - Array of lead rows to display.
  * @returns Lead table element.
  */
-export function LeadTable({ leads, selectedId, onRowClick, hideAssignee }: LeadTableProps) {
+export function LeadTable({
+  leads,
+  selectedId,
+  onRowClick,
+  hideAssignee,
+  renderRowActions,
+}: LeadTableProps) {
   const { locale, t } = useTranslation();
   const emDash = t('common.emDash');
 
@@ -73,6 +80,7 @@ export function LeadTable({ leads, selectedId, onRowClick, hideAssignee }: LeadT
             {!hideAssignee && <TableHead>{t('leads.assignee')}</TableHead>}
             <TableHead>{t('leads.schoolShortname')}</TableHead>
             <TableHead>{t('leads.schoolYear')}</TableHead>
+            {renderRowActions && <TableHead />}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -119,6 +127,11 @@ export function LeadTable({ leads, selectedId, onRowClick, hideAssignee }: LeadT
                     ? formatEnumLabel(locale, 'uniYear', details.uni_year)
                     : emDash}
                 </TableCell>
+                {renderRowActions && (
+                  <TableCell onClick={(e) => e.stopPropagation()} className="text-right">
+                    {renderRowActions(lead)}
+                  </TableCell>
+                )}
               </TableRow>
             );
           })}
