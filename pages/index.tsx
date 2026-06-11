@@ -1,18 +1,14 @@
 /**
- * Root page — redirects to leads list.
+ * Root page — redirects to My Day.
  */
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 
-/**
- * Home page that redirects to /leads.
- * @returns Null render during redirect.
- */
 export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/leads');
+    router.replace('/my-day');
   }, [router]);
 
   return null;

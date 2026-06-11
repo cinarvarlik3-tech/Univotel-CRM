@@ -18,6 +18,7 @@ import {
   IconFileCheck,
   IconHistory,
   IconInbox,
+  IconLayoutDashboard,
   IconMenu2,
   IconPhoneCall,
   IconPlant2,
@@ -45,6 +46,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  { href: '/my-day', labelKey: 'nav.myDay', icon: IconLayoutDashboard },
   { href: '/leads', labelKey: 'nav.leads', icon: IconUsers },
   { href: '/leads/mine', labelKey: 'nav.myLeads', icon: IconUserCheck },
   { href: '/leads/hub', labelKey: 'nav.leadHub', icon: IconInbox },
