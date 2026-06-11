@@ -10,6 +10,7 @@ import {
   FUNNEL_STATUSES,
   PERSONA_TYPES,
   SPECIAL_STATES,
+  STUDENT_GENDER_VALUES,
   STUDENT_STAGES,
 } from '@/lib/constants';
 import type { LeadDetailRow, LeadWithDetails } from '@/types/domain';
@@ -55,10 +56,10 @@ export function GenelTab({ lead, leadId, details, onLeadSaved, onDetailsSaved }:
     label: formatEnumLabel(locale, 'persona', p),
   }));
 
-  const genderOptions: SelectOption[] = [
-    { value: 'male', label: formatEnumLabel(locale, 'gender', 'male') },
-    { value: 'female', label: formatEnumLabel(locale, 'gender', 'female') },
-  ];
+  const genderOptions: SelectOption[] = STUDENT_GENDER_VALUES.map((g) => ({
+    value: g,
+    label: formatEnumLabel(locale, 'gender', g),
+  }));
 
   const stageOptions: SelectOption[] = STUDENT_STAGES.map((s) => ({
     value: s,
@@ -120,7 +121,7 @@ export function GenelTab({ lead, leadId, details, onLeadSaved, onDetailsSaved }:
         }}
       />
 
-      {/* 2. Cinsiyet */}
+      {/* 2. Öğrenci cinsiyeti */}
       <InlineEditField
         label={t('leads.cinsiyet')}
         type="select"
@@ -188,7 +189,21 @@ export function GenelTab({ lead, leadId, details, onLeadSaved, onDetailsSaved }:
         }}
       />
 
-      {/* 7. Notes */}
+      {/* 7. Deal Awaiting */}
+      <InlineEditField
+        label={t('leads.dealAwaiting')}
+        type="select"
+        value={lead.deal_awaiting ? 'true' : 'false'}
+        options={[
+          { value: 'false', label: t('common.no') },
+          { value: 'true', label: t('common.yes') },
+        ]}
+        onSave={async (v) => {
+          onLeadSaved(await patchLead(leadId, { deal_awaiting: v === 'true' }));
+        }}
+      />
+
+      {/* 8. Notes */}
       <InlineEditField
         label={t('leads.notes')}
         type="textarea"

@@ -70,6 +70,7 @@ export function ArchivedLeadListToolbar({
               id="archived_search"
               value={state.search}
               onChange={(e) => update('search', e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && onApply()}
             />
           </FormField>
           <div className="col-span-full flex items-center gap-2">

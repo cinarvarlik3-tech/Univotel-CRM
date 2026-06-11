@@ -14,8 +14,8 @@ import { SourceDetailsPanel } from '@/components/leads/SourceDetailsPanel';
 import { useTranslation } from '@/hooks/useTranslation';
 import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { formatDateTime, formatYesNo } from '@/lib/i18n/format-date';
-import { localeToBcp47 } from '@/lib/i18n/types';
 import { FUNNEL_STATUSES, LOSS_REASONS, ROOM_CATEGORY_VALUES } from '@/lib/constants';
+import { parseRecHotel } from '@/lib/leads/parse-rec-hotel';
 import type { LeadDetailRow, LeadWithDetails } from '@/types/domain';
 
 interface DetayTabProps {
@@ -109,8 +109,63 @@ export function DetayTab({
     label: formatEnumLabel(locale, 'room', r),
   }));
 
+  const recHotelDisplay = (() => {
+    const items = parseRecHotel(details?.rec_hotel);
+    return items?.length ? items.map((r) => r.hotel_name).join(', ') : null;
+  })();
+
   return (
     <div>
+      {/* ── Öncül (always visible) ─────────────────────────── */}
+      <div className="border-b border-border-default pb-3">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+          {t('leads.sectionOncul')}
+        </p>
+        <div className="space-y-2">
+          <InlineEditField
+            label={t('filters.lossReason')}
+            type="select"
+            value={lead.loss_reason ?? ''}
+            options={lossOptions}
+            nullable
+            onSave={async (v) => {
+              onLeadSaved(await patchLead(leadId, { loss_reason: v || null }));
+            }}
+          />
+          <ReadOnlyField
+            label={t('leads.created')}
+            value={formatDateTime(lead.created_at, locale)}
+          />
+          <ReadOnlyField label={t('leads.assignee')} value={assignee} />
+          <ReadOnlyField
+            label={t('filters.channel')}
+            value={lead.message_from ? formatEnumLabel(locale, 'channel', lead.message_from) : null}
+          />
+          <InlineEditField
+            label={t('leads.moveIn')}
+            type="date"
+            value={details?.move_in ?? null}
+            nullable
+            onSave={async (v) => {
+              onDetailsSaved(await patchDetails(leadId, { move_in: v || null }));
+              onReload();
+            }}
+          />
+          {lead.funnel_status === 'sozlesme-imzalandi' && (
+            <InlineEditField
+              label={t('leads.actualMoveInDate')}
+              type="date"
+              value={details?.actual_move_in_date ?? null}
+              nullable
+              onSave={async (v) => {
+                onDetailsSaved(await patchDetails(leadId, { actual_move_in_date: v || null }));
+                onReload();
+              }}
+            />
+          )}
+        </div>
+      </div>
+
       {/* ── Durum ──────────────────────────────────────────── */}
       <CollapsibleSection title={t('leads.status')}>
         <InlineEditField
@@ -122,25 +177,9 @@ export function DetayTab({
             onLeadSaved(await patchLead(leadId, { funnel_status: v as string }));
           }}
         />
-        <InlineEditField
-          label={t('filters.lossReason')}
-          type="select"
-          value={lead.loss_reason ?? ''}
-          options={lossOptions}
-          nullable
-          onSave={async (v) => {
-            onLeadSaved(await patchLead(leadId, { loss_reason: v || null }));
-          }}
-        />
         <ReadOnlyField
           label={t('leads.slaDeadline')}
           value={formatDateTime(lead.sla_deadline, locale)}
-        />
-        <ReadOnlyField label={t('leads.created')} value={formatDateTime(lead.created_at, locale)} />
-        <ReadOnlyField label={t('leads.assignee')} value={assignee} />
-        <ReadOnlyField
-          label={t('filters.channel')}
-          value={lead.message_from ? formatEnumLabel(locale, 'channel', lead.message_from) : null}
         />
         <ReadOnlyField label={t('filters.organic')} value={formatYesNo(lead.is_organic, locale)} />
       </CollapsibleSection>
@@ -165,23 +204,7 @@ export function DetayTab({
             onDetailsSaved(await patchDetails(leadId, { preferred_district: v }));
           }}
         />
-        <InlineEditField
-          label={t('leads.moveIn')}
-          type="text"
-          value={
-            details?.move_in
-              ? new Date(details.move_in).toLocaleDateString(localeToBcp47(locale))
-              : null
-          }
-          nullable
-          onSave={async (v) => {
-            onDetailsSaved(await patchDetails(leadId, { move_in: v || null }));
-          }}
-        />
-        <ReadOnlyField
-          label={t('leads.hotels')}
-          value={details?.interested_hotel?.length ? details.interested_hotel.join(', ') : null}
-        />
+        <ReadOnlyField label={t('leads.recommendedHotel')} value={recHotelDisplay} />
       </CollapsibleSection>
 
       {/* ── Öneri Girdileri ─────────────────────────────────── */}

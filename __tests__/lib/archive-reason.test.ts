@@ -9,9 +9,8 @@ describe('mapArchiveReasonFromFunnel', () => {
     expect(mapArchiveReasonFromFunnel('sozlesme-imzalandi')).toBe('won');
   });
 
-  it('maps negative terminal statuses to lost', () => {
-    expect(mapArchiveReasonFromFunnel('ziyaret-ama-almayacak')).toBe('lost');
-    expect(mapArchiveReasonFromFunnel('ilgilenmiyor')).toBe('lost');
+  it('maps lost status to lost', () => {
+    expect(mapArchiveReasonFromFunnel('lost')).toBe('lost');
   });
 
   it('returns null for non-terminal statuses', () => {

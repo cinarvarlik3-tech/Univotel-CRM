@@ -30,7 +30,7 @@ export function LeadStatusForm({ lead, leadId, onSaved, embedded }: LeadStatusFo
   const [saving, setSaving] = useState(false);
 
   async function handleStatusUpdate() {
-    if (funnelStatus === 'ziyaret-ama-almayacak' && !lossReason) {
+    if (funnelStatus === 'lost' && !lossReason) {
       setError(t('leads.lossReasonRequiredError'));
       return;
     }
@@ -39,7 +39,7 @@ export function LeadStatusForm({ lead, leadId, onSaved, embedded }: LeadStatusFo
     setError('');
 
     const body: Record<string, string> = { funnel_status: funnelStatus };
-    if (funnelStatus === 'ziyaret-ama-almayacak') {
+    if (funnelStatus === 'lost') {
       body.loss_reason = lossReason;
     }
 
@@ -72,7 +72,7 @@ export function LeadStatusForm({ lead, leadId, onSaved, embedded }: LeadStatusFo
           label: formatEnumLabel(locale, 'funnel', s),
         }))}
       />
-      {funnelStatus === 'ziyaret-ama-almayacak' && (
+      {funnelStatus === 'lost' && (
         <FormSelect
           label={t('leads.lossReasonRequired')}
           id="loss_reason"

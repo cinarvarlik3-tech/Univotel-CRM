@@ -3,7 +3,6 @@
  * Single entry point for webhook processors and manual API create.
  */
 import { RETRY_DELAYS_MS } from '@/lib/constants';
-import { assignLead, incrementActiveLeadCount } from '@/lib/leads/assign';
 import type { LeadContactIdentifierKind } from '@/lib/leads/contact-identifier';
 import { findExistingLead, recordDuplicateSubmission } from '@/lib/leads/deduplicate';
 import { normalizeInstagramHandle } from '@/lib/leads/normalize-instagram-handle';
@@ -19,7 +18,6 @@ import { incrementDniLeadCount } from '@/lib/dni/list-active-numbers';
 import { enrichFromGA4Immediate } from '@/lib/ga4/enrich-from-ga4';
 import { runAfterResponse } from '@/lib/webhooks/wait-until';
 import { createServiceClient } from '@/lib/supabase/service';
-import { sendManagerNotification } from '@/lib/notifications/send-manager-alert';
 import { sendTelegramToManagers } from '@/lib/telegram';
 import type { Json } from '@/types/database';
 
@@ -129,10 +127,6 @@ async function executeCreateLead(input: CreateLeadInput): Promise<CreateLeadResu
 
   const createdAt = new Date();
   const { deadline } = calculateSlaDeadline(input.leadSource, createdAt);
-  const { assignedTo } = await assignLead({
-    language: input.language,
-    preferredHotelId: input.preferredHotelId,
-  });
 
   const client = createServiceClient();
 
@@ -146,7 +140,7 @@ async function executeCreateLead(input: CreateLeadInput): Promise<CreateLeadResu
       language: input.language ?? 'tr',
       is_organic: input.isOrganic ?? null,
       source_details: sourceDetails as unknown as Json,
-      assigned_to: assignedTo,
+      assigned_to: null,
       sla_deadline: deadline.toISOString(),
       sla_status: 'on_time',
     })
@@ -191,23 +185,5 @@ async function executeCreateLead(input: CreateLeadInput): Promise<CreateLeadResu
     runAfterResponse(enrichFromGA4Immediate(lead.uuid));
   }
 
-  if (assignedTo) {
-    await incrementActiveLeadCount(assignedTo);
-  } else {
-    await sendManagerNotification({
-      alertType: 'unassigned_lead',
-      leadUuid: lead.uuid,
-      message: `[CRM] Unassigned lead created.\nContact: ${leadPhone}\nSource: ${input.leadSource}\nNo agents available in assignment pool.`,
-    });
-
-    await client.from('contact_history').insert({
-      lead_uuid: lead.uuid,
-      interaction_type: 'reassignment',
-      interaction_source: input.interactionSource,
-      notes: 'Lead created without assignment — pool empty.',
-      metadata: { event: 'unassigned_lead' },
-    });
-  }
-
-  return { type: 'created', uuid: lead.uuid, assignedTo };
+  return { type: 'created', uuid: lead.uuid, assignedTo: null };
 }

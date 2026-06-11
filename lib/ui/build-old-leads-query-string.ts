@@ -6,12 +6,9 @@ import {
   OLD_LEAD_LIST_FILTER_FIELDS,
   OLD_SORTABLE_COLUMNS,
 } from '@/lib/constants';
-import { OLD_LEAD_FILTER_FIELD_META } from '@/lib/query/filter-field-config';
-import { appendListFilterParams, type DateRangeFilter } from '@/lib/ui/append-list-filter-params';
-import {
-  DEFAULT_EXTENDED_LIST_FILTER_FIELDS,
-  type ExtendedListFilterFields,
-} from '@/lib/ui/list-filter-types';
+import { OLD_LEAD_FILTER_FIELD_REGISTRY } from '@/lib/leads/filter-field-registry';
+import { appendFieldFilters } from '@/lib/ui/serialize-field-filters';
+import type { FieldFilterState, SistemDateRanges } from '@/types/filter';
 
 const UI_FILTER_FIELDS = new Set<string>(OLD_LEAD_LIST_FILTER_FIELDS);
 
@@ -21,17 +18,41 @@ export interface OldLeadsListQueryInput {
   cursor?: string;
   limit?: number;
   search?: string;
-  fuzzy?: boolean;
-  filters?: Record<string, string>;
-  extended?: ExtendedListFilterFields;
-  dateFilters?: DateRangeFilter[];
-  scoreMin?: string;
+  fieldFilters?: Record<string, FieldFilterState>;
+  createdFrom?: string;
+  createdTo?: string;
+  lastContactFrom?: string;
+  lastContactTo?: string;
+  moveInFrom?: string;
+  moveInTo?: string;
+}
+
+function sistemRangesFromInput(input: OldLeadsListQueryInput): SistemDateRanges | undefined {
+  const { createdFrom, createdTo, lastContactFrom, lastContactTo, moveInFrom, moveInTo } = input;
+  if (
+    !createdFrom &&
+    !createdTo &&
+    !lastContactFrom &&
+    !lastContactTo &&
+    !moveInFrom &&
+    !moveInTo
+  ) {
+    return undefined;
+  }
+  return {
+    createdFrom: createdFrom ?? '',
+    createdTo: createdTo ?? '',
+    slaFrom: '',
+    slaTo: '',
+    lastContactFrom: lastContactFrom ?? '',
+    lastContactTo: lastContactTo ?? '',
+    moveInFrom: moveInFrom ?? '',
+    moveInTo: moveInTo ?? '',
+  };
 }
 
 /**
  * Builds a query string for GET /api/old-leads.
- * @param input - Sort, cursor, limit, search, fuzzy, filters, and date ranges.
- * @returns Query string including leading `?`, or empty string if no params.
  */
 export function buildOldLeadsQueryString(input: OldLeadsListQueryInput): string {
   const params = new URLSearchParams();
@@ -51,17 +72,11 @@ export function buildOldLeadsQueryString(input: OldLeadsListQueryInput): string 
     params.set('search', search);
   }
 
-  if (input.fuzzy && search) {
-    params.set('fuzzy', '1');
-  }
-
-  appendListFilterParams(params, {
+  appendFieldFilters(params, {
+    fieldFilters: input.fieldFilters ?? {},
+    sistemRanges: sistemRangesFromInput(input),
     allowedFields: UI_FILTER_FIELDS,
-    fieldMeta: OLD_LEAD_FILTER_FIELD_META,
-    filters: input.filters,
-    extended: input.extended ?? DEFAULT_EXTENDED_LIST_FILTER_FIELDS,
-    dateFilters: input.dateFilters,
-    scoreMin: input.scoreMin,
+    registry: OLD_LEAD_FILTER_FIELD_REGISTRY,
     oldLeadRecHotel: true,
   });
 

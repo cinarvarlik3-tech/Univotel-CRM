@@ -7,7 +7,9 @@ import { ArchiveLeadModal } from '@/components/leads/ArchiveLeadModal';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FormSelect } from '@/components/ui/form-select';
+import { useAuth } from '@/hooks/useAuth';
 import { useTranslation } from '@/hooks/useTranslation';
+import { isSuperadmin } from '@/lib/auth/roles';
 import type { LeadWithDetails, SalespersonOption } from '@/types/domain';
 
 interface ManagerLeadActionsProps {
@@ -35,10 +37,35 @@ export function ManagerLeadActions({
 }: ManagerLeadActionsProps) {
   const router = useRouter();
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [assignedTo, setAssignedTo] = useState(lead.assigned_to ?? '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [clearing24h, setClearing24h] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+
+  const canClear24h = isSuperadmin(user?.role);
+
+  async function handleClear24hRestriction() {
+    setClearing24h(true);
+    setError('');
+
+    const res = await fetch(`/api/leads/${leadId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_24h_restricted: false }),
+    });
+
+    const json = await res.json();
+    setClearing24h(false);
+
+    if (!res.ok) {
+      setError(json.error ?? t('leads.clear24hFailed'));
+      return;
+    }
+
+    onReassigned();
+  }
 
   async function handleReassign() {
     setSaving(true);
@@ -114,6 +141,28 @@ export function ManagerLeadActions({
           {t('leads.deleteLead')}
         </Button>
       </div>
+      {lead.is_24h_restricted && (
+        <div className="rounded-lg border border-[var(--badge-warning-border,theme(colors.amber.300))] bg-amber-50 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-800">
+            {t('leads.restriction24hTitle')}
+          </p>
+          <p className="mt-1 text-xs text-amber-700">
+            {canClear24h ? t('leads.clear24hHint') : t('leads.clear24hSuperadminOnly')}
+          </p>
+          {canClear24h && (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="mt-2"
+              onClick={handleClear24hRestriction}
+              disabled={clearing24h}
+            >
+              {clearing24h ? t('common.saving') : t('leads.clear24hRestriction')}
+            </Button>
+          )}
+        </div>
+      )}
       {error && <p className="text-xs text-brand-red">{error}</p>}
       <ArchiveLeadModal
         leadId={leadId}

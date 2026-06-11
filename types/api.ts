@@ -20,8 +20,7 @@ export interface CreateLeadRequest {
   lead_phone: string;
   language?: string;
   university?: string;
-  budget_min?: number;
-  budget_max?: number;
+  budget_tier?: string;
   notes?: string;
 }
 
@@ -42,8 +41,7 @@ export interface UpdateLeadRequest {
 /** Lead details update request body. */
 export interface UpdateLeadDetailsRequest {
   university?: string | null;
-  budget_min?: number | null;
-  budget_max?: number | null;
+  budget_tier?: string | null;
   move_in?: string | null;
   uni_year?: string | null;
   parent_name?: string | null;

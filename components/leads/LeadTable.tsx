@@ -1,7 +1,7 @@
 /**
  * Lead table component for list view.
  */
-import type { LeadRow } from '@/types/domain';
+import type { LeadDetailRow, LeadWithDetails } from '@/types/domain';
 import {
   Table,
   TableBody,
@@ -17,7 +17,7 @@ import { displayLeadContactIdentifier } from '@/lib/ui/display-phone';
 import { cn } from '@/lib/utils';
 
 interface LeadTableProps {
-  leads: LeadRow[];
+  leads: LeadWithDetails[];
   selectedId?: string;
   onRowClick?: (uuid: string) => void;
   hideAssignee?: boolean;
@@ -29,10 +29,21 @@ interface LeadTableProps {
  * @param emDash - Localized empty placeholder.
  * @returns Assignee name or em dash.
  */
-function assigneeLabel(lead: LeadRow, emDash: string): string {
+function assigneeLabel(lead: LeadWithDetails, emDash: string): string {
   if (lead.assignee_name) return lead.assignee_name;
   if (lead.salespeople?.full_name) return lead.salespeople.full_name;
   return emDash;
+}
+
+/**
+ * Reads nested lead_details from a list row.
+ * @param lead - Lead row from API.
+ * @returns Parsed lead details or null.
+ */
+function leadDetails(lead: LeadWithDetails): LeadDetailRow | null {
+  const details = lead.lead_details;
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return null;
+  return details as LeadDetailRow;
 }
 
 /**
@@ -60,12 +71,14 @@ export function LeadTable({ leads, selectedId, onRowClick, hideAssignee }: LeadT
             <TableHead>{t('leads.tableFunnelStatus')}</TableHead>
             <TableHead>{t('leads.tableStudentStage')}</TableHead>
             {!hideAssignee && <TableHead>{t('leads.assignee')}</TableHead>}
-            <TableHead>{t('leads.tableSla')}</TableHead>
+            <TableHead>{t('leads.schoolShortname')}</TableHead>
+            <TableHead>{t('leads.schoolYear')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {leads.map((lead) => {
             const selected = selectedId === lead.uuid;
+            const details = leadDetails(lead);
             return (
               <TableRow
                 key={lead.uuid}
@@ -77,6 +90,9 @@ export function LeadTable({ leads, selectedId, onRowClick, hideAssignee }: LeadT
                   <div className={cn('font-medium', selected && 'text-brand-blue')}>
                     {lead.lead_name ?? emDash}
                   </div>
+                  {lead.deal_awaiting && (
+                    <div className="text-xs font-semibold text-red-600">DEAL AWAITING</div>
+                  )}
                   <div className="text-xs text-text-secondary">
                     {displayLeadContactIdentifier(lead)}
                   </div>
@@ -95,8 +111,13 @@ export function LeadTable({ leads, selectedId, onRowClick, hideAssignee }: LeadT
                     {assigneeLabel(lead, emDash)}
                   </TableCell>
                 )}
-                <TableCell>
-                  <StatusBadge status={lead.sla_status} type="sla" />
+                <TableCell className="text-text-secondary">
+                  {details?.school_shortname ?? emDash}
+                </TableCell>
+                <TableCell className="text-text-secondary">
+                  {details?.uni_year
+                    ? formatEnumLabel(locale, 'uniYear', details.uni_year)
+                    : emDash}
                 </TableCell>
               </TableRow>
             );

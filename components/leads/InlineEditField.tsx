@@ -8,6 +8,7 @@ import { useState, type ReactNode } from 'react';
 import { IconCheck, IconPencil, IconX } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/useTranslation';
+import { localeToBcp47, type Locale } from '@/lib/i18n/types';
 import { cn } from '@/lib/utils';
 
 export interface SelectOption {
@@ -15,7 +16,15 @@ export interface SelectOption {
   label: string;
 }
 
-type FieldType = 'text' | 'textarea' | 'select' | 'multiselect';
+type FieldType = 'text' | 'textarea' | 'date' | 'select' | 'multiselect';
+
+/** Extracts the YYYY-MM-DD portion from an ISO date/timestamp string. */
+function toDateInputValue(value: string | null | undefined): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
 
 // ─── ReadOnlyField ────────────────────────────────────────────────────────────
 
@@ -53,7 +62,7 @@ interface BaseProps {
 }
 
 interface TextProps extends BaseProps {
-  type?: 'text' | 'textarea';
+  type?: 'text' | 'textarea' | 'date';
   value: string | null | undefined;
 }
 
@@ -75,6 +84,7 @@ function displayValue(
   type: FieldType,
   value: string | string[] | null | undefined,
   options: SelectOption[] | undefined,
+  locale: Locale,
 ): ReactNode {
   if (type === 'multiselect') {
     const arr = value as string[] | null | undefined;
@@ -85,6 +95,10 @@ function displayValue(
   if (!str) return null;
   if (type === 'select') return options?.find((o) => o.value === str)?.label ?? str;
   if (type === 'textarea') return <span className="whitespace-pre-wrap">{str}</span>;
+  if (type === 'date') {
+    const d = new Date(str);
+    return Number.isNaN(d.getTime()) ? str : d.toLocaleDateString(localeToBcp47(locale));
+  }
   return str;
 }
 
@@ -100,7 +114,7 @@ export function InlineEditField({
   onSave,
   className,
 }: InlineEditFieldProps) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +128,8 @@ export function InlineEditField({
       setDraftMulti((value as string[] | null | undefined) ?? []);
     } else if (type === 'select') {
       setDraftSelect((value as string | null | undefined) ?? '');
+    } else if (type === 'date') {
+      setDraftText(toDateInputValue(value as string | null | undefined));
     } else {
       setDraftText((value as string | null | undefined) ?? '');
     }
@@ -151,7 +167,7 @@ export function InlineEditField({
     setDraftMulti((prev) => (prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]));
   }
 
-  const displayed = displayValue(type, value, options);
+  const displayed = displayValue(type, value, options, locale);
 
   if (editing) {
     return (
@@ -190,6 +206,20 @@ export function InlineEditField({
                 if (e.key === 'Escape') cancel();
               }}
               className="w-full resize-none rounded-md border border-border-strong bg-surface-page px-2.5 py-1.5 text-sm text-text-primary outline-none focus:border-brand-blue"
+            />
+          )}
+
+          {type === 'date' && (
+            <input
+              autoFocus
+              type="date"
+              value={draftText}
+              onChange={(e) => setDraftText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void save();
+                if (e.key === 'Escape') cancel();
+              }}
+              className="w-full rounded-md border border-border-strong bg-surface-page px-2.5 py-1.5 text-sm text-text-primary outline-none focus:border-brand-blue"
             />
           )}
 

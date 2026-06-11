@@ -6,16 +6,20 @@ import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
 import { isManagerOrAbove } from '@/lib/auth/roles';
+import { hasCustomAttrMappedDetailUpdates } from '@/lib/chatwoot/sync-custom-attributes';
 import { hasLabelMappedDetailUpdates, pushLabelsToChatwoot } from '@/lib/chatwoot/sync-labels';
-import { DORM_AWAITING_VALUES, UNI_YEARS } from '@/lib/constants';
+import { pushCustomAttributesToChatwoot } from '@/lib/chatwoot/push-custom-attributes';
+import { BUDGET_TIERS, DORM_AWAITING_VALUES, UNI_YEARS } from '@/lib/constants';
 import { isChatwootLabelSyncEnabled } from '@/lib/env';
+import { applyLeadFlagsFromDetails } from '@/lib/leads/update-lead';
+import { budgetTierWritePayload } from '@/lib/leads/budget-tier';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 const UpdateLeadDetailsSchema = z.object({
   university: z.string().nullable().optional(),
-  budget_min: z.number().nullable().optional(),
-  budget_max: z.number().nullable().optional(),
+  budget_tier: z.enum(BUDGET_TIERS).nullable().optional(),
   move_in: z.string().nullable().optional(),
+  actual_move_in_date: z.string().nullable().optional(),
   uni_year: z.enum(UNI_YEARS).nullable().optional(),
   parent_name: z.string().nullable().optional(),
   preferred_district: z.string().nullable().optional(),
@@ -61,9 +65,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return sendError(res, 'Invalid input', 400, parsed.error.flatten().fieldErrors);
     }
 
+    const patch = { ...parsed.data } as Record<string, unknown>;
+    if ('budget_tier' in patch) {
+      Object.assign(patch, budgetTierWritePayload(patch.budget_tier as string | null | undefined));
+    }
+
+    // Fetch current lead to check funnel_status for move_in_date_set gating.
+    const { data: leadRow } = await supabase
+      .from('leads')
+      .select('funnel_status')
+      .eq('uuid', leadId)
+      .maybeSingle();
+
+    const moveInDateCapableStatuses = new Set(['kapora-alindi', 'sozlesme-imzalandi']);
+    const canSetMoveInDate = leadRow && moveInDateCapableStatuses.has(leadRow.funnel_status);
+
     const { data, error } = await supabase
       .from('lead_details')
-      .update(parsed.data)
+      .update(patch)
       .eq('lead_uuid', leadId)
       .select('*')
       .maybeSingle();
@@ -71,8 +90,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (error) return sendError(res, 'Failed to update lead details', 500);
     if (!data) return sendError(res, 'Lead details not found', 404);
 
-    if (isChatwootLabelSyncEnabled() && hasLabelMappedDetailUpdates(parsed.data)) {
-      void pushLabelsToChatwoot(leadId);
+    // Propagate actual_move_in_date → has_moved_in and move_in → move_in_date_set.
+    void applyLeadFlagsFromDetails(leadId, parsed.data, canSetMoveInDate ?? false);
+
+    if (isChatwootLabelSyncEnabled()) {
+      if (hasLabelMappedDetailUpdates(parsed.data)) {
+        void pushLabelsToChatwoot(leadId);
+      }
+      if (hasCustomAttrMappedDetailUpdates(parsed.data)) {
+        void pushCustomAttributesToChatwoot(leadId);
+      }
     }
 
     return sendSuccess(res, data);

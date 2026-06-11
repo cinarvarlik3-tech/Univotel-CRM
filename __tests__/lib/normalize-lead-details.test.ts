@@ -8,8 +8,8 @@ describe('normalizeLeadDetails', () => {
   const row = {
     lead_uuid: '11111111-1111-1111-1111-111111111111',
     university: 'Bogazici',
-    budget_min: 1000,
-    budget_max: 2000,
+    budget_tier: 'yuksek-butce',
+    budget_max: 35000,
     move_in: null,
     uni_year: '1',
     parent_name: null,

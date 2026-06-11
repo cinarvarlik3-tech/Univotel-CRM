@@ -22,11 +22,11 @@ describe('splitFilters', () => {
   });
 
   it('detects join requirement', () => {
-    expect(requiresLeadDetailsJoin([{ field: 'budget_min', operator: 'gte', value: '1000' }])).toBe(
-      true,
-    );
-    expect(requiresLeadDetailsJoin([{ field: 'funnel_status', operator: 'eq', value: 'yeni' }])).toBe(
-      false,
-    );
+    expect(
+      requiresLeadDetailsJoin([{ field: 'budget_tier', operator: 'eq', value: 'ortalama' }]),
+    ).toBe(true);
+    expect(
+      requiresLeadDetailsJoin([{ field: 'funnel_status', operator: 'eq', value: 'yeni' }]),
+    ).toBe(false);
   });
 });

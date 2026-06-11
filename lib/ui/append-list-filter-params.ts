@@ -119,6 +119,10 @@ export function appendListFilterParams(
     params.set('filter[lead_score][gte]', scoreMin);
   }
 
+  if (extended.budgetTier && allowedFields.has('budget_tier')) {
+    params.set('filter[budget_tier][eq]', extended.budgetTier);
+  }
+
   if (extended.budgetMin && allowedFields.has('budget_min')) {
     params.set('filter[budget_min][gte]', extended.budgetMin);
   }
@@ -157,13 +161,13 @@ export function appendListFilterParams(
     params.set('filter[student_gender][is]', 'null');
   }
 
-  if (
-    extended.missingBudget &&
-    allowedFields.has('budget_min') &&
-    allowedFields.has('budget_max')
-  ) {
-    params.set('filter[budget_min][is]', 'null');
-    params.set('filter[budget_max][is]', 'null');
+  if (extended.missingBudget) {
+    if (allowedFields.has('budget_tier')) {
+      params.set('filter[budget_tier][is]', 'null');
+    } else if (allowedFields.has('budget_min') && allowedFields.has('budget_max')) {
+      params.set('filter[budget_min][is]', 'null');
+      params.set('filter[budget_max][is]', 'null');
+    }
   }
 
   appendPresenceFilter(params, 'parent_phone', extended.hasParentPhone);

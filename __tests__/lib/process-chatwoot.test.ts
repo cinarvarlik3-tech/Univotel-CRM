@@ -61,6 +61,68 @@ function defaultSupabaseMock() {
   };
 }
 
+interface DbCapture {
+  op: 'update' | 'upsert' | 'insert';
+  table: string;
+  payload: Record<string, unknown>;
+}
+
+/** Lead row baseline matching LeadSyncRow shape. */
+function leadRow(overrides: Record<string, unknown> = {}) {
+  return {
+    uuid: 'lead-uuid-1',
+    funnel_status: 'ziyaret-etti',
+    student_stage: 'unknown',
+    persona_type: null,
+    special_state: null,
+    message_from: 'whatsapp',
+    lead_source: 'whatsapp',
+    is_organic: true,
+    deal_awaiting: false,
+    source_details: { external_id: 'conv_124' },
+    label_sync_source: null,
+    label_synced_at: null,
+    loss_reason: null,
+    funnel_status_before_lost: null,
+    ...overrides,
+  };
+}
+
+/** Supabase mock that returns a fixed lead + lead_details and captures writes. */
+function leadSyncMock(
+  lead: Record<string, unknown>,
+  details: Record<string, unknown> | null,
+  captures: DbCapture[],
+) {
+  return () => ({
+    from: (table: string) => {
+      const result =
+        table === 'lead_details' ? { data: details, error: null } : { data: lead, error: null };
+      const chain: Record<string, unknown> = {
+        eq: () => chain,
+        like: () => chain,
+        limit: () => chain,
+        maybeSingle: () => Promise.resolve(result),
+      };
+      return {
+        select: () => chain,
+        update: (payload: Record<string, unknown>) => {
+          captures.push({ op: 'update', table, payload });
+          return { eq: () => Promise.resolve({ error: null }) };
+        },
+        upsert: (payload: Record<string, unknown>) => {
+          captures.push({ op: 'upsert', table, payload });
+          return Promise.resolve({ error: null });
+        },
+        insert: (payload: Record<string, unknown>) => {
+          captures.push({ op: 'insert', table, payload });
+          return Promise.resolve({ error: null });
+        },
+      };
+    },
+  });
+}
+
 describe('processChatwoot', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -231,5 +293,171 @@ describe('processChatwoot', () => {
 
     expect(createLeadFromWebhook).not.toHaveBeenCalled();
     expect(sendTelegramToManagers).toHaveBeenCalled();
+  });
+
+  it('moves lead to lost and saves prior stage when kayip_nedeni is set', async () => {
+    const captures: DbCapture[] = [];
+    mockCreateServiceClient.mockImplementation(
+      leadSyncMock(leadRow({ funnel_status: 'ziyaret-etti' }), { university: null }, captures),
+    );
+
+    await processChatwoot({
+      event: 'conversation_updated',
+      id: 124,
+      conversation: { id: 124 },
+      changed_attributes: [
+        { custom_attributes: { current_value: { kayip_nedeni: 'Rakip' }, previous_value: {} } },
+      ],
+    });
+
+    const leadUpdate = captures.find(
+      (c) => c.op === 'update' && c.table === 'leads' && 'funnel_status' in c.payload,
+    );
+    expect(leadUpdate?.payload).toMatchObject({
+      funnel_status: 'lost',
+      loss_reason: 'competitor',
+      funnel_status_before_lost: 'ziyaret-etti',
+    });
+  });
+
+  it('restores prior stage when kayip_nedeni is cleared on a lost lead', async () => {
+    const captures: DbCapture[] = [];
+    mockCreateServiceClient.mockImplementation(
+      leadSyncMock(
+        leadRow({
+          funnel_status: 'lost',
+          loss_reason: 'competitor',
+          funnel_status_before_lost: 'ziyaret-etti',
+        }),
+        { university: null },
+        captures,
+      ),
+    );
+
+    await processChatwoot({
+      event: 'conversation_updated',
+      id: 124,
+      conversation: { id: 124 },
+      changed_attributes: [
+        { custom_attributes: { current_value: {}, previous_value: { kayip_nedeni: 'Rakip' } } },
+      ],
+    });
+
+    const leadUpdate = captures.find(
+      (c) => c.op === 'update' && c.table === 'leads' && 'funnel_status' in c.payload,
+    );
+    expect(leadUpdate?.payload).toMatchObject({
+      funnel_status: 'ziyaret-etti',
+      loss_reason: null,
+      funnel_status_before_lost: null,
+    });
+  });
+
+  it('moves lead to lost when the kayıp label is added', async () => {
+    const captures: DbCapture[] = [];
+    mockCreateServiceClient.mockImplementation(
+      leadSyncMock(leadRow({ funnel_status: 'arandi' }), { university: null }, captures),
+    );
+
+    await processChatwoot({
+      event: 'conversation_updated',
+      id: 124,
+      conversation: { id: 124 },
+      changed_attributes: [{ label_list: { current_value: ['kayıp'], previous_value: [] } }],
+    });
+
+    const leadUpdate = captures.find(
+      (c) => c.op === 'update' && c.table === 'leads' && 'funnel_status' in c.payload,
+    );
+    expect(leadUpdate?.payload).toMatchObject({
+      funnel_status: 'lost',
+      funnel_status_before_lost: 'arandi',
+    });
+  });
+
+  it('uses another funnel label on removal instead of defaulting to yeni', async () => {
+    const captures: DbCapture[] = [];
+    mockCreateServiceClient.mockImplementation(
+      leadSyncMock(leadRow({ funnel_status: 'ziyaret-etti' }), { university: null }, captures),
+    );
+
+    await processChatwoot({
+      event: 'conversation_updated',
+      id: 124,
+      conversation: { id: 124 },
+      changed_attributes: [
+        {
+          label_list: {
+            current_value: ['arandi', 'pre-sinav'],
+            previous_value: ['arandi', 'ziyaret-etti', 'pre-sinav'],
+          },
+        },
+      ],
+    });
+
+    const leadUpdate = captures.find(
+      (c) => c.op === 'update' && c.table === 'leads' && 'funnel_status' in c.payload,
+    );
+    expect(leadUpdate?.payload).toMatchObject({ funnel_status: 'arandi' });
+  });
+
+  it('writes ogrenci_cinsiyeti to lead_details.student_gender', async () => {
+    const captures: DbCapture[] = [];
+    mockCreateServiceClient.mockImplementation(
+      leadSyncMock(leadRow({ funnel_status: 'arandi' }), { student_gender: null }, captures),
+    );
+
+    await processChatwoot({
+      event: 'conversation_updated',
+      id: 124,
+      conversation: { id: 124 },
+      changed_attributes: [
+        {
+          custom_attributes: {
+            current_value: { ogrenci_cinsiyeti: 'Kız' },
+            previous_value: {},
+          },
+        },
+      ],
+    });
+
+    const upsert = captures.find((c) => c.op === 'upsert' && c.table === 'lead_details');
+    expect(upsert?.payload).toMatchObject({
+      lead_uuid: 'lead-uuid-1',
+      student_gender: 'female',
+    });
+  });
+
+  it('writes a changed custom attribute to lead_details', async () => {
+    const captures: DbCapture[] = [];
+    mockCreateServiceClient.mockImplementation(
+      leadSyncMock(leadRow({ funnel_status: 'arandi' }), { university: null }, captures),
+    );
+
+    await processChatwoot({
+      event: 'conversation_updated',
+      id: 124,
+      conversation: { id: 124 },
+      changed_attributes: [
+        {
+          custom_attributes: {
+            current_value: { university: 'Boğaziçi - Ana Kampüs' },
+            previous_value: {},
+          },
+        },
+      ],
+    });
+
+    const upsert = captures.find((c) => c.op === 'upsert' && c.table === 'lead_details');
+    expect(upsert?.payload).toMatchObject({
+      lead_uuid: 'lead-uuid-1',
+      university: 'Boğaziçi - Ana Kampüs',
+      school_shortname: 'Boğaziçi',
+    });
+    // A pure custom-attribute edit must not touch funnel_status.
+    const funnelUpdate = captures.find(
+      (c) => c.op === 'update' && c.table === 'leads' && 'funnel_status' in c.payload,
+    );
+    expect(funnelUpdate).toBeUndefined();
   });
 });

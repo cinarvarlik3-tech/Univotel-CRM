@@ -585,7 +585,7 @@ export type Database = {
       lead_details: {
         Row: {
           budget_max: number | null;
-          budget_min: number | null;
+          budget_tier: string | null;
           campus: string | null;
           created_at: string;
           district_preference: string | null;
@@ -601,6 +601,7 @@ export type Database = {
           rec_hotel: Json | null;
           room_category: string | null;
           room_type: string[];
+          school_shortname: string | null;
           student_gender: string | null;
           uni_year: string | null;
           university: string | null;
@@ -608,7 +609,7 @@ export type Database = {
         };
         Insert: {
           budget_max?: number | null;
-          budget_min?: number | null;
+          budget_tier?: string | null;
           campus?: string | null;
           created_at?: string;
           district_preference?: string | null;
@@ -624,6 +625,7 @@ export type Database = {
           rec_hotel?: Json | null;
           room_category?: string | null;
           room_type?: string[];
+          school_shortname?: string | null;
           student_gender?: string | null;
           uni_year?: string | null;
           university?: string | null;
@@ -631,7 +633,7 @@ export type Database = {
         };
         Update: {
           budget_max?: number | null;
-          budget_min?: number | null;
+          budget_tier?: string | null;
           campus?: string | null;
           created_at?: string;
           district_preference?: string | null;
@@ -647,6 +649,7 @@ export type Database = {
           rec_hotel?: Json | null;
           room_category?: string | null;
           room_type?: string[];
+          school_shortname?: string | null;
           student_gender?: string | null;
           uni_year?: string | null;
           university?: string | null;
@@ -679,6 +682,7 @@ export type Database = {
           is_private: boolean;
           lead_uuid: string;
           message_type: string;
+          notified_at: string | null;
           sender_id: number | null;
           sender_name: string | null;
           sender_type: string | null;
@@ -693,6 +697,7 @@ export type Database = {
           is_private?: boolean;
           lead_uuid: string;
           message_type: string;
+          notified_at?: string | null;
           sender_id?: number | null;
           sender_name?: string | null;
           sender_type?: string | null;
@@ -707,6 +712,7 @@ export type Database = {
           is_private?: boolean;
           lead_uuid?: string;
           message_type?: string;
+          notified_at?: string | null;
           sender_id?: number | null;
           sender_name?: string | null;
           sender_type?: string | null;
@@ -739,7 +745,9 @@ export type Database = {
           chatwoot_conversation_id: number | null;
           created_at: string;
           deleted_at: string | null;
+          deal_awaiting: boolean;
           funnel_status: string;
+          funnel_status_before_lost: string | null;
           is_archived: boolean;
           is_deleted: boolean;
           is_organic: boolean | null;
@@ -774,7 +782,9 @@ export type Database = {
           chatwoot_conversation_id?: number | null;
           created_at?: string;
           deleted_at?: string | null;
+          deal_awaiting?: boolean;
           funnel_status?: string;
+          funnel_status_before_lost?: string | null;
           is_archived?: boolean;
           is_deleted?: boolean;
           is_organic?: boolean | null;
@@ -809,7 +819,9 @@ export type Database = {
           chatwoot_conversation_id?: number | null;
           created_at?: string;
           deleted_at?: string | null;
+          deal_awaiting?: boolean;
           funnel_status?: string;
+          funnel_status_before_lost?: string | null;
           is_archived?: boolean;
           is_deleted?: boolean;
           is_organic?: boolean | null;
@@ -1364,6 +1376,45 @@ export type Database = {
         };
         Relationships: [];
       };
+      universities: {
+        Row: {
+          city: string;
+          country: string;
+          created_at: string;
+          district: string | null;
+          id: string;
+          is_active: boolean;
+          uni_name: string;
+          uni_shortname: string;
+          updated_at: string;
+          yok_code: string | null;
+        };
+        Insert: {
+          city?: string;
+          country?: string;
+          created_at?: string;
+          district?: string | null;
+          id?: string;
+          is_active?: boolean;
+          uni_name: string;
+          uni_shortname: string;
+          updated_at?: string;
+          yok_code?: string | null;
+        };
+        Update: {
+          city?: string;
+          country?: string;
+          created_at?: string;
+          district?: string | null;
+          id?: string;
+          is_active?: boolean;
+          uni_name?: string;
+          uni_shortname?: string;
+          updated_at?: string;
+          yok_code?: string | null;
+        };
+        Relationships: [];
+      };
       salespeople: {
         Row: {
           active_lead_count: number;
@@ -1665,7 +1716,7 @@ export type Database = {
       lead_details_safe: {
         Row: {
           budget_max: number | null;
-          budget_min: number | null;
+          budget_tier: string | null;
           campus: string | null;
           created_at: string | null;
           district_preference: string | null;
@@ -1681,6 +1732,7 @@ export type Database = {
           rec_hotel: Json | null;
           room_category: string | null;
           room_type: string[] | null;
+          school_shortname: string | null;
           student_gender: string | null;
           uni_year: string | null;
           university: string | null;
@@ -1688,7 +1740,7 @@ export type Database = {
         };
         Insert: {
           budget_max?: number | null;
-          budget_min?: number | null;
+          budget_tier?: string | null;
           campus?: string | null;
           created_at?: string | null;
           district_preference?: string | null;
@@ -1704,6 +1756,7 @@ export type Database = {
           rec_hotel?: Json | null;
           room_category?: string | null;
           room_type?: string[] | null;
+          school_shortname?: string | null;
           student_gender?: never;
           uni_year?: string | null;
           university?: string | null;
@@ -1711,7 +1764,7 @@ export type Database = {
         };
         Update: {
           budget_max?: number | null;
-          budget_min?: number | null;
+          budget_tier?: string | null;
           campus?: string | null;
           created_at?: string | null;
           district_preference?: string | null;
@@ -1727,6 +1780,7 @@ export type Database = {
           rec_hotel?: Json | null;
           room_category?: string | null;
           room_type?: string[] | null;
+          school_shortname?: string | null;
           student_gender?: never;
           uni_year?: string | null;
           university?: string | null;

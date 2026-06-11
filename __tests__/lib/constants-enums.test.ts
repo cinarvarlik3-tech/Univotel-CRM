@@ -8,6 +8,7 @@ import {
   LEAD_SOURCES,
   LOSS_REASONS,
   MESSAGE_FROM_VALUES,
+  normalizeChatwootFunnelLabel,
   SPECIAL_STATES,
 } from '@/lib/constants';
 
@@ -40,7 +41,7 @@ describe('constants enums', () => {
   });
 
   it('LOSS_REASONS is non-empty and duplicate-free', () => {
-    expect(LOSS_REASONS.length).toBe(8);
+    expect(LOSS_REASONS.length).toBe(9);
     expect(hasNoDuplicates(LOSS_REASONS)).toBe(true);
   });
 
@@ -48,5 +49,11 @@ describe('constants enums', () => {
     expect(DORM_AWAITING_VALUES.length).toBe(3);
     expect(DORM_AWAITING_VALUES[0]).toBe('kyk-sonuc-bekliyor');
     expect(hasNoDuplicates(DORM_AWAITING_VALUES)).toBe(true);
+  });
+
+  it('normalizeChatwootFunnelLabel maps kayıp to lost', () => {
+    expect(normalizeChatwootFunnelLabel('kayıp')).toBe('lost');
+    expect(normalizeChatwootFunnelLabel('KAYIP')).toBe('lost');
+    expect(normalizeChatwootFunnelLabel('arandi')).toBe('arandi');
   });
 });

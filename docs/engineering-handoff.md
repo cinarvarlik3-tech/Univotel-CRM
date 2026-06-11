@@ -1,6 +1,6 @@
 # Univotel CRM — Engineering Handoff
 
-**Last updated:** 2026-05-28  
+**Last updated:** 2026-06-09  
 **Production:** https://panel.marketinguni.app  
 **Audience:** Engineers taking over development, on-call, or deployment.
 
@@ -72,14 +72,15 @@ lib/
   leads/            create, assign, dedupe, SLA, archive, save-rec-hotel, parse-rec-hotel, chat sync
   webhooks/         processors, verify, normalize-netgsm-payload, webhook_logs, replay
   query/            filter-builder, split-filters, composite filters, supabase-query-types
-  ui/               build-*-query-string, append-list-filter-params, list-filter-types
+  ui/               build-*-query-string, serialize-field-filters, lead-list-query
+  leads/            … filter-field-registry, budget-tier
   chatwoot/         API client, label sync, messages
   campaigns/        segment, worker, WhatsApp template send
   attribution/      collected_data, confidence, GA4
   dni/              lookup, normalize, increment lead_count
   auth/             session, roles
 
-supabase/migrations/   0001–0047 (47 files)
+supabase/migrations/   0001–0061 (61 files)
 types/                 database.ts (generated), domain.ts, webhooks.ts
 docs/                  runbook, onboarding, this file, netgsm-integration
 ```
@@ -100,6 +101,8 @@ After any migration: `pnpm gen:types`.
 | 0042–0044 | Property availability, room types, physical rooms                                              |
 | 0045–0046 | lead_details rec fields (campus, room_category, rec_hotel jsonb); drop redundant gender column |
 | 0047      | `search_old_leads_ids` RPC (fuzzy search on old leads)                                         |
+| 0048–0060 | Lead messaging, universities, deal_awaiting, funnel stages, loss_reason trigger, Chatwoot sync |
+| 0061      | `budget_tier` replaces `budget_min`; derived `budget_max`; Chatwoot `butce` sync               |
 
 **Lead lifecycle states:** Active (`is_deleted=false`, `is_archived=false`) → Archived → soft-deleted.
 
@@ -132,26 +135,36 @@ Full NetGSM detail: [`netgsm-integration.md`](./netgsm-integration.md).
 
 ## 7. Lead list filters (active + old leads)
 
-**Shipped 2026-05:** Tier 1 + Tier 2 filter expansion with shared query pipeline.
+**Shipped 2026-06:** Filter panel revamp — four sections mirroring lead detail tabs (Genel / Profil / Detay / Sistem), per-field **Değer / Dolu / Boş** modes, per-field fuzzy on text inputs.
 
-**UI:** `/leads` and `/old-leads` toolbars have collapsible sections (Pipeline open by default). Filters map to `filter[field][operator]=value` query params.
+**UI:** `/leads` and `/old-leads` toolbars share the same layout. Top bar: search, Filters toggle, sort, Apply, Clear. Filter panel sections are collapsible (Genel open by default). Pipeline view reuses applied state with funnel/deal-awaiting overrides.
+
+**State model:** `types/filter.ts` → `LeadListFilterState.fieldFilters` (per-field mode + value). Serialized by `lib/ui/serialize-field-filters.ts`.
 
 **Query layer:**
 
-| Module                                 | Role                                                              |
-| -------------------------------------- | ----------------------------------------------------------------- |
-| `lib/query/filter-builder.ts`          | Parse/validate/apply filters (`eq`, `ilike`, `is`, `cs`, `ov`, …) |
-| `lib/query/supabase-query-types.ts`    | Typed PostgREST builder shapes                                    |
-| `lib/ui/append-list-filter-params.ts`  | Toolbar state → URL params                                        |
-| `lib/query/apply-composite-filters.ts` | Old-lead `rec_hotel` TEXT empty-string handling                   |
+| Module                                   | Role                                                  |
+| ---------------------------------------- | ----------------------------------------------------- |
+| `lib/leads/filter-field-registry.ts`     | Field definitions by section (single source of truth) |
+| `lib/ui/serialize-field-filters.ts`      | `fieldFilters` + Sistem date ranges → URL params      |
+| `lib/ui/build-leads-query-string.ts`     | Active leads query builder                            |
+| `lib/ui/build-old-leads-query-string.ts` | Old leads query builder                               |
+| `lib/query/filter-builder.ts`            | Server-side parse/validate/apply                      |
+| `lib/query/apply-composite-filters.ts`   | Old-lead `rec_hotel` TEXT empty-string handling       |
 
-**Active-only filters:** campus, room category, district preference, interested hotel (property dropdown).
+**Notable behaviors:**
 
-**Old-leads-only:** manager+ access; fuzzy search requires migration **0047**.
+- `parent_name` filter lives in **Profil** only (also shown on Genel side panel for editing)
+- `funnel_status` filter in **Genel** only; ignored in pipeline columns
+- Assignee filter: managers only
+- Active leads use `budget_tier`; old leads use `budget_min` / `budget_max`
+- Sistem section includes date-range shortcuts; Detay also has `created_at` operator filter (both can compose)
+
+**Old-leads-only:** manager+ access.
 
 **Campaign segments** reuse `FILTERABLE_COLUMNS` from `lib/constants.ts` — new whitelist fields work in segment JSON automatically.
 
-See [`runbook.md` — Lead list filters](./runbook.md) for operator reference.
+See [`runbook.md` — Lead list filters](./runbook.md) for full field inventory and operator reference.
 
 ---
 
@@ -159,13 +172,13 @@ See [`runbook.md` — Lead list filters](./runbook.md) for operator reference.
 
 **Status:** Live (property-level output only — no room type/price in callback).
 
-| Step                                   | Component                                                                                 |
-| -------------------------------------- | ----------------------------------------------------------------------------------------- |
-| User fills Profile **Öneri Girdileri** | `student_gender`, `campus`, `budget_max`, `room_category`, optional `district_preference` |
-| **Öneri Al**                           | `POST /api/leads/{id}/request-rec` → proxies to `MAKE_WEBHOOK_URL`                        |
-| Make.com callback                      | `PATCH /api/leads/{id}/rec-hotel`                                                         |
-| DB write                               | `lib/leads/save-rec-hotel.ts` (service role)                                              |
-| UI display                             | `LeadRecHotel` + polling in `LeadRecommendationPanel`                                     |
+| Step                                                | Component                                                                                                                                                   |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User fills **Profil** + **Detay → Öneri Girdileri** | Profil: `student_gender`, `budget_tier`. Detay: `campus`, `room_category`, optional `district_preference`. `budget_max` derived from tier for Make payload. |
+| **Öneri Al** (Detay tab)                            | `POST /api/leads/{id}/request-rec` → proxies to `MAKE_WEBHOOK_URL`                                                                                          |
+| Make.com callback                                   | `PATCH /api/leads/{id}/rec-hotel`                                                                                                                           |
+| DB write                                            | `lib/leads/save-rec-hotel.ts` (service role)                                                                                                                |
+| UI display                                          | `LeadRecHotel` + polling in `LeadRecommendationPanel`                                                                                                       |
 
 **Callback auth:** `Authorization: Bearer {CRON_SECRET}` or authenticated CRM session.
 

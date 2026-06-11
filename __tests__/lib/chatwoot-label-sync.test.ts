@@ -7,6 +7,7 @@ import {
   CHATWOOT_LABEL_IS_ORGANIC,
   getLabelFieldTargets,
   LABEL_TO_FIELD_MAP,
+  resolveStudentStageFromChatwootLabel,
 } from '@/lib/constants';
 import { ChatwootConversationUpdatedSchema } from '@/types/webhooks';
 
@@ -35,6 +36,29 @@ describe('Chatwoot label mapping', () => {
     expect(getLabelFieldTargets('kyk-sonuc-bekliyor')).toEqual([
       { table: 'lead_details', field: 'dorm_awaiting' },
     ]);
+  });
+
+  it('student stage labels map to leads.student_stage', () => {
+    expect(getLabelFieldTargets('pre-sinav')).toEqual([{ table: 'leads', field: 'student_stage' }]);
+    expect(getLabelFieldTargets('erasmus')).toEqual([{ table: 'leads', field: 'student_stage' }]);
+    expect(getLabelFieldTargets('yerleşti')).toEqual([{ table: 'leads', field: 'student_stage' }]);
+    expect(getLabelFieldTargets('yeni giriş')).toEqual([
+      { table: 'leads', field: 'student_stage' },
+    ]);
+    expect(getLabelFieldTargets('yatay_geçiş_bekliyor')).toEqual([
+      { table: 'leads', field: 'student_stage' },
+    ]);
+  });
+
+  it('resolves student stage label aliases to canonical CRM slugs', () => {
+    expect(resolveStudentStageFromChatwootLabel('pre-sinav')).toBe('pre-sinav');
+    expect(resolveStudentStageFromChatwootLabel('erasmus')).toBe('erasmus');
+    expect(resolveStudentStageFromChatwootLabel('yerleşti')).toBe('yerlesti');
+    expect(resolveStudentStageFromChatwootLabel('yeni-giris')).toBe('yeni-giris');
+    expect(resolveStudentStageFromChatwootLabel('yeni giriş')).toBe('yeni-giris');
+    expect(resolveStudentStageFromChatwootLabel('yatay_geçiş_bekliyor')).toBe(
+      'yatay-gecis-bekliyor',
+    );
   });
 
   it('referral domain labels map to source_details', () => {

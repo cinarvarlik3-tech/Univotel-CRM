@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   IconArrowsMaximize,
   IconArrowsMinimize,
+  IconCalendarPlus,
   IconExternalLink,
   IconX,
 } from '@tabler/icons-react';
@@ -23,6 +24,7 @@ interface LeadDetailHeaderProps {
   onClose?: () => void;
   isFullScreen?: boolean;
   onToggleFullScreen?: () => void;
+  onScheduleVisit?: () => void;
 }
 
 /**
@@ -47,6 +49,7 @@ export function LeadDetailHeader({
   onClose,
   isFullScreen,
   onToggleFullScreen,
+  onScheduleVisit,
 }: LeadDetailHeaderProps) {
   const { locale, t } = useTranslation();
 
@@ -94,6 +97,9 @@ export function LeadDetailHeader({
       </h2>
       <p className="font-mono text-sm text-text-primary">{displayLeadPhone(lead)}</p>
       <div className="flex flex-wrap items-center gap-1.5">
+        {lead.deal_awaiting && (
+          <Badge className="bg-red-100 font-semibold text-red-700">DEAL AWAITING</Badge>
+        )}
         {details?.school_shortname && (
           <Badge className="bg-[var(--badge-school-bg)] text-[var(--badge-school-text)]">
             {details.school_shortname}
@@ -117,13 +123,25 @@ export function LeadDetailHeader({
           {t('leads.assignee')}: {assigneeLabel(lead, t('common.unassigned'))}
         </span>
       </div>
-      <Link
-        href={`/tasks?lead_uuid=${leadId}`}
-        className="inline-flex items-center gap-1 text-xs text-brand-blue hover:underline"
-      >
-        {t('leads.createTask')}
-        <IconExternalLink className="size-3" />
-      </Link>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <Link
+          href={`/tasks?lead_uuid=${leadId}`}
+          className="inline-flex items-center gap-1 text-xs text-brand-blue hover:underline"
+        >
+          {t('leads.createTask')}
+          <IconExternalLink className="size-3" />
+        </Link>
+        {onScheduleVisit && (
+          <button
+            type="button"
+            onClick={onScheduleVisit}
+            className="inline-flex items-center gap-1 text-xs text-brand-blue hover:underline"
+          >
+            {t('visitCalendar.scheduleVisit')}
+            <IconCalendarPlus className="size-3" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

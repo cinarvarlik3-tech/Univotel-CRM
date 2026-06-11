@@ -2,6 +2,7 @@
  * Chatwoot label category sets for outbound label rebuild (one slug per category except dorm).
  */
 import {
+  CHATWOOT_DEAL_AWAITING_LABEL,
   CHATWOOT_DORM_AWAITING_LABELS,
   CHATWOOT_FUNNEL_LABELS,
   CHATWOOT_INTENT_ONLY_LABELS,
@@ -12,6 +13,7 @@ import {
   CHATWOOT_SPECIAL_STATE_LABELS,
   CHATWOOT_STUDENT_STAGE_LABELS,
   CHATWOOT_UNI_YEAR_LABELS,
+  resolveChatwootLabelFromStudentStage,
 } from '@/lib/constants';
 
 /** All managed label slugs (excludes intent-only). */
@@ -25,6 +27,11 @@ export const MANAGED_CHATWOOT_LABELS = new Set<string>([
   ...CHATWOOT_UNI_YEAR_LABELS,
   ...CHATWOOT_DORM_AWAITING_LABELS,
   ...CHATWOOT_REFERRAL_DOMAIN_LABELS,
+  CHATWOOT_DEAL_AWAITING_LABEL,
+  // NOTE: CHATWOOT_24H_RESTRICTED_LABEL is intentionally NOT managed outbound.
+  // The 24h restriction is set by a cron (lib/jobs/run-24h-restriction) and the
+  // inbound label is kept only as a manual override. CRM must neither push nor
+  // strip this label, so it is excluded from the managed set.
 ]);
 
 /** CRM lead row used to build outbound Chatwoot labels. */
@@ -38,6 +45,7 @@ export interface CrmLabelState {
   source_details: Record<string, unknown> | null;
   uni_year?: string | null;
   dorm_awaiting?: string[];
+  deal_awaiting?: boolean;
 }
 
 /**
@@ -58,8 +66,9 @@ export function buildManagedLabelsFromCrm(state: CrmLabelState): string[] {
   if (CHATWOOT_FUNNEL_LABELS.has(state.funnel_status)) {
     labels.push(state.funnel_status);
   }
-  if (CHATWOOT_STUDENT_STAGE_LABELS.has(state.student_stage)) {
-    labels.push(state.student_stage);
+  const studentStageLabel = resolveChatwootLabelFromStudentStage(state.student_stage);
+  if (studentStageLabel) {
+    labels.push(studentStageLabel);
   }
   if (state.persona_type && CHATWOOT_PERSONA_LABELS.has(state.persona_type)) {
     labels.push(state.persona_type);
@@ -81,6 +90,10 @@ export function buildManagedLabelsFromCrm(state: CrmLabelState): string[] {
       labels.push(dorm);
     }
   }
+  if (state.deal_awaiting) {
+    labels.push(CHATWOOT_DEAL_AWAITING_LABEL);
+  }
+  // is_24h_restricted is deliberately not pushed outbound (cron-driven, inbound override only).
   const referralDomain = state.source_details?.referral_domain;
   if (typeof referralDomain === 'string' && CHATWOOT_REFERRAL_DOMAIN_LABELS.has(referralDomain)) {
     labels.push(referralDomain);

@@ -56,7 +56,45 @@ export async function findExistingLead(
     throw new Error(`Dedup query failed: ${error.message}`);
   }
 
-  return data;
+  if (data) return data;
+
+  // Secondary check: archived leads. If found within 80 days, reactivate.
+  const eightWeeksAgo = new Date(Date.now() - 80 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: archived, error: archiveError } = await client
+    .from('leads')
+    .select('uuid, lead_name, funnel_status, archived_at')
+    .or(`lead_phone.eq.${identifier},parent_phone.eq.${identifier}`)
+    .eq('is_deleted', false)
+    .eq('is_archived', true)
+    .gte('archived_at', eightWeeksAgo)
+    .limit(1)
+    .maybeSingle();
+
+  if (archiveError) {
+    throw new Error(`Dedup archive query failed: ${archiveError.message}`);
+  }
+
+  if (archived) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: reactivateError } = await (client as any)
+      .from('leads')
+      .update({
+        is_archived: false,
+        archived_at: null,
+        archive_reason: null,
+        funnel_status: 'yeni',
+        assigned_to: null,
+      })
+      .eq('uuid', archived.uuid);
+
+    if (reactivateError) {
+      throw new Error(`Failed to reactivate archived lead: ${reactivateError.message}`);
+    }
+
+    return { uuid: archived.uuid, lead_name: archived.lead_name, funnel_status: 'yeni' };
+  }
+
+  return null;
 }
 
 /**

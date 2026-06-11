@@ -3,7 +3,7 @@
  */
 import useSWR from 'swr';
 
-import type { LeadRow } from '@/types/domain';
+import type { LeadWithDetails } from '@/types/domain';
 
 /** Fetcher for SWR GET requests. */
 async function fetcher<T>(url: string): Promise<T> {
@@ -13,14 +13,22 @@ async function fetcher<T>(url: string): Promise<T> {
   return json.data;
 }
 
+/** Leads list API response payload. */
+export interface LeadsListResponse {
+  leads: LeadWithDetails[];
+  nextCursor: string | null;
+  totalCount: number;
+  kpiCounts: {
+    breached: number;
+    onTime: number;
+  };
+}
+
 /**
  * Fetches paginated leads list via internal API.
  * @param params - Optional query string for filters/cursor; pass null to skip fetch.
  * @returns SWR response with leads data.
  */
 export function useLeads(params: string | null = '') {
-  return useSWR<{ leads: LeadRow[]; nextCursor: string | null }>(
-    params === null ? null : `/api/leads${params}`,
-    fetcher,
-  );
+  return useSWR<LeadsListResponse>(params === null ? null : `/api/leads${params}`, fetcher);
 }

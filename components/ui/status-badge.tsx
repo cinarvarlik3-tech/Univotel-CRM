@@ -19,8 +19,7 @@ const FUNNEL_VARIANTS: Record<string, 'default' | 'call' | 'visit' | 'deal' | 'd
   'teklif-gonderildi': 'deal',
   'kapora-alindi': 'deal',
   'sozlesme-imzalandi': 'deal',
-  'ziyaret-ama-almayacak': 'danger',
-  ilgilenmiyor: 'danger',
+  lost: 'danger',
 };
 
 const SLA_VARIANTS: Record<string, 'success' | 'warning' | 'danger'> = {

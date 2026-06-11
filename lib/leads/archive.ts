@@ -64,7 +64,7 @@ export async function unarchiveLead(uuid: string, managerUuid: string): Promise<
  */
 export function mapArchiveReasonFromFunnel(funnelStatus: string): 'won' | 'lost' | null {
   if (funnelStatus === 'sozlesme-imzalandi') return 'won';
-  if (funnelStatus === 'ziyaret-ama-almayacak' || funnelStatus === 'ilgilenmiyor') {
+  if (funnelStatus === 'lost') {
     return 'lost';
   }
   return null;

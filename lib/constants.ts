@@ -30,6 +30,7 @@ export const PEAK_SEASON_SLA_MINUTES = 30;
 /** Valid funnel status stages for leads (Chatwoot label slugs). */
 export const FUNNEL_STATUSES = [
   'yeni',
+  'bilgi-verildi',
   'aranacak',
   'arandi',
   'arandi-acmadi',
@@ -40,9 +41,30 @@ export const FUNNEL_STATUSES = [
   'teklif-gonderildi',
   'kapora-alindi',
   'sozlesme-imzalandi',
-  'ziyaret-ama-almayacak',
-  'ilgilenmiyor',
+  'lost',
 ] as const;
+
+/** Terminal "lost" funnel status set via Chatwoot kayip_nedeni custom attribute. */
+export const LOST_FUNNEL_STATUS = 'lost' as const;
+
+/** Chatwoot funnel label aliases (display labels → CRM slug). */
+export const CHATWOOT_FUNNEL_LABEL_ALIASES: Readonly<Record<string, string>> = {
+  kayıp: LOST_FUNNEL_STATUS,
+  kayip: LOST_FUNNEL_STATUS,
+};
+
+/**
+ * Normalizes a Chatwoot funnel label to the canonical CRM funnel_status slug.
+ * @param label - Raw label from a Chatwoot webhook.
+ */
+export function normalizeChatwootFunnelLabel(label: string): string {
+  const trimmed = label.trim();
+  if (!trimmed) return trimmed;
+  const lowerTr = trimmed.toLocaleLowerCase('tr');
+  return (
+    CHATWOOT_FUNNEL_LABEL_ALIASES[lowerTr] ?? CHATWOOT_FUNNEL_LABEL_ALIASES[trimmed] ?? trimmed
+  );
+}
 
 /** Chatwoot funnel labels — same values as FUNNEL_STATUSES. */
 export const CHATWOOT_FUNNEL_LABELS = new Set<string>(FUNNEL_STATUSES);
@@ -87,6 +109,7 @@ export const LOSS_REASONS = [
   'not_student',
   'already_placed',
   'timing',
+  'plans_changed',
   'other',
 ] as const;
 
@@ -124,22 +147,70 @@ export const DORM_AWAITING_VALUES = [
 /** Chatwoot dorm_awaiting labels (array field on lead_details). */
 export const CHATWOOT_DORM_AWAITING_LABELS = new Set<string>(DORM_AWAITING_VALUES);
 
+/** Chatwoot label that sets deal_awaiting = true on the leads table. */
+export const CHATWOOT_DEAL_AWAITING_LABEL = 'deal_awaiting' as const;
+
+/** Chatwoot label that sets is_24h_restricted = true on the leads table. */
+export const CHATWOOT_24H_RESTRICTED_LABEL = '24h_window_warning' as const;
+
 /** Valid student_stage values for leads. */
 export const STUDENT_STAGES = [
   'pre-sinav',
   'yerlesti',
   'yeni-giris',
   'erasmus',
+  'yatay-gecis-bekliyor',
   'unknown',
 ] as const;
 
-/** Chatwoot student_stage labels. */
-export const CHATWOOT_STUDENT_STAGE_LABELS = new Set<string>([
-  'pre-sinav',
-  'yerlesti',
-  'yeni-giris',
-  'erasmus',
-]);
+/**
+ * Maps inbound Chatwoot student-stage label slugs to canonical CRM student_stage values.
+ * Includes Turkish-character and spacing variants used in Chatwoot.
+ */
+export const CHATWOOT_STUDENT_STAGE_LABEL_MAP: Readonly<Record<string, string>> = {
+  'pre-sinav': 'pre-sinav',
+  pre_sinav: 'pre-sinav',
+  erasmus: 'erasmus',
+  yerlesti: 'yerlesti',
+  yerleşti: 'yerlesti',
+  'yeni-giris': 'yeni-giris',
+  'yeni-giriş': 'yeni-giris',
+  yeni_giriş: 'yeni-giris',
+  'yeni giriş': 'yeni-giris',
+  yatay_geçiş_bekliyor: 'yatay-gecis-bekliyor',
+  yatay_gecis_bekliyor: 'yatay-gecis-bekliyor',
+  'yatay-gecis-bekliyor': 'yatay-gecis-bekliyor',
+};
+
+/** Outbound Chatwoot label when it differs from the canonical CRM student_stage slug. */
+export const CHATWOOT_STUDENT_STAGE_OUTBOUND_LABEL: Readonly<Partial<Record<string, string>>> = {
+  'yatay-gecis-bekliyor': 'yatay_geçiş_bekliyor',
+};
+
+/** All Chatwoot label slugs that map to student_stage (includes alias keys). */
+export const CHATWOOT_STUDENT_STAGE_LABELS = new Set<string>(
+  Object.keys(CHATWOOT_STUDENT_STAGE_LABEL_MAP),
+);
+
+/**
+ * Resolves a Chatwoot label slug to the canonical CRM student_stage value.
+ * @param label - Chatwoot label slug from webhook or API.
+ * @returns Canonical student_stage or undefined when not a stage label.
+ */
+export function resolveStudentStageFromChatwootLabel(label: string): string | undefined {
+  return CHATWOOT_STUDENT_STAGE_LABEL_MAP[label];
+}
+
+/**
+ * Resolves the Chatwoot label slug to push for a CRM student_stage value.
+ * @param stage - Canonical CRM student_stage slug.
+ * @returns Chatwoot label slug, or undefined for unknown / non-synced stages.
+ */
+export function resolveChatwootLabelFromStudentStage(stage: string): string | undefined {
+  if (stage === 'unknown') return undefined;
+  if (!(STUDENT_STAGES as readonly string[]).includes(stage)) return undefined;
+  return CHATWOOT_STUDENT_STAGE_OUTBOUND_LABEL[stage] ?? stage;
+}
 
 /** Valid persona_type values for leads. */
 export const PERSONA_TYPES = ['ogrenci', 'veli'] as const;
@@ -200,6 +271,17 @@ export const STUDENT_GENDER_VALUES = ['male', 'female', 'other'] as const;
 /** Valid room_category values for hotel recommendation. */
 export const ROOM_CATEGORY_VALUES = ['single', 'double', 'triple', 'quad'] as const;
 
+/** Chatwoot butce fixed-list tier slugs stored in lead_details.budget_tier. */
+export const BUDGET_TIERS = [
+  'dusuk-butce',
+  'ortalama',
+  'yuksek-butce',
+  'cok-yuksek-butce',
+  'anlasilmiyor',
+] as const;
+
+export type BudgetTier = (typeof BUDGET_TIERS)[number];
+
 /** Tri-state presence filter values for nullable field UI controls. */
 export const PRESENCE_FILTER_VALUES = ['any', 'yes', 'no'] as const;
 
@@ -239,8 +321,7 @@ export const TRIGRAM_SIMILARITY_THRESHOLD = 0.3;
 /** Filter fields on lead_details table (require embed join). */
 export const LEAD_DETAILS_FILTER_FIELDS = [
   'university',
-  'budget_min',
-  'budget_max',
+  'budget_tier',
   'move_in',
   'uni_year',
   'student_gender',
@@ -250,6 +331,7 @@ export const LEAD_DETAILS_FILTER_FIELDS = [
   'room_category',
   'nationality',
   'parent_name',
+  'school_shortname',
   'kvkk_opt_in',
   'marketing_opt_in',
   'dorm_awaiting',
@@ -278,6 +360,11 @@ export const LEADS_TABLE_FILTER_FIELDS = [
   'special_state',
   'loss_reason',
   'parent_phone',
+  'deal_awaiting',
+  'notes',
+  'has_moved_in',
+  'is_24h_restricted',
+  'move_in_date_set',
 ] as const;
 
 /** Filter fields exposed in lead list toolbar (leads + lead_details). */
@@ -289,11 +376,41 @@ export const LEAD_LIST_FILTER_FIELDS = [
 /** Days in terminal funnel status before nightly auto-archive (see archive_single_lead SQL). */
 export const AUTO_ARCHIVE_CUTOFF_DAYS = 80;
 
-/** Terminal funnel statuses excluded from SLA updates and active lead counts. */
-export const TERMINAL_FUNNEL_STATUSES = [
-  'sozlesme-imzalandi',
-  'ziyaret-ama-almayacak',
-  'ilgilenmiyor',
+/** Terminal funnel statuses used for SLA exclusion. */
+export const TERMINAL_FUNNEL_STATUSES = ['sozlesme-imzalandi', 'lost'] as const;
+
+/**
+ * Funnel stages grouped into named compartments for the kanban compartment view.
+ * 'lost' and boolean-state leads (is_24h_restricted, has_moved_in) are excluded.
+ */
+export const FUNNEL_COMPARTMENTS: Readonly<Record<string, string[]>> = {
+  cold: ['yeni'],
+  'expecting-call': ['aranacak', 'arandi-acmadi'],
+  nurture: ['arandi', 'bilgi-verildi', 'bizi-aradi-konustuk'],
+  'will-visit': ['ziyaret'],
+  'failed-visit': ['ziyaret-etmedi'],
+  'post-visit-nurture': ['ziyaret-etti', 'teklif-gonderildi'],
+  downpayment: ['kapora-alindi'],
+  'deal-signed': ['sozlesme-imzalandi'],
+};
+
+/**
+ * "Irrelevant" leads are hidden from default views; shown only with the "Show All Leads" toggle.
+ * Applies to funnel_status values and the boolean flags below.
+ */
+export const IRRELEVANT_FUNNEL_STATUSES = ['lost', 'sozlesme-imzalandi'] as const;
+
+/** visit status values for the visits table. */
+export const VISIT_STATUSES = ['scheduled', 'attended', 'failed'] as const;
+
+/** auto_task_type values for the tasks table. */
+export const AUTO_TASK_TYPES = [
+  'nurture_reminder',
+  'post_visit_nurture_reminder',
+  'visit_reminder',
+  'move_in_reminder',
+  'visit_resolution',
+  'failed_visit_followup',
 ] as const;
 
 /** Maps paid/organic Chatwoot source labels to is_organic. */
@@ -315,7 +432,9 @@ export type LabelFieldTarget =
         | 'special_state'
         | 'message_from'
         | 'lead_source'
-        | 'is_organic';
+        | 'is_organic'
+        | 'deal_awaiting'
+        | 'is_24h_restricted';
     }
   | { table: 'lead_details'; field: 'uni_year' | 'dorm_awaiting' }
   | { table: 'source_details'; field: 'referral_domain' }
@@ -357,6 +476,12 @@ export function getLabelFieldTargets(label: string): LabelFieldTarget[] {
   if (CHATWOOT_DORM_AWAITING_LABELS.has(label)) {
     return [{ table: 'lead_details', field: 'dorm_awaiting' }];
   }
+  if (label === CHATWOOT_DEAL_AWAITING_LABEL) {
+    return [{ table: 'leads', field: 'deal_awaiting' }];
+  }
+  if (label === CHATWOOT_24H_RESTRICTED_LABEL) {
+    return [{ table: 'leads', field: 'is_24h_restricted' }];
+  }
   if (CHATWOOT_REFERRAL_DOMAIN_LABELS.has(label)) {
     return [{ table: 'source_details', field: 'referral_domain' }];
   }
@@ -376,6 +501,8 @@ export const LABEL_TO_FIELD_MAP: Readonly<Record<string, LabelFieldTarget[]>> = 
     ...CHATWOOT_DORM_AWAITING_LABELS,
     ...CHATWOOT_REFERRAL_DOMAIN_LABELS,
     ...CHATWOOT_INTENT_ONLY_LABELS,
+    CHATWOOT_DEAL_AWAITING_LABEL,
+    CHATWOOT_24H_RESTRICTED_LABEL,
   ];
   const map: Record<string, LabelFieldTarget[]> = {};
   for (const label of allLabels) {
@@ -491,6 +618,7 @@ export const STALE_THRESHOLD_DAYS_DEFAULT = 7;
  */
 export const STALE_THRESHOLDS_BY_STAGE: Readonly<Record<string, number>> = {
   yeni: 7,
+  'bilgi-verildi': 7,
   aranacak: 7,
   arandi: 7,
   'arandi-acmadi': 7,
@@ -501,6 +629,5 @@ export const STALE_THRESHOLDS_BY_STAGE: Readonly<Record<string, number>> = {
   'teklif-gonderildi': 7,
   'kapora-alindi': 7,
   'sozlesme-imzalandi': 7,
-  'ziyaret-ama-almayacak': 7,
-  ilgilenmiyor: 7,
+  lost: 7,
 };

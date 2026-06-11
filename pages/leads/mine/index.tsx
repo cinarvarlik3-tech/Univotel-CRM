@@ -3,6 +3,13 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
+import {
+  IconArrowsMaximize,
+  IconArrowsMinimize,
+  IconLayoutColumns,
+  IconLayoutGrid,
+  IconList,
+} from '@tabler/icons-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { LeadDetailPanel } from '@/components/leads/LeadDetailPanel';
 import {
@@ -11,6 +18,7 @@ import {
   type LeadListFilterState,
 } from '@/components/leads/LeadListToolbar';
 import { LeadTable } from '@/components/leads/LeadTable';
+import { PipelineView } from '@/components/leads/PipelineView';
 import { Button } from '@/components/ui/button';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { TasksDueTodayKpiCard } from '@/components/leads/TasksDueTodayKpiCard';
@@ -22,6 +30,9 @@ import { useLeads } from '@/hooks/useLeads';
 import { useSalespeople } from '@/hooks/useSalespeople';
 import { buildQueryFromLeadListState } from '@/lib/ui/lead-list-query';
 import type { LeadRow } from '@/types/domain';
+
+type ViewMode = 'list' | 'pipeline';
+const VIEW_MODE_KEY = 'mine_leads_view_mode';
 
 /**
  * Reads selected lead UUID from router query.
@@ -51,12 +62,42 @@ export default function MyLeadsPage() {
   const [accumulatedLeads, setAccumulatedLeads] = useState<LeadRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [compactPipeline, setCompactPipeline] = useState(false);
+  const [compartmentMode, setCompartmentMode] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(VIEW_MODE_KEY);
+    if (stored === 'pipeline' || stored === 'list') setViewMode(stored);
+    const storedCompact = localStorage.getItem('pipeline_compact');
+    if (storedCompact === 'true') setCompactPipeline(true);
+  }, []);
+
+  function toggleViewMode() {
+    setViewMode((prev) => {
+      const next: ViewMode = prev === 'list' ? 'pipeline' : 'list';
+      localStorage.setItem(VIEW_MODE_KEY, next);
+      return next;
+    });
+  }
+
+  function toggleCompact() {
+    setCompactPipeline((prev) => {
+      const next = !prev;
+      localStorage.setItem('pipeline_compact', String(next));
+      return next;
+    });
+  }
+
+  const [showAll, setShowAll] = useState(false);
 
   const selectedLeadId = router.isReady ? selectedLeadFromQuery(router.query) : null;
   const panelOpen = selectedLeadId !== null;
   const canFetch = Boolean(user);
 
-  const queryString = canFetch ? buildQueryFromLeadListState(appliedState, { mine: true }) : '';
+  const queryString = canFetch
+    ? buildQueryFromLeadListState(appliedState, { mine: true, showAll })
+    : '';
 
   const { data, error, isLoading, mutate } = useLeads(canFetch ? queryString : null);
 
@@ -68,17 +109,23 @@ export default function MyLeadsPage() {
   }, [data]);
 
   const kpis = useMemo(() => {
-    const active = accumulatedLeads.length;
-    const breached = accumulatedLeads.filter((l) => l.sla_status === 'breached').length;
-    const onTime = accumulatedLeads.filter((l) => l.sla_status === 'on_time').length;
+    const active = data?.totalCount ?? 0;
+    const breached = data?.kpiCounts?.breached ?? 0;
+    const onTime = data?.kpiCounts?.onTime ?? 0;
     return { active, breached, onTime };
-  }, [accumulatedLeads]);
+  }, [data?.totalCount, data?.kpiCounts]);
 
   function handleApply() {
     setAppliedState(listState);
     setAccumulatedLeads([]);
     setNextCursor(null);
     mutate();
+  }
+
+  function toggleShowAll() {
+    setShowAll((prev) => !prev);
+    setAccumulatedLeads([]);
+    setNextCursor(null);
   }
 
   const openLead = useCallback(
@@ -104,7 +151,11 @@ export default function MyLeadsPage() {
     if (!nextCursor) return;
     setLoadingMore(true);
 
-    const moreQuery = buildQueryFromLeadListState(appliedState, { cursor: nextCursor, mine: true });
+    const moreQuery = buildQueryFromLeadListState(appliedState, {
+      cursor: nextCursor,
+      mine: true,
+      showAll,
+    });
 
     const res = await fetch(`/api/leads${moreQuery}`);
     const json = await res.json();
@@ -115,20 +166,70 @@ export default function MyLeadsPage() {
     }
 
     setLoadingMore(false);
-  }, [nextCursor, appliedState]);
+  }, [nextCursor, appliedState, showAll]);
 
   if (!user) {
     return null;
   }
 
   return (
-    <AppShell title={t('leads.myLeads')} count={accumulatedLeads.length || undefined}>
+    <AppShell
+      title={t('leads.myLeads')}
+      count={data?.totalCount ?? undefined}
+      actions={
+        <>
+          <Button
+            type="button"
+            variant={showAll ? 'default' : 'secondary'}
+            size="sm"
+            onClick={toggleShowAll}
+          >
+            {showAll ? t('leads.showRelevantOnly') : t('leads.showAllLeads')}
+          </Button>
+          {viewMode === 'pipeline' && (
+            <>
+              <Button
+                type="button"
+                variant={compartmentMode ? 'default' : 'secondary'}
+                size="icon"
+                onClick={() => setCompartmentMode((p) => !p)}
+                title={compartmentMode ? 'Stage view' : 'Compartment view'}
+              >
+                <IconLayoutGrid size={16} />
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                onClick={toggleCompact}
+                title={compactPipeline ? 'Normal görünüm' : 'Ekrana sığdır'}
+              >
+                {compactPipeline ? (
+                  <IconArrowsMinimize size={16} />
+                ) : (
+                  <IconArrowsMaximize size={16} />
+                )}
+              </Button>
+            </>
+          )}
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon"
+            onClick={toggleViewMode}
+            title={viewMode === 'list' ? 'Pipeline görünümü' : 'Liste görünümü'}
+          >
+            {viewMode === 'list' ? <IconLayoutColumns size={16} /> : <IconList size={16} />}
+          </Button>
+        </>
+      }
+    >
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard
           label={t('leads.myLeadsKpi')}
           value={kpis.active}
           variant="blue"
-          sub={t('leads.currentPage')}
+          sub={t('leads.totalMatching')}
         />
         <KpiCard
           label={t('leads.slaBreached')}
@@ -155,30 +256,43 @@ export default function MyLeadsPage() {
         />
       </div>
 
-      {isLoading && (
-        <div className="space-y-2">
-          <Skeleton className="h-[58px] w-full" />
-          <Skeleton className="h-[58px] w-full" />
-          <Skeleton className="h-[58px] w-full" />
-        </div>
-      )}
-      {error && <p className="text-sm text-brand-red">{t('leads.failedToLoad')}</p>}
+      {viewMode === 'list' ? (
+        <>
+          {isLoading && (
+            <div className="space-y-2">
+              <Skeleton className="h-[58px] w-full" />
+              <Skeleton className="h-[58px] w-full" />
+              <Skeleton className="h-[58px] w-full" />
+            </div>
+          )}
+          {error && <p className="text-sm text-brand-red">{t('leads.failedToLoad')}</p>}
 
-      {!isLoading && (
-        <LeadTable
-          leads={accumulatedLeads}
-          selectedId={selectedLeadId ?? undefined}
-          onRowClick={openLead}
-          hideAssignee
+          {!isLoading && (
+            <LeadTable
+              leads={accumulatedLeads}
+              selectedId={selectedLeadId ?? undefined}
+              onRowClick={openLead}
+              hideAssignee
+            />
+          )}
+
+          {nextCursor && (
+            <div className="mt-4 flex justify-center">
+              <Button type="button" variant="secondary" onClick={loadMore} disabled={loadingMore}>
+                {loadingMore ? t('common.loading') : t('common.loadMore')}
+              </Button>
+            </div>
+          )}
+        </>
+      ) : (
+        <PipelineView
+          appliedState={appliedState}
+          mine
+          compact={compactPipeline}
+          compartmentMode={compartmentMode}
+          selectedId={selectedLeadId}
+          onLeadClick={openLead}
         />
-      )}
-
-      {nextCursor && (
-        <div className="mt-4 flex justify-center">
-          <Button type="button" variant="secondary" onClick={loadMore} disabled={loadingMore}>
-            {loadingMore ? t('common.loading') : t('common.loadMore')}
-          </Button>
-        </div>
       )}
 
       <LeadDetailPanel

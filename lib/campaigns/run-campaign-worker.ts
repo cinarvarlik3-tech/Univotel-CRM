@@ -107,13 +107,13 @@ async function processCampaignLead(
     lead_details:
       | {
           university: string | null;
-          budget_min: number | null;
+          budget_tier: string | null;
           budget_max: number | null;
           interested_hotel: string[] | null;
         }
       | {
           university: string | null;
-          budget_min: number | null;
+          budget_tier: string | null;
           budget_max: number | null;
           interested_hotel: string[] | null;
         }[]

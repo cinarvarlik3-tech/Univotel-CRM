@@ -10,6 +10,7 @@ import { FunnelView } from '@/components/leads/FunnelView';
 import { ProfilTab } from '@/components/leads/ProfilTab';
 import { ManagerLeadActions } from '@/components/leads/ManagerLeadActions';
 import { ContactHistorySection } from '@/components/leads/ContactHistorySection';
+import { VisitScheduleDialog } from '@/components/leads/VisitScheduleDialog';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -43,10 +44,12 @@ export function LeadDetailPanel({
     useLeadDetail(open ? (leadId ?? undefined) : undefined);
   const [tab, setTab] = useState('genel');
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [visitDialogOpen, setVisitDialogOpen] = useState(false);
 
   useEffect(() => {
     setTab('genel');
     setIsFullScreen(false);
+    setVisitDialogOpen(false);
   }, [leadId]);
 
   const sourceDetails =
@@ -63,7 +66,10 @@ export function LeadDetailPanel({
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent
         side="right"
-        className={cn('flex h-full flex-col gap-0 p-0', isFullScreen && 'w-screen max-w-none')}
+        className={cn(
+          'flex h-full flex-col gap-0 overflow-hidden p-0',
+          isFullScreen && 'w-screen max-w-none',
+        )}
         hideClose
       >
         {loading && (
@@ -89,10 +95,11 @@ export function LeadDetailPanel({
               onClose={onClose}
               isFullScreen={isFullScreen}
               onToggleFullScreen={() => setIsFullScreen((v) => !v)}
+              onScheduleVisit={() => setVisitDialogOpen(true)}
             />
 
             <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
-              <TabsList className="h-auto shrink-0 px-5 pt-2">
+              <TabsList className="h-auto shrink-0 overflow-x-auto px-5 pt-2">
                 <TabsTrigger value="genel">{t('leads.overview')}</TabsTrigger>
                 <TabsTrigger value="profil">{t('leads.profile')}</TabsTrigger>
                 <TabsTrigger value="detay">{t('leads.detay')}</TabsTrigger>
@@ -197,6 +204,13 @@ export function LeadDetailPanel({
                 </TabsContent>
               )}
             </Tabs>
+
+            <VisitScheduleDialog
+              open={visitDialogOpen}
+              leadUuid={leadId}
+              onClose={() => setVisitDialogOpen(false)}
+              onSuccess={reload}
+            />
           </>
         )}
       </SheetContent>

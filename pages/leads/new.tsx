@@ -19,8 +19,7 @@ export default function NewLeadPage() {
     lead_phone: string;
     language?: string;
     university?: string;
-    budget_min?: number;
-    budget_max?: number;
+    budget_tier?: string;
     notes?: string;
   }) {
     const res = await fetch('/api/leads', {

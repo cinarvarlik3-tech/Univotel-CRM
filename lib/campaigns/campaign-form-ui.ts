@@ -38,8 +38,8 @@ export const TEMPLATE_VARIABLE_FIELD_OPTIONS: ReadonlyArray<{ value: string; lab
   { value: 'language', label: 'Language' },
   { value: 'funnel_status', label: 'Funnel status' },
   { value: 'university', label: 'University' },
-  { value: 'budget_min', label: 'Budget (min)' },
-  { value: 'budget_max', label: 'Budget (max)' },
+  { value: 'budget_tier', label: 'Budget tier' },
+  { value: 'budget_max', label: 'Budget (max, rec)' },
   { value: 'interested_hotel', label: 'Interested hotel (first)' },
 ];
 

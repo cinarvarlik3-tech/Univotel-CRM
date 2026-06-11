@@ -8,9 +8,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { FormField } from '@/components/ui/form-field';
 import { FormSelect } from '@/components/ui/form-select';
 import { Input } from '@/components/ui/input';
+import { UniversityCombobox } from '@/components/ui/university-combobox';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useUniversities } from '@/hooks/useUniversities';
 import { formatEnumLabel } from '@/lib/i18n/enum-labels';
-import { DORM_AWAITING_VALUES, UNI_YEARS } from '@/lib/constants';
+import { BUDGET_TIERS, DORM_AWAITING_VALUES, UNI_YEARS } from '@/lib/constants';
+import { lookupSchoolShortname } from '@/lib/leads/lookup-school-shortname';
 import { useProperties } from '@/hooks/useProperties';
 import type { LeadDetailRow } from '@/types/domain';
 
@@ -32,11 +35,11 @@ const ROOM_CATEGORIES = ['single', 'double', 'triple', 'quad'] as const;
 export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDetailsFormProps) {
   const { locale, t } = useTranslation();
   const { data: properties } = useProperties();
+  const { data: universities = [], isLoading: universitiesLoading } = useUniversities();
   const d = details;
 
   const [university, setUniversity] = useState(d?.university ?? '');
-  const [budgetMin, setBudgetMin] = useState(d?.budget_min?.toString() ?? '');
-  const [budgetMax, setBudgetMax] = useState(d?.budget_max?.toString() ?? '');
+  const [budgetTier, setBudgetTier] = useState(d?.budget_tier ?? '');
   const [moveIn, setMoveIn] = useState(d?.move_in?.slice(0, 10) ?? '');
   const [uniYear, setUniYear] = useState(d?.uni_year ?? '');
   const [parentName, setParentName] = useState(d?.parent_name ?? '');
@@ -57,8 +60,7 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
   useEffect(() => {
     if (!details) return;
     setUniversity(details.university ?? '');
-    setBudgetMin(details.budget_min?.toString() ?? '');
-    setBudgetMax(details.budget_max?.toString() ?? '');
+    setBudgetTier(details.budget_tier ?? '');
     setMoveIn(details.move_in?.slice(0, 10) ?? '');
     setUniYear(details.uni_year ?? '');
     setParentName(details.parent_name ?? '');
@@ -98,8 +100,7 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
 
     const body: Record<string, unknown> = {
       university: university || null,
-      budget_min: budgetMin ? Number(budgetMin) : null,
-      budget_max: budgetMax ? Number(budgetMax) : null,
+      budget_tier: budgetTier || null,
       move_in: moveIn || null,
       uni_year: uniYear || null,
       parent_name: parentName || null,
@@ -139,28 +140,47 @@ export function LeadDetailsForm({ leadId, details, onSaved, embedded }: LeadDeta
 
       <div className="grid grid-cols-2 gap-3">
         <FormField label={t('filters.university')} htmlFor="university" className="col-span-2">
-          <Input
+          <UniversityCombobox
             id="university"
             value={university}
-            onChange={(e) => setUniversity(e.target.value)}
+            universities={universities}
+            loading={universitiesLoading}
+            onSelect={(uniName) => {
+              setUniversity(uniName);
+            }}
+            onClear={() => {
+              setUniversity('');
+            }}
           />
         </FormField>
-        <FormField label={t('filters.budgetMin')} htmlFor="budget_min">
+        <FormField
+          label={t('leads.schoolShortname')}
+          htmlFor="school_shortname"
+          className="col-span-2"
+        >
           <Input
-            id="budget_min"
-            type="number"
-            value={budgetMin}
-            onChange={(e) => setBudgetMin(e.target.value)}
+            id="school_shortname"
+            value={
+              lookupSchoolShortname(university, universities) ?? details?.school_shortname ?? ''
+            }
+            readOnly
+            placeholder="—"
+            className="cursor-default bg-surface-muted text-text-secondary"
           />
         </FormField>
-        <FormField label={t('filters.budgetMax')} htmlFor="budget_max">
-          <Input
-            id="budget_max"
-            type="number"
-            value={budgetMax}
-            onChange={(e) => setBudgetMax(e.target.value)}
-          />
-        </FormField>
+        <FormSelect
+          label={t('filters.budgetTier')}
+          id="budget_tier"
+          value={budgetTier || '__none__'}
+          onValueChange={(v) => setBudgetTier(v === '__none__' ? '' : v)}
+          options={[
+            { value: '__none__', label: t('common.emDash') },
+            ...BUDGET_TIERS.map((tier) => ({
+              value: tier,
+              label: formatEnumLabel(locale, 'budgetTier', tier),
+            })),
+          ]}
+        />
         <FormSelect
           label={t('filters.gender')}
           id="student_gender"

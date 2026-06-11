@@ -37,6 +37,7 @@ const eslintConfig = [
       'lib/dni/**',
       'lib/ga4/**',
       'lib/ref/**',
+      'lib/tasks/**',
     ],
     rules: {
       'no-restricted-imports': [

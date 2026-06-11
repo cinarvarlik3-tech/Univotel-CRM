@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useTranslation } from '@/hooks/useTranslation';
 import { formatEnumLabel } from '@/lib/i18n/enum-labels';
-import { LANGUAGES } from '@/lib/constants';
+import { BUDGET_TIERS, LANGUAGES } from '@/lib/constants';
 
 interface LeadFormProps {
   onSubmit: (data: {
@@ -17,8 +17,7 @@ interface LeadFormProps {
     lead_phone: string;
     language?: string;
     university?: string;
-    budget_min?: number;
-    budget_max?: number;
+    budget_tier?: string;
     notes?: string;
   }) => Promise<void>;
 }
@@ -34,8 +33,7 @@ export function LeadForm({ onSubmit }: LeadFormProps) {
   const [leadPhone, setLeadPhone] = useState('');
   const [language, setLanguage] = useState('tr');
   const [university, setUniversity] = useState('');
-  const [budgetMin, setBudgetMin] = useState('');
-  const [budgetMax, setBudgetMax] = useState('');
+  const [budgetTier, setBudgetTier] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -51,8 +49,7 @@ export function LeadForm({ onSubmit }: LeadFormProps) {
         lead_phone: leadPhone,
         language,
         university: university || undefined,
-        budget_min: budgetMin ? Number(budgetMin) : undefined,
-        budget_max: budgetMax ? Number(budgetMax) : undefined,
+        budget_tier: budgetTier || undefined,
         notes: notes || undefined,
       });
     } catch (err) {
@@ -88,22 +85,19 @@ export function LeadForm({ onSubmit }: LeadFormProps) {
       <FormField label={t('filters.university')} htmlFor="university">
         <Input id="university" value={university} onChange={(e) => setUniversity(e.target.value)} />
       </FormField>
-      <FormField label={t('filters.budgetMin')} htmlFor="budget_min">
-        <Input
-          id="budget_min"
-          type="number"
-          value={budgetMin}
-          onChange={(e) => setBudgetMin(e.target.value)}
-        />
-      </FormField>
-      <FormField label={t('filters.budgetMax')} htmlFor="budget_max">
-        <Input
-          id="budget_max"
-          type="number"
-          value={budgetMax}
-          onChange={(e) => setBudgetMax(e.target.value)}
-        />
-      </FormField>
+      <FormSelect
+        label={t('filters.budgetTier')}
+        id="budget_tier"
+        value={budgetTier || '__none__'}
+        onValueChange={(v) => setBudgetTier(v === '__none__' ? '' : v)}
+        options={[
+          { value: '__none__', label: t('common.emDash') },
+          ...BUDGET_TIERS.map((tier) => ({
+            value: tier,
+            label: formatEnumLabel(locale, 'budgetTier', tier),
+          })),
+        ]}
+      />
       <FormField label={t('leads.notes')} htmlFor="notes">
         <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
       </FormField>

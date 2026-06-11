@@ -17,7 +17,7 @@ describe('resolveTemplateVariables', () => {
   it('uses first interested_hotel as hotel name', () => {
     const result = resolveTemplateVariables({ '1': 'interested_hotel.hotel_name' }, lead, {
       university: null,
-      budget_min: null,
+      budget_tier: null,
       budget_max: null,
       interested_hotel: ['Kampüs Han'],
     });

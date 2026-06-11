@@ -8,6 +8,7 @@ import { createTranslator } from '@/lib/i18n/create-translator';
 
 const FUNNEL_KEY: Record<string, string> = {
   yeni: 'funnel_yeni',
+  'bilgi-verildi': 'funnel_bilgi_verildi',
   aranacak: 'funnel_aranacak',
   arandi: 'funnel_arandi',
   'arandi-acmadi': 'funnel_arandi_acmadi',
@@ -18,8 +19,7 @@ const FUNNEL_KEY: Record<string, string> = {
   'teklif-gonderildi': 'funnel_teklif',
   'kapora-alindi': 'funnel_kapora',
   'sozlesme-imzalandi': 'funnel_sozlesme',
-  'ziyaret-ama-almayacak': 'funnel_ziyaret_ama',
-  ilgilenmiyor: 'funnel_ilgilenmiyor',
+  lost: 'funnel_lost',
 };
 
 const LOSS_KEY: Record<string, string> = {
@@ -30,6 +30,7 @@ const LOSS_KEY: Record<string, string> = {
   not_student: 'loss_not_student',
   already_placed: 'loss_already_placed',
   timing: 'loss_timing',
+  plans_changed: 'loss_plans_changed',
   other: 'loss_other',
   'sure-asildi': 'loss_sure_asildi',
 };
@@ -69,6 +70,7 @@ const STAGE_KEY: Record<string, string> = {
   yerlesti: 'stage_yerlesti',
   'yeni-giris': 'stage_yeni_giris',
   erasmus: 'stage_erasmus',
+  'yatay-gecis-bekliyor': 'stage_yatay_gecis_bekliyor',
   unknown: 'stage_unknown',
 };
 
@@ -118,6 +120,14 @@ const ROOM_KEY: Record<string, string> = {
   quad: 'room_quad',
 };
 
+const BUDGET_TIER_KEY: Record<string, string> = {
+  'dusuk-butce': 'budget_dusuk_butce',
+  ortalama: 'budget_ortalama',
+  'yuksek-butce': 'budget_yuksek_butce',
+  'cok-yuksek-butce': 'budget_cok_yuksek_butce',
+  anlasilmiyor: 'budget_anlasilmiyor',
+};
+
 const SLA_KEY: Record<string, string> = {
   on_time: 'sla_on_time',
   breached: 'sla_breached',
@@ -156,6 +166,7 @@ const GROUP_MAP: Record<string, Record<string, string>> = {
   language: LANG_KEY,
   gender: GENDER_KEY,
   room: ROOM_KEY,
+  budgetTier: BUDGET_TIER_KEY,
   sla: SLA_KEY,
   archive: ARCHIVE_KEY,
   interaction: INTERACTION_KEY,
@@ -264,7 +275,7 @@ export function getTemplateVariableFieldOptions(
     { value: 'language', label: t('campaigns.fieldLanguage') },
     { value: 'funnel_status', label: t('campaigns.fieldFunnelStatus') },
     { value: 'university', label: t('campaigns.fieldUniversity') },
-    { value: 'budget_min', label: t('campaigns.fieldBudgetMin') },
+    { value: 'budget_tier', label: t('campaigns.fieldBudgetTier') },
     { value: 'budget_max', label: t('campaigns.fieldBudgetMax') },
     { value: 'interested_hotel', label: t('campaigns.fieldInterestedHotel') },
   ];

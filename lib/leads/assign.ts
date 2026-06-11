@@ -47,6 +47,11 @@ function isWithinShift(shiftStart: string, shiftEnd: string, now: Date): boolean
 
 /**
  * Assigns a lead to the best available salesperson.
+ *
+ * @deprecated Assignment replaced by Lead Hub self-service (Major Update). All new leads go to
+ *   assigned_to = NULL. Salespeople claim leads via POST /api/leads/[id]/claim. This function is
+ *   kept for potential future manager-reassignment flows and must not be re-wired to lead creation.
+ *
  * @param params - Assignment parameters including language and hotel preference.
  * @returns Assigned salesperson UUID or null if pool is empty.
  */

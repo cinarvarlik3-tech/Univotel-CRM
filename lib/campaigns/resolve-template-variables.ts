@@ -1,6 +1,4 @@
-/**
- * Resolves WhatsApp template variable placeholders from lead + lead_details rows.
- */
+import { TIER_TO_BUTCE_LABEL, isBudgetTier } from '@/lib/chatwoot/custom-attributes';
 
 /** Lead row subset for template resolution. */
 export interface TemplateLeadRow {
@@ -13,7 +11,7 @@ export interface TemplateLeadRow {
 /** Lead details subset for template resolution. */
 export interface TemplateLeadDetailsRow {
   university: string | null;
-  budget_min: number | null;
+  budget_tier: string | null;
   budget_max: number | null;
   interested_hotel: string[] | null;
 }
@@ -40,8 +38,11 @@ function resolveField(
   if (field === 'language') return lead.language;
   if (field === 'funnel_status') return lead.funnel_status;
   if (field === 'university') return details?.university?.trim() || null;
-  if (field === 'budget_min')
-    return details?.budget_min != null ? String(details.budget_min) : null;
+  if (field === 'budget_tier') {
+    const tier = details?.budget_tier;
+    if (!tier || !isBudgetTier(tier)) return null;
+    return TIER_TO_BUTCE_LABEL[tier];
+  }
   if (field === 'budget_max')
     return details?.budget_max != null ? String(details.budget_max) : null;
   if (field === 'interested_hotel' || field === 'interested_hotel.hotel_name') {

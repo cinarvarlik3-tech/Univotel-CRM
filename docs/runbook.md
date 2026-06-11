@@ -1,6 +1,6 @@
 # Univotel CRM — Production Runbook
 
-Last updated: 2026-06-01. This document describes **what the running system does now** and **how to fix it when something breaks**. For design history, see implementation docs; this is operational reference only.
+Last updated: 2026-06-09. This document describes **what the running system does now** and **how to fix it when something breaks**. For design history, see implementation docs; this is operational reference only.
 
 ---
 
@@ -1368,39 +1368,76 @@ Both `/leads` and `/old-leads` use the same dynamic filter pipeline: UI toolbar 
 | `lib/query/supabase-query-types.ts`                                      | Typed PostgREST query-builder shapes for filter helpers (no `any`)                                                  |
 | `lib/query/filter-field-config.ts`                                       | Per-column metadata (leads vs details table, ilike vs eq, array ops)                                                |
 | `lib/query/apply-embedded-filters.ts`                                    | Applies filters on embedded `lead_details` / `old_lead_details` paths                                               |
-| `lib/ui/append-list-filter-params.ts`                                    | Maps toolbar state → query params                                                                                   |
-| `lib/ui/build-leads-query-string.ts` / `build-old-leads-query-string.ts` | Builds full list API URLs                                                                                           |
-| `lib/ui/lead-list-query.ts` / `old-lead-list-query.ts`                   | Maps toolbar state (incl. date ranges) → query builders                                                             |
+| `lib/query/split-filters.ts`                                             | Splits root-table vs embedded detail filters                                                                        |
 | `lib/query/apply-composite-filters.ts`                                   | Old-lead `rec_hotel` TEXT empty-string handling via `composite=old_rec_hotel_present\|old_rec_hotel_absent`         |
-| `components/leads/list-filter-controls.tsx`                              | Shared filter UI: collapsible sections, presence selects, dorm awaiting, data-quality toggles                       |
+| `types/filter.ts`                                                        | `LeadListFilterState`, `FieldFilterState`, per-field mode (`match` / `filled` / `empty`)                            |
+| `lib/leads/filter-field-registry.ts`                                     | Single source of truth: field id, section, control kind, table                                                      |
+| `lib/ui/serialize-field-filters.ts`                                      | Maps `fieldFilters` + Sistem date ranges → query params                                                             |
+| `lib/ui/build-leads-query-string.ts` / `build-old-leads-query-string.ts` | Builds full list API URLs                                                                                           |
+| `lib/ui/lead-list-query.ts` / `old-lead-list-query.ts`                   | Maps toolbar state → query builders                                                                                 |
+| `components/leads/filter/FilterFieldControl.tsx`                         | Per-field control (mode toggle + value input)                                                                       |
+| `components/leads/filter/FilterModeToggle.tsx`                           | Değer / Dolu / Boş tri-state                                                                                        |
+| `components/leads/LeadListToolbar.tsx` / `OldLeadListToolbar.tsx`        | Top bar + collapsible filter panel                                                                                  |
 
-**UI layout:** Filter panel sections (**Pipeline**, **Assignment & dates**, **Student profile**, **Housing intent**, **Compliance & contacts**) are **collapsible** — click the section heading to expand/collapse. **Pipeline** starts open; other sections start collapsed. Fuzzy search checkbox stays visible above all sections.
+**Legacy (still present, no longer primary path):** `lib/ui/append-list-filter-params.ts`, `lib/ui/list-filter-types.ts` — superseded by `serialize-field-filters.ts` for active/old lead lists.
 
-**Presence filters:** `filter[column][is]=null` (missing) or `filter[column][is]=not.null` (has value). Used for unassigned (`assigned_to`), parent phone/name, missing university/gender/budget toggles, and active-lead `rec_hotel` jsonb.
+**UI layout (shipped 2026-06):** Filter panel mirrors lead detail tabs — collapsible sections **Genel**, **Profil**, **Detay**, **Sistem** (Genel open by default). **Outside** the panel: search (name/phone), Filters toggle, sort, Apply, Clear.
 
-**Array filters:** `dorm_awaiting` uses overlap (`ov`) for any-of multi-select. `interested_hotel` and `room_type` use contains (`cs`) with a single value.
+| Top bar control | Behavior                                                               |
+| --------------- | ---------------------------------------------------------------------- |
+| Search          | `search=` param — trigram RPC on name + phone only (not field filters) |
+| Sort            | Dropdown; Clear resets to `created_at`                                 |
+| Apply           | Commits draft toolbar state to list/pipeline query                     |
+| Clear           | Resets filters, search, and sort                                       |
 
-**University:** partial match via `filter[university][ilike]=%term%` (not exact `eq`).
+**Per-field filter modes (all registry fields):**
 
-**Active leads (`/leads`) — filter groups in UI:**
+| Mode     | UI label | Query effect                                        |
+| -------- | -------- | --------------------------------------------------- |
+| `match`  | Değer    | Operator + value (eq, ilike, date comparison, etc.) |
+| `filled` | Dolu     | `filter[field][is]=not.null`                        |
+| `empty`  | Boş      | `filter[field][is]=null`                            |
 
-| Group                 | Fields                                                                                                                                         |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pipeline              | funnel, SLA, source, channel, stage, special state, loss reason, persona, language, organic, min score                                         |
-| Assignment & dates    | assignee (incl. Unassigned), created range, last contact range, SLA range, move-in range                                                       |
-| Student profile       | university (partial), uni year, cinsiyet, nationality, dorm awaiting                                                                           |
-| Housing intent        | budget min/max, preferred district, campus, room category, district preference, interested hotel (property dropdown), room type, has hotel rec |
-| Compliance & contacts | KVKK opt-in, marketing opt-in, has parent phone/name, missing data toggles                                                                     |
+Text fields support an optional **per-field fuzzy** checkbox: fuzzy → `ilike` with `%term%`; exact → `eq`. There is **no** global fuzzy checkbox in the filter panel (archived leads list still has its own fuzzy toggle for search).
 
-Gender filter on active leads is available to all roles (same RLS as list — own + unassigned pool for salespeople; all for managers).
+**Presence / array / university:**
 
-**Old leads (`/old-leads`) — same groups minus active-only fields:**
+- Assignee match: `eq` on salesperson id, or `__unassigned__` → `filter[assigned_to][is]=null`. **Managers only** in UI.
+- `dorm_awaiting`: multiselect OR via overlap (`ov`)
+- `interested_hotel`, `room_type`: contains (`cs`) with single value when in match mode
+- `university`: searchable combobox; fuzzy defaults on
 
-No campus, room category, or district preference (not on `old_lead_details`). Interested hotel is free-text (exact array contains). Has hotel rec uses composite filter (TEXT column — empty string counts as absent).
+**Sistem date-range shortcuts** (in addition to per-field `created_at` operator in Detay):
+
+| Range                | Column            |
+| -------------------- | ----------------- |
+| Created from/to      | `created_at`      |
+| SLA from/to          | `sla_deadline`    |
+| Last contact from/to | `last_contact_at` |
+| Move-in from/to      | `move_in`         |
+
+Both Detay `created_at` comparison **and** Sistem created from/to can be active simultaneously — they compose as separate filters.
+
+**Active leads (`/leads`) — filter sections (registry):**
+
+| Section | Fields                                                                                                                                                               |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Genel   | funnel_status, persona_type, student_gender, parent_phone, student_stage, special_state, dorm_awaiting, deal_awaiting, notes                                         |
+| Profil  | parent_name, university, school_shortname, uni_year, budget_tier, language, room_type, interested_hotel (property dropdown)                                          |
+| Detay   | loss_reason, created_at (date/datetime + operators), assigned_to (managers), message_from, move_in                                                                   |
+| Sistem  | sla_status, lead_source, is_organic, lead_score, nationality, preferred_district, campus, room_category, district_preference, rec_hotel presence + date ranges above |
+
+**Pipeline view (`/leads` toggle):** Uses same applied filter state via `buildLeadsQueryString` with overrides — strips `funnel_status`, forces `deal_awaiting=false`, shows hint when funnel filter is active. Gender and all other filters apply normally.
+
+**Deal Awaiting page (`/deal-awaiting`):** Always scopes to `deal_awaiting=true`; field hidden from toolbar.
+
+**Old leads (`/old-leads`) — same four sections minus active-only fields:**
+
+No `deal_awaiting`, `notes`, `budget_tier`, `school_shortname`, or `sla_status`. Uses `budget_min` / `budget_max` (number filters) instead of `budget_tier`. Has hotel rec uses composite filter (TEXT column — empty string counts as absent). Manager+ access.
 
 **Campaign segments:** `FILTERABLE_COLUMNS` whitelist is derived from `LEAD_LIST_FILTER_FIELDS`; new list filters are automatically valid in campaign segment JSON unless UI is updated separately.
 
-**Fuzzy search:** trigram RPC on name + phone only (`search_leads_ids` / `search_old_leads_ids`). Filters compose with fuzzy results. Old-leads fuzzy requires migration `0047`.
+**Adding a filter field:** Update `lib/constants.ts` (`LEAD_LIST_FILTER_FIELDS` / `OLD_*`), `lib/leads/filter-field-registry.ts`, `lib/query/filter-field-config.ts` (ilike/array metadata), and `__tests__/lib/build-leads-query-string.test.ts`.
 
 ### Funnel View (active lead slide-over tab)
 
@@ -1451,13 +1488,13 @@ Stale check is based on `leads.last_contact_at` only — not on how long the lea
 
 Make.com workflow returns up to three property matches; results are stored on `lead_details.rec_hotel` (jsonb).
 
-| Step | What happens                                                                                                                              |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | User fills **Öneri Girdileri** on lead Profile: `student_gender`, `campus`, `budget_max`, `room_category`, optional `district_preference` |
-| 2    | **Öneri Al** in lead slide-over Profile tab → `POST /api/leads/{id}/request-rec`                                                          |
-| 3    | CRM proxies payload to `MAKE_WEBHOOK_URL` (Make.com scenario)                                                                             |
-| 4    | Make.com callback → `PATCH /api/leads/{id}/rec-hotel` with `recommendations[]`                                                            |
-| 5    | UI polls lead detail and renders cards via `LeadRecHotel`                                                                                 |
+| Step | What happens                                                                                                                                                                              |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | User fills **Profil**: `student_gender`, `budget_tier` (derives `budget_max` for Make). User fills **Detay → Öneri Girdileri**: `campus`, `room_category`, optional `district_preference` |
+| 2    | **Öneri Al** in lead slide-over **Detay** tab (`LeadRecommendationPanel`) → `POST /api/leads/{id}/request-rec`                                                                            |
+| 3    | CRM proxies payload to `MAKE_WEBHOOK_URL` (Make.com scenario)                                                                                                                             |
+| 4    | Make.com callback → `PATCH /api/leads/{id}/rec-hotel` with `recommendations[]`                                                                                                            |
+| 5    | UI polls lead detail and renders cards via `LeadRecommendationPanel`                                                                                                                      |
 
 **Auth on callback:** `PATCH /api/leads/{id}/rec-hotel` accepts `Authorization: Bearer {CRON_SECRET}` (Make.com) **or** any authenticated CRM session.
 

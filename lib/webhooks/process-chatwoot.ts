@@ -5,6 +5,8 @@
  */
 import { env } from '@/lib/env';
 import {
+  CHATWOOT_24H_RESTRICTED_LABEL,
+  CHATWOOT_DEAL_AWAITING_LABEL,
   CHATWOOT_DORM_AWAITING_LABELS,
   CHATWOOT_FUNNEL_LABELS,
   CHATWOOT_LABEL_IS_ORGANIC,
@@ -13,19 +15,38 @@ import {
   CHATWOOT_PERSONA_LABELS,
   CHATWOOT_REFERRAL_DOMAIN_LABELS,
   CHATWOOT_SPECIAL_STATE_LABELS,
-  CHATWOOT_STUDENT_STAGE_LABELS,
   CHATWOOT_UNI_YEAR_LABELS,
   DEFAULT_FUNNEL_STATUS,
-  DEFAULT_STUDENT_STAGE,
+  normalizeChatwootFunnelLabel,
   getLabelFieldTargets,
+  resolveStudentStageFromChatwootLabel,
   RETRY_DELAYS_MS,
 } from '@/lib/constants';
 import { persistChatwootConversationLink, shouldSkipInboundEcho } from '@/lib/chatwoot/sync-engine';
+import {
+  mapLabelToFieldValue,
+  resolveDormAwaitingFromRemainingLabels,
+  resolveFieldAfterLabelRemoval,
+  type SingleValueLabelField,
+} from '@/lib/chatwoot/resolve-remaining-labels';
+import { lookupSchoolShortname } from '@/lib/leads/lookup-school-shortname';
+import { budgetTierWritePayload } from '@/lib/leads/budget-tier';
+import {
+  extractCustomAttributeDiff,
+  mapButce,
+  mapKayipNedeni,
+  mapOdaTipiInbound,
+  mapOgrenciCinsiyet,
+  normalizeText,
+  parseMoveInDate,
+  resolveLostTransition,
+  type LossIntent,
+} from '@/lib/chatwoot/custom-attributes';
 import { isChatwootAssigneeSyncEnabled, isChatwootLabelSyncEnabled } from '@/lib/env';
 import type { LeadContactIdentifierKind } from '@/lib/leads/contact-identifier';
 import { createLeadFromWebhook } from '@/lib/leads/create-lead';
 import { mergeChatwootIntoExistingLead } from '@/lib/leads/merge-chatwoot-duplicate';
-import { applyChatwootAssigneeToLead, pushAssigneeToChatwoot } from '@/lib/leads/sync-assignee';
+import { applyChatwootAssigneeToLead } from '@/lib/leads/sync-assignee';
 import { buildChatwootSourceDetails } from '@/lib/leads/source-details';
 import { resolveInboundAssignee } from '@/lib/webhooks/extract-assignee';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -66,9 +87,13 @@ interface LeadSyncRow {
   message_from: string | null;
   lead_source: string;
   is_organic: boolean | null;
+  deal_awaiting: boolean;
+  is_24h_restricted: boolean;
   source_details: Record<string, unknown> | null;
   label_sync_source: string | null;
   label_synced_at: string | null;
+  loss_reason: string | null;
+  funnel_status_before_lost: string | null;
 }
 
 /** Record of a single field change for contact_history. */
@@ -76,6 +101,7 @@ interface FieldChangeRecord {
   field: string;
   previous_value: unknown;
   current_value: unknown;
+  origin?: 'label' | 'custom_attribute';
 }
 
 /**
@@ -111,6 +137,40 @@ async function withRetry(operation: () => Promise<void>, context: string): Promi
   await sendTelegramToManagers(
     `[CRM] Chatwoot ${context} failed after ${RETRY_DELAYS_MS.length} attempts.\nError: ${lastError?.message}`,
   );
+}
+
+/**
+ * Reactivates a lost lead when a new inbound message arrives.
+ * Clears funnel_status → 'yeni', clears loss_reason, sets assigned_to = null (Lead Hub).
+ */
+async function reactivateLostLead(leadUuid: string, messageFrom: string | null): Promise<void> {
+  const client = createServiceClient();
+
+  await client
+    .from('leads')
+    .update({
+      funnel_status: DEFAULT_FUNNEL_STATUS,
+      loss_reason: null,
+      funnel_status_before_lost: null,
+      assigned_to: null,
+    })
+    .eq('uuid', leadUuid);
+
+  const interactionSource =
+    messageFrom === 'instagram' || messageFrom === 'whatsapp' ? messageFrom : 'whatsapp';
+
+  await client.from('contact_history').insert({
+    lead_uuid: leadUuid,
+    interaction_type: 'status_change',
+    interaction_source: interactionSource,
+    funnel_status_at_time: DEFAULT_FUNNEL_STATUS,
+    previous_status: 'lost',
+    status_changed: true,
+    notes: 'Lead reactivated — new inbound message after lost status.',
+    metadata: { event: 'lost_reactivation' },
+  });
+
+  console.info(`[chatwoot] lost lead reactivated uuid=${leadUuid}`);
 }
 
 /**
@@ -171,6 +231,9 @@ export async function processChatwoot(body: unknown): Promise<void> {
       const existingLead = await findLeadByChatwootConversation(conversationId);
       if (!existingLead) {
         await handleLeadCreate(payload);
+      } else if (existingLead.funnel_status === 'lost') {
+        // New inbound message on a lost lead — reactivate to Lead Hub.
+        await reactivateLostLead(existingLead.uuid, existingLead.message_from);
       }
     }
     // Hem incoming hem outgoing lead_messages'a yazılır
@@ -425,8 +488,6 @@ async function handleLeadCreate(payload: InboundChatwootPayload): Promise<void> 
   const inboundAgent = resolveInboundAssignee(payload);
   if (inboundAgent) {
     await tryInboundAssigneeSync(payload, leadUuid, conversationId);
-  } else if (result.type === 'created' && result.assignedTo) {
-    await pushAssigneeToChatwoot(leadUuid, result.assignedTo);
   }
 }
 
@@ -469,16 +530,20 @@ function normalizeLabelArray(value: unknown): string[] {
  */
 function normalizeLabelsChangeValue(value: unknown): string[] {
   const fromArray = normalizeLabelArray(value);
-  if (fromArray.length > 0) return fromArray;
+  const raw = fromArray.length > 0 ? fromArray : [];
 
-  if (typeof value === 'string' && value.trim().length > 0) {
-    return value
-      .split(',')
-      .map((part) => part.trim())
-      .filter((part) => part.length > 0);
+  if (raw.length === 0) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0)
+        .map(normalizeChatwootFunnelLabel);
+    }
+    return [];
   }
 
-  return [];
+  return raw.map(normalizeChatwootFunnelLabel);
 }
 
 /**
@@ -488,7 +553,7 @@ function normalizeLabelsChangeValue(value: unknown): string[] {
  */
 function extractLabelDiff(
   changedAttributes: ChatwootConversationUpdated['changed_attributes'],
-): { added: string[]; removed: string[] } | null {
+): { added: string[]; removed: string[]; current: string[] } | null {
   const labelKeys = ['label_list', 'labels'] as const;
 
   for (const attr of changedAttributes) {
@@ -507,7 +572,7 @@ function extractLabelDiff(
       const added = current.filter((l) => !previousSet.has(l));
       const removed = previous.filter((l) => !currentSet.has(l));
 
-      return { added, removed };
+      return { added, removed, current };
     }
   }
 
@@ -524,8 +589,12 @@ function resolveLabelValue(label: string, field: string): string | boolean | nul
   if (field === 'is_organic' && label in CHATWOOT_LABEL_IS_ORGANIC) {
     return CHATWOOT_LABEL_IS_ORGANIC[label];
   }
+  if (field === 'deal_awaiting' && label === CHATWOOT_DEAL_AWAITING_LABEL) return true;
+  if (field === 'is_24h_restricted' && label === CHATWOOT_24H_RESTRICTED_LABEL) return true;
   if (field === 'funnel_status' && CHATWOOT_FUNNEL_LABELS.has(label)) return label;
-  if (field === 'student_stage' && CHATWOOT_STUDENT_STAGE_LABELS.has(label)) return label;
+  if (field === 'student_stage') {
+    return resolveStudentStageFromChatwootLabel(label) ?? null;
+  }
   if (field === 'persona_type' && CHATWOOT_PERSONA_LABELS.has(label)) return label;
   if (field === 'special_state' && CHATWOOT_SPECIAL_STATE_LABELS.has(label)) return label;
   if (field === 'message_from' && CHATWOOT_MESSAGE_FROM_LABELS.has(label)) return label;
@@ -568,6 +637,12 @@ function assignLeadsField(
     case 'is_organic':
       updates.is_organic = value as boolean | null;
       break;
+    case 'deal_awaiting':
+      updates.deal_awaiting = value as boolean;
+      break;
+    case 'is_24h_restricted':
+      (updates as Record<string, unknown>).is_24h_restricted = value as boolean;
+      break;
     default:
       break;
   }
@@ -598,6 +673,10 @@ function getLeadsUpdateField(
       return updates.lead_source;
     case 'is_organic':
       return updates.is_organic;
+    case 'deal_awaiting':
+      return updates.deal_awaiting;
+    case 'is_24h_restricted':
+      return (updates as Record<string, unknown>).is_24h_restricted as boolean | undefined;
     default:
       return undefined;
   }
@@ -625,23 +704,13 @@ function getLeadFieldValue(lead: LeadSyncRow, field: string): string | boolean |
       return lead.lead_source;
     case 'is_organic':
       return lead.is_organic;
+    case 'deal_awaiting':
+      return lead.deal_awaiting;
+    case 'is_24h_restricted':
+      return lead.is_24h_restricted;
     default:
       return null;
   }
-}
-
-/**
- * Resolves cleared value when a label is removed from a single-value field.
- * @param field - Target CRM field name.
- * @returns Cleared value.
- */
-function resolveClearedValue(field: string): string | boolean | null {
-  if (field === 'funnel_status') return DEFAULT_FUNNEL_STATUS;
-  if (field === 'student_stage') return DEFAULT_STUDENT_STAGE;
-  if (field === 'persona_type' || field === 'special_state') return null;
-  if (field === 'message_from' || field === 'lead_source' || field === 'is_organic') return null;
-  if (field === 'uni_year' || field === 'referral_domain') return null;
-  return null;
 }
 
 /**
@@ -654,7 +723,7 @@ async function findLeadByChatwootConversation(conversationId: number): Promise<L
   const idStr = String(conversationId);
 
   const selectCols =
-    'uuid, funnel_status, student_stage, persona_type, special_state, message_from, lead_source, is_organic, source_details, label_sync_source, label_synced_at';
+    'uuid, funnel_status, student_stage, persona_type, special_state, message_from, lead_source, is_organic, deal_awaiting, is_24h_restricted, source_details, label_sync_source, label_synced_at, loss_reason, funnel_status_before_lost';
 
   const { data: byConvId, error: convError } = await client
     .from('leads')
@@ -668,7 +737,7 @@ async function findLeadByChatwootConversation(conversationId: number): Promise<L
     throw new Error(`Lead lookup by conversation id failed: ${convError.message}`);
   }
 
-  if (byConvId) return byConvId as LeadSyncRow;
+  if (byConvId) return byConvId as unknown as LeadSyncRow;
 
   const { data: exact, error: exactError } = await client
     .from('leads')
@@ -682,7 +751,7 @@ async function findLeadByChatwootConversation(conversationId: number): Promise<L
     throw new Error(`Lead lookup failed: ${exactError.message}`);
   }
 
-  if (exact) return exact as LeadSyncRow;
+  if (exact) return exact as unknown as LeadSyncRow;
 
   const prefix = `conv_${idStr}_%`;
   const { data: prefixed, error: prefixError } = await client
@@ -698,7 +767,7 @@ async function findLeadByChatwootConversation(conversationId: number): Promise<L
     throw new Error(`Lead prefix lookup failed: ${prefixError.message}`);
   }
 
-  return prefixed as LeadSyncRow | null;
+  return prefixed as unknown as LeadSyncRow | null;
 }
 
 /**
@@ -719,8 +788,14 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
   }
 
   const labelDiff = extractLabelDiff(payload.changed_attributes);
+  const customAttrDiff = extractCustomAttributeDiff(payload.changed_attributes);
 
-  if (!labelDiff) {
+  const labelAdded = labelDiff?.added ?? [];
+  const labelRemoved = labelDiff?.removed ?? [];
+  const hasLabelChanges = labelAdded.length > 0 || labelRemoved.length > 0;
+  const hasCustomAttrChanges = customAttrDiff != null;
+
+  if (!hasLabelChanges && !hasCustomAttrChanges) {
     if (conversationWasReopened(payload.changed_attributes)) {
       const existing = await findLeadByChatwootConversation(conversationId);
       if (!existing) {
@@ -738,15 +813,12 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
     return;
   }
 
-  const { added, removed } = labelDiff;
-  if (added.length === 0 && removed.length === 0) return;
-
   let lead = await findLeadByChatwootConversation(conversationId);
 
   if (!lead) {
     const contact = resolveChatwootContact(payload);
     if (contact) {
-      console.info(`[chatwoot] creating lead before label sync conversation=${conversationId}`);
+      console.info(`[chatwoot] creating lead before sync conversation=${conversationId}`);
       await handleLeadCreate(inboundPayloadFromConversationUpdated(payload));
       lead = await findLeadByChatwootConversation(conversationId);
     }
@@ -757,47 +829,83 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
     return;
   }
 
-  if (
+  const leadRow = lead;
+
+  // Labels and custom attributes can echo a CRM-originated push — skip both inside the echo window.
+  const echoSkip =
     isChatwootLabelSyncEnabled() &&
-    shouldSkipInboundEcho(lead.label_sync_source, lead.label_synced_at)
-  ) {
-    console.info(`[chatwoot] label sync skipped — CRM echo window lead=${lead.uuid}`);
-    return;
+    shouldSkipInboundEcho(leadRow.label_sync_source, leadRow.label_synced_at);
+  const processLabels = hasLabelChanges && !echoSkip;
+  const processCustomAttrs = hasCustomAttrChanges && !echoSkip;
+  if (echoSkip && hasLabelChanges) {
+    console.info(`[chatwoot] label sync skipped — CRM echo window lead=${leadRow.uuid}`);
   }
+  if (echoSkip && hasCustomAttrChanges) {
+    console.info(`[chatwoot] custom-attribute sync skipped — CRM echo window lead=${leadRow.uuid}`);
+  }
+
+  const added = processLabels ? labelAdded : [];
+  const removed = processLabels ? labelRemoved : [];
+  const currentLabels = labelDiff?.current ?? [];
+
+  if (!processLabels && !processCustomAttrs) return;
 
   const client = createServiceClient();
   const leadsUpdates: LeadsUpdate = {};
-  const detailsUpdates: Record<string, string | null> = {};
+  const leadDetailsUpdates: Record<string, unknown> = {};
   const fieldChanges: FieldChangeRecord[] = [];
 
   let referralDomain: string | null | undefined;
   let dormAwaiting: string[] | undefined;
   let uniYear: string | null | undefined = undefined;
 
-  const needsDetails =
-    added.some((l) => CHATWOOT_DORM_AWAITING_LABELS.has(l) || CHATWOOT_UNI_YEAR_LABELS.has(l)) ||
-    removed.some((l) => CHATWOOT_DORM_AWAITING_LABELS.has(l) || CHATWOOT_UNI_YEAR_LABELS.has(l));
+  const labelNeedsDetails =
+    processLabels &&
+    (added.some((l) => CHATWOOT_DORM_AWAITING_LABELS.has(l) || CHATWOOT_UNI_YEAR_LABELS.has(l)) ||
+      removed.some((l) => CHATWOOT_DORM_AWAITING_LABELS.has(l) || CHATWOOT_UNI_YEAR_LABELS.has(l)));
 
   let existingUniYear: string | null = null;
+  let detailsRow: {
+    dorm_awaiting?: string[] | null;
+    uni_year?: string | null;
+    university?: string | null;
+    school_shortname?: string | null;
+    interested_hotel?: string[] | null;
+    budget_tier?: string | null;
+    move_in?: string | null;
+    room_category?: string | null;
+    room_type?: string[] | null;
+    student_gender?: string | null;
+  } | null = null;
 
-  if (needsDetails) {
-    const { data: detailsRow, error: detailsError } = await client
+  if (labelNeedsDetails || processCustomAttrs) {
+    const { data, error: detailsError } = await client
       .from('lead_details')
-      .select('dorm_awaiting, uni_year')
-      .eq('lead_uuid', lead.uuid)
+      .select(
+        'dorm_awaiting, uni_year, university, school_shortname, interested_hotel, budget_tier, move_in, room_category, room_type, student_gender',
+      )
+      .eq('lead_uuid', leadRow.uuid)
       .maybeSingle();
 
     if (detailsError) {
       throw new Error(`lead_details fetch failed: ${detailsError.message}`);
     }
+    detailsRow = data;
+  }
 
+  if (labelNeedsDetails) {
     dormAwaiting = [...(detailsRow?.dorm_awaiting ?? [])];
     existingUniYear = detailsRow?.uni_year ?? null;
     uniYear = existingUniYear;
   }
 
-  const recordChange = (field: string, previous: unknown, current: unknown) => {
-    fieldChanges.push({ field, previous_value: previous, current_value: current });
+  const recordChange = (
+    field: string,
+    previous: unknown,
+    current: unknown,
+    origin: 'label' | 'custom_attribute' = 'label',
+  ) => {
+    fieldChanges.push({ field, previous_value: previous, current_value: current, origin });
   };
 
   const applyAdded = (label: string) => {
@@ -818,14 +926,14 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
         const value = resolveLabelValue(label, 'uni_year') as string;
         const prev = uniYear ?? existingUniYear;
         uniYear = value;
-        detailsUpdates.uni_year = value;
+        leadDetailsUpdates.uni_year = value;
         recordChange('uni_year', prev, value);
         continue;
       }
 
       if (target.table === 'source_details' && target.field === 'referral_domain') {
         const value = resolveLabelValue(label, 'referral_domain') as string;
-        const prev = lead.source_details?.referral_domain ?? null;
+        const prev = leadRow.source_details?.referral_domain ?? null;
         referralDomain = value;
         recordChange('referral_domain', prev, value);
         continue;
@@ -835,7 +943,8 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
         const value = resolveLabelValue(label, target.field);
         if (value === null && target.field !== 'is_organic') continue;
         const prev =
-          getLeadsUpdateField(leadsUpdates, target.field) ?? getLeadFieldValue(lead, target.field);
+          getLeadsUpdateField(leadsUpdates, target.field) ??
+          getLeadFieldValue(leadRow, target.field);
         assignLeadsField(leadsUpdates, target.field, value);
         recordChange(target.field, prev, value);
       }
@@ -847,95 +956,240 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
       if (target.table === 'none') continue;
 
       if (target.table === 'lead_details' && target.field === 'dorm_awaiting') {
-        if (!dormAwaiting) continue;
-        if (!dormAwaiting.includes(label)) continue;
-        const prev = [...dormAwaiting];
-        dormAwaiting = dormAwaiting.filter((d) => d !== label);
-        recordChange('dorm_awaiting', prev, [...dormAwaiting]);
+        const prev = [...(dormAwaiting ?? detailsRow?.dorm_awaiting ?? [])];
+        const next = resolveDormAwaitingFromRemainingLabels(currentLabels);
+        if (!arraysEqual(prev, next)) {
+          dormAwaiting = next;
+          recordChange('dorm_awaiting', prev, [...next]);
+        }
         continue;
       }
 
       if (target.table === 'lead_details' && target.field === 'uni_year') {
-        const mapped = resolveLabelValue(label, 'uni_year');
+        const field = 'uni_year' satisfies SingleValueLabelField;
+        const mapped = mapLabelToFieldValue(label, field);
         const current = uniYear ?? existingUniYear;
-        if (mapped !== null && current !== mapped) continue;
+        if (mapped !== null && mapped !== current) continue;
         const prev = current;
-        uniYear = null;
-        detailsUpdates.uni_year = null;
-        recordChange('uni_year', prev, null);
+        const next = resolveFieldAfterLabelRemoval(field, currentLabels) as string | null;
+        uniYear = next;
+        leadDetailsUpdates.uni_year = next;
+        recordChange('uni_year', prev, next);
         continue;
       }
 
       if (target.table === 'source_details' && target.field === 'referral_domain') {
-        const mapped = resolveLabelValue(label, 'referral_domain');
+        const field = 'referral_domain' satisfies SingleValueLabelField;
+        const mapped = mapLabelToFieldValue(label, field);
         const current =
-          referralDomain ?? (lead.source_details?.referral_domain as string | null) ?? null;
-        if (mapped !== null && current !== mapped) continue;
+          referralDomain ?? (leadRow.source_details?.referral_domain as string | null) ?? null;
+        if (mapped !== null && mapped !== current) continue;
         const prev = current;
-        referralDomain = null;
-        recordChange('referral_domain', prev, null);
+        const next = resolveFieldAfterLabelRemoval(field, currentLabels) as string | null;
+        referralDomain = next;
+        recordChange('referral_domain', prev, next);
         continue;
       }
 
       if (target.table === 'leads') {
-        const mapped = resolveLabelValue(label, target.field);
+        const field = target.field as SingleValueLabelField;
+        const mapped = mapLabelToFieldValue(label, field);
         const current =
-          getLeadsUpdateField(leadsUpdates, target.field) ?? getLeadFieldValue(lead, target.field);
-        if (mapped !== null && current !== mapped) continue;
+          getLeadsUpdateField(leadsUpdates, target.field) ??
+          getLeadFieldValue(leadRow, target.field);
+        if (mapped !== null && mapped !== current) continue;
         const prev = current;
-        const cleared = resolveClearedValue(target.field);
-        assignLeadsField(leadsUpdates, target.field, cleared);
-        recordChange(target.field, prev, cleared);
+        const next = resolveFieldAfterLabelRemoval(field, currentLabels);
+        assignLeadsField(leadsUpdates, target.field, next);
+        recordChange(target.field, prev, next);
       }
     }
   };
 
-  for (const label of added) applyAdded(label);
-  for (const label of removed) applyRemoved(label);
+  if (processLabels) {
+    for (const label of added) applyAdded(label);
+    for (const label of removed) applyRemoved(label);
+  }
+
+  // Apply Chatwoot conversation custom attributes (university, budget, loss reason, ...).
+  let lossIntent: LossIntent;
+
+  const applyCustomAttribute = (key: string, current: unknown): void => {
+    switch (key) {
+      case 'university': {
+        const value = normalizeText(current);
+        const prev = detailsRow?.university ?? null;
+        if (value !== prev) {
+          leadDetailsUpdates.university = value;
+          recordChange('university', prev, value, 'custom_attribute');
+          const shortname = lookupSchoolShortname(value);
+          const prevShortname = detailsRow?.school_shortname ?? null;
+          if (shortname !== prevShortname) {
+            leadDetailsUpdates.school_shortname = shortname;
+            recordChange('school_shortname', prevShortname, shortname, 'custom_attribute');
+          }
+        }
+        return;
+      }
+      case 'ilgili_otel': {
+        const value = normalizeText(current);
+        const next = value ? [value] : [];
+        const prev = [...(detailsRow?.interested_hotel ?? [])];
+        if (!arraysEqual(prev, next)) {
+          leadDetailsUpdates.interested_hotel = next;
+          recordChange('interested_hotel', prev, next, 'custom_attribute');
+        }
+        return;
+      }
+      case 'butce': {
+        const text = normalizeText(current);
+        const tier = mapButce(current);
+        if (text && tier === null) return;
+        const prev = detailsRow?.budget_tier ?? null;
+        if (tier !== prev) {
+          Object.assign(leadDetailsUpdates, budgetTierWritePayload(tier));
+          recordChange('budget_tier', prev, tier, 'custom_attribute');
+        }
+        return;
+      }
+      case 'tasinma_tarihi': {
+        const text = normalizeText(current);
+        const value = parseMoveInDate(current);
+        if (text && value === null) return; // unparseable date — ignore
+        const prev = detailsRow?.move_in ?? null;
+        if (value !== prev) {
+          leadDetailsUpdates.move_in = value;
+          recordChange('move_in', prev, value, 'custom_attribute');
+        }
+        return;
+      }
+      case 'oda_tiipi': {
+        const mapped = mapOdaTipiInbound(current, [...(detailsRow?.room_type ?? [])]);
+        if (!mapped) return;
+        const prevCategory = detailsRow?.room_category ?? null;
+        if (mapped.room_category !== prevCategory) {
+          leadDetailsUpdates.room_category = mapped.room_category;
+          recordChange('room_category', prevCategory, mapped.room_category, 'custom_attribute');
+        }
+        const prevRoomType = [...(detailsRow?.room_type ?? [])];
+        if (!arraysEqual(prevRoomType, mapped.room_type)) {
+          leadDetailsUpdates.room_type = mapped.room_type;
+          recordChange('room_type', prevRoomType, mapped.room_type, 'custom_attribute');
+        }
+        return;
+      }
+      case 'ogrenci_cinsiyet': {
+        const value = mapOgrenciCinsiyet(current);
+        const prev = detailsRow?.student_gender ?? null;
+        if (value !== prev) {
+          leadDetailsUpdates.student_gender = value;
+          recordChange('student_gender', prev, value, 'custom_attribute');
+        }
+        return;
+      }
+      case 'kayip_nedeni': {
+        const value = mapKayipNedeni(current);
+        lossIntent = value === null ? 'clear' : 'set';
+        if (value !== null) {
+          leadsUpdates.loss_reason = value;
+        }
+        return;
+      }
+      default:
+        return;
+    }
+  };
+
+  if (processCustomAttrs && customAttrDiff) {
+    for (const [key, change] of Object.entries(customAttrDiff)) {
+      applyCustomAttribute(key, change.current);
+    }
+  }
+
+  // Resolve the lost transition (move to / restore from the 'lost' funnel status).
+  const lostTransition = resolveLostTransition({
+    prevFunnel: leadRow.funnel_status,
+    beforeLost: leadRow.funnel_status_before_lost,
+    added,
+    removed,
+    lossIntent,
+  });
+
+  let funnelStatusBeforeLost: string | null | undefined;
+  if (lostTransition.funnelStatus !== undefined) {
+    leadsUpdates.funnel_status = lostTransition.funnelStatus;
+  }
+  if (lostTransition.funnelStatusBeforeLost !== undefined) {
+    funnelStatusBeforeLost = lostTransition.funnelStatusBeforeLost;
+  }
+  if (lostTransition.clearLossReason) {
+    leadsUpdates.loss_reason = null;
+  }
+
+  // Reconcile contact_history funnel_status entries to a single net change, then
+  // add a loss_reason entry when it changed.
+  const finalFunnel = leadsUpdates.funnel_status;
+  const reconciledChanges = fieldChanges.filter((c) => c.field !== 'funnel_status');
+  if (finalFunnel !== undefined && finalFunnel !== leadRow.funnel_status) {
+    reconciledChanges.push({
+      field: 'funnel_status',
+      previous_value: leadRow.funnel_status,
+      current_value: finalFunnel,
+      origin: lossIntent ? 'custom_attribute' : 'label',
+    });
+  }
+  if ('loss_reason' in leadsUpdates) {
+    const prevLoss = leadRow.loss_reason ?? null;
+    const nextLoss = (leadsUpdates.loss_reason as string | null) ?? null;
+    if (prevLoss !== nextLoss) {
+      reconciledChanges.push({
+        field: 'loss_reason',
+        previous_value: prevLoss,
+        current_value: nextLoss,
+        origin: 'custom_attribute',
+      });
+    }
+  }
 
   const interactionSource =
-    lead.message_from === 'instagram' || lead.message_from === 'whatsapp'
-      ? lead.message_from
+    leadRow.message_from === 'instagram' || leadRow.message_from === 'whatsapp'
+      ? leadRow.message_from
       : 'whatsapp';
 
   const labelSyncMeta =
-    isChatwootLabelSyncEnabled() && fieldChanges.length > 0
+    isChatwootLabelSyncEnabled() && reconciledChanges.length > 0
       ? {
           label_sync_source: 'chatwoot' as const,
           label_synced_at: new Date().toISOString(),
         }
       : {};
 
-  if (Object.keys(leadsUpdates).length > 0 || Object.keys(labelSyncMeta).length > 0) {
+  const leadWritePayload: Record<string, unknown> = { ...leadsUpdates, ...labelSyncMeta };
+  if (funnelStatusBeforeLost !== undefined) {
+    leadWritePayload.funnel_status_before_lost = funnelStatusBeforeLost;
+  }
+
+  if (Object.keys(leadWritePayload).length > 0) {
     const { error: leadError } = await client
       .from('leads')
-      .update({ ...leadsUpdates, ...labelSyncMeta })
-      .eq('uuid', lead.uuid);
+      .update(leadWritePayload as LeadsUpdate)
+      .eq('uuid', leadRow.uuid);
 
     if (leadError) {
       throw new Error(`leads update failed: ${leadError.message}`);
-    }
-  } else if (Object.keys(labelSyncMeta).length > 0) {
-    const { error: metaError } = await client
-      .from('leads')
-      .update(labelSyncMeta)
-      .eq('uuid', lead.uuid);
-
-    if (metaError) {
-      throw new Error(`label sync meta update failed: ${metaError.message}`);
     }
   }
 
   if (referralDomain !== undefined) {
     const merged = {
-      ...(lead.source_details ?? {}),
+      ...(leadRow.source_details ?? {}),
       referral_domain: referralDomain,
     };
 
     const { error: sdError } = await client
       .from('leads')
       .update({ source_details: merged })
-      .eq('uuid', lead.uuid);
+      .eq('uuid', leadRow.uuid);
 
     if (sdError) {
       throw new Error(`source_details update failed: ${sdError.message}`);
@@ -943,44 +1197,36 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
   }
 
   if (dormAwaiting !== undefined) {
-    const { error: dormError } = await client
-      .from('lead_details')
-      .upsert({ lead_uuid: lead.uuid, dorm_awaiting: dormAwaiting }, { onConflict: 'lead_uuid' });
+    leadDetailsUpdates.dorm_awaiting = dormAwaiting;
+  }
 
-    if (dormError) {
-      throw new Error(`lead_details dorm_awaiting upsert failed: ${dormError.message}`);
+  if (Object.keys(leadDetailsUpdates).length > 0) {
+    const { error: detailsUpsertError } = await client
+      .from('lead_details')
+      .upsert({ lead_uuid: leadRow.uuid, ...leadDetailsUpdates }, { onConflict: 'lead_uuid' });
+
+    if (detailsUpsertError) {
+      throw new Error(`lead_details upsert failed: ${detailsUpsertError.message}`);
     }
   }
 
-  if (detailsUpdates.uni_year !== undefined) {
-    const { error: uniError } = await client
-      .from('lead_details')
-      .upsert(
-        { lead_uuid: lead.uuid, uni_year: detailsUpdates.uni_year },
-        { onConflict: 'lead_uuid' },
-      );
-
-    if (uniError) {
-      throw new Error(`lead_details uni_year upsert failed: ${uniError.message}`);
-    }
-  }
-
-  for (const change of fieldChanges) {
+  for (const change of reconciledChanges) {
+    const noteSource = change.origin === 'custom_attribute' ? 'custom attribute' : 'label';
     const { error: historyError } = await client.from('contact_history').insert({
-      lead_uuid: lead.uuid,
+      lead_uuid: leadRow.uuid,
       interaction_type: 'status_change',
       interaction_source: interactionSource,
       funnel_status_at_time:
-        change.field === 'funnel_status' ? (change.current_value as string) : lead.funnel_status,
+        change.field === 'funnel_status' ? (change.current_value as string) : leadRow.funnel_status,
       previous_status: change.field === 'funnel_status' ? (change.previous_value as string) : null,
       status_changed: change.field === 'funnel_status',
-      notes: `Chatwoot label sync: ${change.field} updated`,
+      notes: `Chatwoot ${noteSource} sync: ${change.field} updated`,
       metadata: {
         chatwoot_event: 'conversation_updated',
         conversation_id: conversationId,
         field: change.field,
-        previous_value: change.previous_value,
-        current_value: change.current_value,
+        previous_value: change.previous_value as Json,
+        current_value: change.current_value as Json,
         added_labels: added,
         removed_labels: removed,
       } as Json,
@@ -990,6 +1236,12 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
       throw new Error(`contact_history insert failed: ${historyError.message}`);
     }
   }
+}
+
+/** Shallow array equality for string arrays. */
+function arraysEqual(a: readonly unknown[], b: readonly unknown[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
 }
 
 /** Yeni konuşma sayılması için minimum sessizlik süresi (saat). */
@@ -1042,6 +1294,11 @@ async function handleMessageCreated(payload: ChatwootMessageCreated): Promise<vo
     isPrivate,
     messageTimestamp,
   });
+
+  // Incoming customer messages reset the WhatsApp 24h window and reopen restriction.
+  if (messageType === 'incoming' && !isPrivate) {
+    await recordInboundMessageWindow(lead.uuid, messageTimestamp);
+  }
 
   await maybeWriteMessageStart({
     leadUuid: lead.uuid,
@@ -1096,6 +1353,38 @@ async function syncMessageToLeadMessages(params: {
   } else {
     console.info(
       `[chatwoot] lead_messages synced lead=${params.leadUuid} message=${params.messageId}`,
+    );
+  }
+}
+
+/**
+ * Records the latest incoming (customer) message time on the lead and reopens the
+ * WhatsApp 24h window: clears is_24h_restricted when a fresh inbound message arrives.
+ * Only the customer's incoming messages reset the window — outgoing replies do not.
+ * @param leadUuid - Lead UUID.
+ * @param messageTimestamp - ISO timestamp of the incoming message.
+ */
+async function recordInboundMessageWindow(
+  leadUuid: string,
+  messageTimestamp: string,
+): Promise<void> {
+  const client = createServiceClient();
+  const { error } = await (
+    client as unknown as {
+      from: (t: string) => {
+        update: (v: Record<string, unknown>) => {
+          eq: (c: string, v: string) => Promise<{ error: { message: string } | null }>;
+        };
+      };
+    }
+  )
+    .from('leads')
+    .update({ last_inbound_message_at: messageTimestamp, is_24h_restricted: false })
+    .eq('uuid', leadUuid);
+
+  if (error) {
+    console.error(
+      `[chatwoot] last_inbound_message_at update failed lead=${leadUuid}: ${error.message}`,
     );
   }
 }

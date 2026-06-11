@@ -148,7 +148,9 @@ export default function ArchivedLeadDetailPage() {
                   { term: t('filters.university'), value: details.university ?? emDash },
                   {
                     term: t('leads.budget'),
-                    value: `${details.budget_min ?? emDash} – ${details.budget_max ?? emDash}`,
+                    value: details.budget_tier
+                      ? formatEnumLabel(locale, 'budgetTier', details.budget_tier)
+                      : emDash,
                   },
                   { term: t('leads.moveIn'), value: details.move_in ?? emDash },
                   { term: t('filters.uniYear'), value: details.uni_year ?? emDash },

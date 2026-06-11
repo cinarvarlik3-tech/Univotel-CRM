@@ -25,10 +25,17 @@ export interface LeadRow {
   lead_score?: number;
   parent_phone?: string | null;
   is_organic?: boolean | null;
+  deal_awaiting?: boolean;
   source_details?: SourceDetails | Record<string, unknown>;
   assignee_name?: string | null;
   salespeople?: { full_name: string; email: string } | null;
   updated_at?: string;
+  has_moved_in?: boolean;
+  is_24h_restricted?: boolean;
+  move_in_date_set?: boolean;
+  last_inbound_message_at?: string | null;
+  funnel_status_before_lost?: string | null;
+  archived_at?: string | null;
 }
 
 /** Hotel recommendation contender from Make.com workflow. */
@@ -43,8 +50,8 @@ export interface RecHotelItem {
 export interface LeadDetailRow {
   lead_uuid: string;
   university: string | null;
-  budget_min: number | null;
-  budget_max: number | null;
+  budget_tier: string | null;
+  budget_max?: number | null;
   move_in: string | null;
   uni_year: string | null;
   parent_name: string | null;
@@ -62,6 +69,21 @@ export interface LeadDetailRow {
   rec_hotel?: RecHotelItem[] | unknown | null;
   school_shortname?: string | null;
   updated_at?: string;
+  actual_move_in_date?: string | null;
+}
+
+/** Reference row from the universities table — drives the university combobox. */
+export interface UniversityRow {
+  id: string;
+  uni_name: string;
+  uni_shortname: string;
+  district: string | null;
+  city: string;
+  country: string;
+  yok_code: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 /** Lead with joined details and assignee. */
@@ -166,7 +188,12 @@ export type NotificationAlertType =
   | 'unassigned_lead'
   | 'webhook_failure'
   | 'campaign_paused'
-  | 'campaign_failed';
+  | 'campaign_failed'
+  | 'lead_message'
+  | 'nurture_task_due'
+  | 'visit_reminder'
+  | 'visit_resolution_pending'
+  | 'move_in_reminder';
 
 /** Notification row for manager alert inbox. */
 export interface NotificationRow {

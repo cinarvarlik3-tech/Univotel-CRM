@@ -122,6 +122,34 @@ export async function listConversationLabels(conversationId: number): Promise<st
 }
 
 /**
+ * Updates custom attributes on a Chatwoot conversation (merge semantics).
+ * @param conversationId - Chatwoot conversation id.
+ * @param customAttributes - Key/value pairs to set on the conversation.
+ */
+export async function updateConversationCustomAttributes(
+  conversationId: number,
+  customAttributes: Record<string, string | null>,
+): Promise<void> {
+  if (!isChatwootApiConfigured()) {
+    throw new Error('Chatwoot API is not configured');
+  }
+
+  const res = await chatwootFetch(`conversations/${conversationId}/custom_attributes`, {
+    method: 'POST',
+    body: JSON.stringify({ custom_attributes: customAttributes }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new ChatwootApiError(
+      `update custom attributes ${conversationId} failed: ${res.status}`,
+      res.status,
+      body,
+    );
+  }
+}
+
+/**
  * Replaces all labels on a conversation (Chatwoot overwrite semantics).
  * @param conversationId - Chatwoot conversation id.
  * @param labels - Full label slug list to set.

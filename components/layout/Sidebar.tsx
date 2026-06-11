@@ -7,10 +7,20 @@ import { useState } from 'react';
 import {
   IconArchive,
   IconBuilding,
+  IconCalendar,
+  IconCalendarEvent,
   IconChartBar,
   IconCheckbox,
+  IconClock,
+  IconClockPause,
+  IconContract,
+  IconCurrencyLira,
+  IconFileCheck,
   IconHistory,
+  IconInbox,
   IconMenu2,
+  IconPhoneCall,
+  IconPlant2,
   IconSettings,
   IconSpeakerphone,
   IconUserCheck,
@@ -37,6 +47,17 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: '/leads', labelKey: 'nav.leads', icon: IconUsers },
   { href: '/leads/mine', labelKey: 'nav.myLeads', icon: IconUserCheck },
+  { href: '/leads/hub', labelKey: 'nav.leadHub', icon: IconInbox },
+  { href: '/leads/expecting-call', labelKey: 'nav.expectingCall', icon: IconPhoneCall },
+  { href: '/leads/nurture', labelKey: 'nav.nurture', icon: IconPlant2 },
+  { href: '/visits', labelKey: 'nav.visitCalendar', icon: IconCalendar },
+  { href: '/leads/post-visit', labelKey: 'nav.postVisit', icon: IconFileCheck },
+  { href: '/leads/24h-restricted', labelKey: 'nav.restricted24h', icon: IconClock },
+  { href: '/leads/downpayment', labelKey: 'nav.downpayment', icon: IconCurrencyLira },
+  { href: '/leads/deal-signed', labelKey: 'nav.dealSigned', icon: IconContract },
+  { href: '/move-in', labelKey: 'nav.moveInCalendar', icon: IconCalendarEvent },
+  { href: '/leads/moved-in', labelKey: 'nav.movedIn', icon: IconBuilding },
+  { href: '/deal-awaiting', labelKey: 'nav.dealAwaiting', icon: IconClockPause },
   { href: '/tasks', labelKey: 'nav.tasks', icon: IconCheckbox },
   { href: '/properties', labelKey: 'nav.properties', icon: IconBuilding },
   { href: '/dashboard', labelKey: 'nav.analytics', icon: IconChartBar, managerOnly: true },
@@ -91,15 +112,32 @@ export function Sidebar({ userName, userRole, isManager, isSuperadminUser }: Sid
     return true;
   });
 
+  const EXACT_LEADS_SUBPAGES = new Set([
+    '/leads/mine',
+    '/leads/hub',
+    '/leads/expecting-call',
+    '/leads/nurture',
+    '/leads/post-visit',
+    '/leads/24h-restricted',
+    '/leads/downpayment',
+    '/leads/deal-signed',
+    '/leads/moved-in',
+    '/leads/archived',
+    '/leads/new',
+  ]);
+
   function isActive(href: string) {
     if (href === '/old-leads') return router.pathname.startsWith('/old-leads');
-    if (href === '/leads/mine') return router.pathname === '/leads/mine';
+    if (href === '/deal-awaiting') return router.pathname.startsWith('/deal-awaiting');
+    if (href === '/visits') return router.pathname === '/visits';
+    if (href === '/move-in') return router.pathname === '/move-in';
+    // Exact-match subroutes under /leads.
+    if (EXACT_LEADS_SUBPAGES.has(href)) return router.pathname === href;
     if (href === '/leads') {
       return (
         router.pathname === '/leads' ||
         (router.pathname.startsWith('/leads/') &&
-          !router.pathname.startsWith('/leads/archived') &&
-          !router.pathname.startsWith('/leads/mine') &&
+          !EXACT_LEADS_SUBPAGES.has(router.pathname) &&
           router.pathname !== '/leads/new')
       );
     }

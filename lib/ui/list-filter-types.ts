@@ -7,6 +7,8 @@ export type PresenceFilter = 'any' | 'yes' | 'no';
 
 /** Extended filter fields beyond enum dropdowns in `filters` record. */
 export interface ExtendedListFilterFields {
+  budgetTier: string;
+  /** Old leads list only — old_lead_details still uses numeric budget range. */
   budgetMin: string;
   budgetMax: string;
   moveInFrom: string;
@@ -33,6 +35,7 @@ export interface ExtendedListFilterFields {
 
 /** Default values for extended list filter fields. */
 export const DEFAULT_EXTENDED_LIST_FILTER_FIELDS: ExtendedListFilterFields = {
+  budgetTier: '',
   budgetMin: '',
   budgetMax: '',
   moveInFrom: '',

@@ -39,6 +39,15 @@ describe('buildManagedLabelsFromCrm', () => {
     });
     expect(labels).not.toContain('manual');
   });
+
+  it('uses Chatwoot label slug for yatay-gecis-bekliyor student stage', () => {
+    const labels = buildManagedLabelsFromCrm({
+      ...baseState,
+      student_stage: 'yatay-gecis-bekliyor',
+    });
+    expect(labels).toContain('yatay_geçiş_bekliyor');
+    expect(labels).not.toContain('yatay-gecis-bekliyor');
+  });
 });
 
 describe('mergeOutboundLabels', () => {

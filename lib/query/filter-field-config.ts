@@ -32,7 +32,11 @@ const DETAILS_ILIKE_FIELDS = new Set([
   'campus',
   'nationality',
   'parent_name',
+  'school_shortname',
 ]);
+
+/** Fields on leads table that use partial text match. */
+const LEADS_ILIKE_FIELDS = new Set(['notes', 'parent_phone']);
 
 /** Array fields filtered via overlap (any-of multi-select). */
 const DETAILS_OVERLAP_FIELDS = new Set(['dorm_awaiting']);
@@ -56,6 +60,8 @@ function buildMeta(
       } else {
         meta[field] = { table, textMatch: 'eq' };
       }
+    } else if (LEADS_ILIKE_FIELDS.has(field)) {
+      meta[field] = { table, textMatch: 'ilike' };
     } else {
       meta[field] = { table, textMatch: 'eq' };
     }

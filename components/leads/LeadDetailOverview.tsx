@@ -70,10 +70,10 @@ export function LeadDetailOverview({ lead, details }: LeadDetailOverviewProps) {
     metaItems.push({ term: t('filters.university'), value: details.university });
   }
 
-  if (details?.budget_min != null || details?.budget_max != null) {
+  if (details?.budget_tier) {
     metaItems.push({
       term: t('leads.budget'),
-      value: `${details?.budget_min ?? t('common.emDash')} – ${details?.budget_max ?? t('common.emDash')}`,
+      value: formatEnumLabel(locale, 'budgetTier', details.budget_tier),
     });
   }
 

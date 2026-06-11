@@ -3,6 +3,7 @@
  */
 import { listConversationLabels, setConversationLabels } from '@/lib/chatwoot/client';
 import { mergeOutboundLabels, type CrmLabelState } from '@/lib/chatwoot/label-categories';
+import { markCrmChatwootOutboundSync } from '@/lib/chatwoot/push-custom-attributes';
 import { getConversationIdForLead } from '@/lib/chatwoot/sync-engine';
 import { logChatwootSync } from '@/lib/chatwoot/sync-log';
 import { isChatwootLabelSyncEnabled } from '@/lib/env';
@@ -17,15 +18,28 @@ export async function pushLabelsToChatwoot(leadUuid: string): Promise<void> {
 
   const client = createServiceClient();
 
-  const { data: lead, error: leadError } = await client
+  type LeadLabelRow = {
+    uuid: string;
+    funnel_status: string;
+    student_stage: string;
+    persona_type: string | null;
+    special_state: string | null;
+    message_from: string | null;
+    lead_source: string;
+    source_details: Record<string, unknown> | null;
+    chatwoot_conversation_id: number | null;
+    deal_awaiting: boolean;
+  };
+
+  const { data: lead, error: leadError } = (await client
     .from('leads')
     .select(
-      'uuid, funnel_status, student_stage, persona_type, special_state, message_from, lead_source, source_details, chatwoot_conversation_id',
+      'uuid, funnel_status, student_stage, persona_type, special_state, message_from, lead_source, source_details, chatwoot_conversation_id, deal_awaiting',
     )
     .eq('uuid', leadUuid)
     .eq('is_deleted', false)
     .eq('is_archived', false)
-    .maybeSingle();
+    .maybeSingle()) as unknown as { data: LeadLabelRow | null; error: { message: string } | null };
 
   if (leadError || !lead) {
     console.warn(`[chatwoot] pushLabels: lead not found ${leadUuid}`);
@@ -63,18 +77,14 @@ export async function pushLabelsToChatwoot(leadUuid: string): Promise<void> {
     source_details: (lead.source_details as Record<string, unknown> | null) ?? null,
     uni_year: details?.uni_year ?? null,
     dorm_awaiting: details?.dorm_awaiting ?? [],
+    deal_awaiting: lead.deal_awaiting,
   };
 
   try {
     const currentLabels = await listConversationLabels(conversationId);
     const nextLabels = mergeOutboundLabels(currentLabels, crmState);
     await setConversationLabels(conversationId, nextLabels);
-
-    const now = new Date().toISOString();
-    await client
-      .from('leads')
-      .update({ label_sync_source: 'crm', label_synced_at: now })
-      .eq('uuid', leadUuid);
+    await markCrmChatwootOutboundSync(leadUuid);
 
     await logChatwootSync({
       leadUuid,
@@ -108,6 +118,7 @@ export const CRM_LABEL_SYNC_FIELDS = [
   'special_state',
   'message_from',
   'lead_source',
+  'deal_awaiting',
 ] as const;
 
 /**

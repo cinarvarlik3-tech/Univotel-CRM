@@ -1,10 +1,10 @@
 # NetGSM Integration — Connection Details & System Reference
 
-**Last updated:** 2026-05-28  
+**Last updated:** 2026-06-11  
 **Production endpoint:** `POST https://panel.marketinguni.app/api/webhooks/netgsm`  
-**Related:** [`runbook.md` §4 NetGSM](./runbook.md), [`engineering-handoff.md`](./engineering-handoff.md)
+**Related:** [`runbook.md` §4 NetGSM](./runbook.md), [`engineering-handoff.md`](./engineering-handoff.md), [`engineering-onboarding.md`](./engineering-onboarding.md)
 
-This document covers **every NetGSM touchpoint in Univotel CRM**: how calls become leads, how authentication works (including caveats), payload normalization, DNI attribution, idempotency, logging, replay, and production troubleshooting.
+This document covers **every NetGSM touchpoint in Univotel CRM**: how calls become leads or call logs, how authentication works (including caveats), payload normalization, company-line CDR matching, DNI attribution, idempotency, logging, replay, and production troubleshooting.
 
 ---
 
@@ -14,10 +14,17 @@ NetGSM is the **GSM voice call ingestion channel**. When a prospect calls a mark
 
 1. Authenticates the request (static token in JSON body)
 2. Normalizes Turkish field names (`arayan`, `aranan`, `sure`, `kimlik`)
-3. Decides whether the event represents a **completed call worth a lead**
-4. Creates a lead with `lead_source = netgsm_call` and **5-minute SLA**
-5. Matches `aranan` (called number) to **`dni_numbers`** for marketing attribution
+3. Decides whether the event represents a **completed call worth processing**
+4. **Either** logs the call on an **existing lead** (company-line CDR path) **or** creates a new lead with `lead_source = netgsm_call`
+5. On **new lead** creation only: matches `aranan` to **`dni_numbers`** for marketing attribution and increments DNI counters
 6. Writes **`webhook_logs`** for audit and optional replay
+
+Two outcomes after a qualifying webhook:
+
+| Path                 | When                                                                                                                         | Result                                                               |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| **Company-line CDR** | `scenario: cdr` and caller or callee is the company line (`+90 212 909 52 44`) and a lead exists for the other party's phone | `contact_history` call log; may **unarchive** lead — **no new lead** |
+| **New lead**         | No company-line match, or no existing lead for that phone                                                                    | Full lead pipeline (dedupe, assign, SLA, DNI, attribution)           |
 
 NetGSM is **not** used for WhatsApp, SMS, or outbound campaign delivery in this CRM.
 
@@ -71,12 +78,14 @@ POST /api/webhooks/netgsm
   → runWithWebhookLog
        → claimWebhookLog (idempotency)
        → shouldSkipProcessing? → status=skipped
-       → processNetGsm → createLeadFromWebhook
+       → processNetGsm
+            → handleCdrForExistingLead? → contact_history (+ unarchive) → return
+            → else createLeadFromWebhook
        → finalizeWebhookLog (success | failed)
   → res.status(200)
 ```
 
-Implementation: `lib/webhooks/create-webhook-handler.ts`, `lib/webhooks/run-with-webhook-log.ts`.
+Implementation: `lib/webhooks/create-webhook-handler.ts`, `lib/webhooks/run-with-webhook-log.ts`, `lib/webhooks/process-netgsm.ts`.
 
 ---
 
@@ -187,46 +196,90 @@ Logic in `normalizeNetGsmPayload()`:
 
 **Hangup scenarios:** `hangup`, `*hangup` suffix.
 
-**Do NOT create lead when:**
+**Do NOT enter the processor as a new lead when:**
 
-- `scenario: Queue` (or similar) without caller + id + outcome
-- Missing `arayan` / resolved caller phone on a CDR that passed gate
-- Token mismatch inside processor (logged, no lead)
+- `scenario: Queue` (or similar) without caller + id + outcome → **`skipped`** in webhook_logs
+- Missing `arayan` / resolved caller phone on a payload that passed the gate → processor logs error + Telegram; no lead
+- Company-line CDR matches an existing lead → call log only (§7.1)
 
 **Skip flag for webhook_logs:** `shouldSkipNetGsmLead()` mirrors `!shouldCreateLead` (and invalid token when token sent) → log status **`skipped`**, no processor run.
 
 ---
 
-## 7. End-to-end lead pipeline
+## 7. End-to-end processing
 
-After `processNetGsm` approves the payload:
+After `processNetGsm` passes validation and `shouldCreateLead`, processing branches on **company-line CDR matching** before any new lead is created.
 
 ```
 normalizeNetGsmPayload
+  → handleCdrForExistingLead (see §7.1)
+       → matched? → write contact_history → return (webhook_logs success, no new lead)
   → buildNetGsmSourceDetails (channel: netgsm_call)
-  → createLeadFromWebhook
-       → normalizePhone(arayan)
-       → dedupe by phone (record duplicate if exists)
-       → insert leads (lead_source: netgsm_call)
-       → insert lead_details
-       → insert contact_history (see §7.1 quirk)
-       → buildCollectedDataRow + persistCollectedData (DNI lookup)
-       → incrementDniLeadCount(aranan) if channel netgsm_call
-       → assignLead + SLA (5 min)
-       → Telegram if unassigned / failures
+  → createLeadFromWebhook (see §7.2)
 ```
 
-### 7.1 Known quirk — `contact_history.interaction_type`
+### 7.1 Company-line CDR path (existing lead)
 
-In `lib/leads/create-lead.ts`:
+**File:** `lib/webhooks/process-netgsm.ts` → `handleCdrForExistingLead()`
+
+Runs when the normalized caller or callee matches the company line:
+
+| Constant                          | Value               |
+| --------------------------------- | ------------------- |
+| `COMPANY_PHONE_NUMBER`            | `+90 212 909 52 44` |
+| `COMPANY_PHONE_NUMBER_NORMALIZED` | `02129095244`       |
+
+**Algorithm:**
+
+1. Normalize `arayan` and `aranan` via `normalizePhone()`
+2. If neither side is the company line → return `false` (fall through to new-lead path)
+3. Resolve **lead phone** = the other party (not the company line)
+4. Resolve **direction:** company is caller → `outbound`; company is callee → `inbound`
+5. `findLeadByPhone(leadPhone)` — includes **archived** leads (`is_archived` filter not applied)
+6. If no lead → return `false` (fall through to new-lead path)
+7. If lead is archived → `unarchive_single_lead(uuid, manager_uuid: NULL)` (migration **0049** — audit note shows `system/CDR`)
+8. Insert `contact_history` with:
+   - `interaction_type: 'call'`
+   - `interaction_source: 'netgsm'`
+   - Turkish note, e.g. `15/05/2026 14.30'de aradı — 2 dk 5 sn` (Istanbul timezone; webhook receipt time — payload has no call timestamp)
+   - `metadata`: direction, duration, caller, callee
+
+**Does not run on this path:** new lead insert, assignment, SLA, DNI lookup/increment, `collected_data` write.
+
+**Unarchive failure:** logged as warning; CDR write is still attempted.
+
+### 7.2 New lead creation path
+
+When company-line CDR does not match (or no lead exists for that phone):
+
+```
+createLeadFromWebhook
+  → normalizePhone(arayan)
+  → dedupe by phone (record duplicate if active lead exists)
+  → insert leads (lead_source: netgsm_call)
+  → insert lead_details
+  → insert contact_history (see §7.3 — new-lead quirk)
+  → buildCollectedDataRow + persistCollectedData (DNI lookup)
+  → incrementDniLeadCount(aranan) when channel netgsm_call
+  → assignLead + calculateSlaDeadline (see §7.5)
+  → Telegram if unassigned / failures
+```
+
+### 7.3 `contact_history` — two behaviors
+
+**Company-line CDR path (§7.1):** correct types — `interaction_type: 'call'`, `interaction_source: 'netgsm'`.
+
+**New lead path** — known quirk in `lib/leads/create-lead.ts`:
 
 ```typescript
 interaction_type: input.leadSource.includes('call') ? 'whatsapp_call' : 'message_received';
 ```
 
-Because `leadSource` is `netgsm_call`, first contact history row is stored as **`whatsapp_call`**, not a NetGSM-specific type. Analytics or filters keyed on interaction type should account for this.
+Because `leadSource` is `netgsm_call`, the **first** contact history row on new lead creation is stored as **`whatsapp_call`**, not `call`. Analytics or filters keyed on `interaction_type` should account for this on the create path only.
 
-### 7.2 `source_details` shape
+**Duplicate submission:** `interaction_type: 'duplicate_submission'`, `interaction_source: netgsm`.
+
+### 7.4 `source_details` shape (new lead path only)
 
 Built by `buildNetGsmSourceDetails()`:
 
@@ -238,25 +291,30 @@ Built by `buildNetGsmSourceDetails()`:
 | `call_duration`        | Seconds                                                |
 | `normalization_failed` | false after successful phone normalize                 |
 
-### 7.3 SLA
+### 7.5 SLA
 
-From `lib/constants.ts`:
+**All lead sources** share the same SLA calculation in `lib/leads/sla.ts` (the `_leadSource` parameter is retained for call-site compatibility but **not used**):
 
-| Source        | Deadline      | At-risk offset |
-| ------------- | ------------- | -------------- |
-| `netgsm_call` | **5 minutes** | 2 minutes      |
+| Setting           | Value                                                                                                                         |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Standard deadline | **60 minutes** from SLA start (`SLA_DEADLINE_MINUTES`)                                                                        |
+| Peak season       | **30 minutes** when `PEAK_SEASON_ACTIVE = true` in `lib/constants.ts`                                                         |
+| Business hours    | Counting starts 09:00–17:00 Istanbul only; leads before 09:00 defer to 09:00 same day; at/after 17:00 defer to 09:00 next day |
+| `sla_status`      | `on_time` or `breached` only (`at_risk` removed in migration **0050**)                                                        |
 
-Peak season overrides apply via `isPeakSeasonActive()`.
+NetGSM new leads get the same 60-minute SLA as WhatsApp and other sources — not a separate 5-minute window.
 
-### 7.4 Deduplication
+### 7.6 Deduplication
 
-Same phone as existing active lead → **duplicate** path: no new lead; `contact_history` notes duplicate submission with `interaction_source: netgsm`.
+Same phone as existing **active** (non-archived) lead → **duplicate** path: no new lead; `contact_history` notes duplicate submission with `interaction_source: netgsm`.
+
+**Archived leads are not dedup matches.** A returning caller may get a new lead — unless company-line CDR finds the archived lead first and unarchives it (§7.1).
 
 ---
 
 ## 8. DNI (Dynamic Number Insertion) integration
 
-NetGSM calls are the **only live path** that increments DNI stats without a browser session.
+NetGSM **new lead creation** is the **only live path** that increments DNI stats without a browser session. Company-line CDR logging (§7.1) does **not** increment DNI or write `collected_data`.
 
 ### Data model
 
@@ -267,7 +325,7 @@ Table: `dni_numbers` (migration `0035`)
 | `virtual_number`             | NetGSM virtual number (unique)                                              |
 | `source`                     | Traffic source slug (`google-ads`, `meta-ads`, `organic`, site-specific, …) |
 | `is_active`                  | Must be `true` for GTM list + matching                                      |
-| `lead_count`, `last_lead_at` | Incremented on successful NetGSM lead create                                |
+| `lead_count`, `last_lead_at` | Incremented on **new lead** create only (not company-line CDR path)         |
 
 Admin UI: `/admin/dni-numbers` (**superadmin only**).
 
@@ -331,11 +389,11 @@ Duplicate keys → **silent no-op** (claim returns `duplicate`).
 
 ### Log row lifecycle
 
-| Status    | Meaning                                                       |
-| --------- | ------------------------------------------------------------- |
-| `success` | Lead pipeline completed (or processor returned without throw) |
-| `skipped` | Queue/ring-only, or `!shouldCreateLead` — **not replayable**  |
-| `failed`  | Processor threw — Telegram alert + **replay eligible**        |
+| Status    | Meaning                                                                                 |
+| --------- | --------------------------------------------------------------------------------------- |
+| `success` | Processor completed without throw — new lead, duplicate, **or** company-line CDR logged |
+| `skipped` | Queue/ring-only, or `!shouldCreateLead` — **not replayable**                            |
+| `failed`  | Processor threw — Telegram alert + **replay eligible**                                  |
 
 **UI:** `/webhook-logs` (manager+). Pre-2026-05-26 UI filtered failed-only; successful NetGSM tests appear as `success`.
 
@@ -363,7 +421,8 @@ If key is null, processor still runs but **without** log claim — error logged 
 | Wrong token                  | 401  | No row                 | No                 |
 | Missing token (caveat)       | 200  | Yes (if key derivable) | Maybe              |
 | Skipped event                | 200  | `skipped`              | No                 |
-| Success                      | 200  | `success`              | Yes (or duplicate) |
+| Success (new lead)           | 200  | `success`              | Yes (or duplicate) |
+| Success (CDR on existing)    | 200  | `success`              | No — call log only |
 | Processor throw              | 200  | `failed`               | No                 |
 
 **Why always 200 after auth:** NetGSM may not retry on 5xx; CRM prefers logging + Telegram over failing the HTTP layer. Check logs, not HTTP status alone.
@@ -399,9 +458,13 @@ pnpm exec wrangler secret list
 
 ---
 
-## 12. Production smoke test
+## 12. Production smoke tests
 
 From any machine with the token:
+
+### 12.1 New inbound call (DNI virtual number)
+
+Creates a lead (unless phone dedupes against an active lead):
 
 ```bash
 TOKEN=$(grep '^NETGSM_STATIC_TOKEN=' .env.local | cut -d= -f2-)
@@ -418,13 +481,32 @@ curl -i -X POST https://panel.marketinguni.app/api/webhooks/netgsm \
   }"
 ```
 
-**Expect:**
+**Expect:** HTTP **200**, `webhook_logs.status=success`, new lead with `lead_source=netgsm_call`.
 
-- HTTP **200**
-- New row in `webhook_logs`: `source=netgsm`, `status=success`, `event_type=cdr`
-- New lead with `lead_source=netgsm_call` (unless phone dedupes)
+### 12.2 Company-line CDR (existing lead)
 
-**SQL check:**
+Logs a call on an existing lead — **no new lead**. Use a phone that already exists in `leads.lead_phone`:
+
+```bash
+TOKEN=$(grep '^NETGSM_STATIC_TOKEN=' .env.local | cut -d= -f2-)
+
+curl -i -X POST https://panel.marketinguni.app/api/webhooks/netgsm \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"scenario\": \"cdr\",
+    \"kimlik\": \"smoke-cdr-$(date +%s)\",
+    \"arayan\": \"05554443322\",
+    \"aranan\": \"02129095244\",
+    \"sure\": 125,
+    \"token\": \"$TOKEN\"
+  }"
+```
+
+**Expect:** HTTP **200**, `webhook_logs.status=success`, new `contact_history` row with `interaction_type=call` for the matching lead (unarchives if lead was archived).
+
+See also `test-webhooks.mjs` for a scripted sequence including this CDR case.
+
+### SQL checks
 
 ```sql
 SELECT id, status, event_type, created_at
@@ -432,6 +514,13 @@ FROM webhook_logs
 WHERE source = 'netgsm'
 ORDER BY created_at DESC
 LIMIT 10;
+
+-- After company-line CDR smoke test:
+SELECT interaction_type, interaction_source, notes, created_at
+FROM contact_history
+WHERE lead_uuid = '<existing-lead-uuid>'
+ORDER BY created_at DESC
+LIMIT 5;
 ```
 
 ---
@@ -446,7 +535,10 @@ Live call → no webhook_logs row?
 webhook_logs row exists?
   ├─ status=skipped → Queue/ring event or missing kimlik+caller; check scenario in payload
   ├─ status=failed → /webhook-logs replay; read error_message; Telegram
-  └─ status=success but no lead → duplicate phone; or processor returned early (check logs)
+  └─ status=success but no new lead
+       ├─ Company-line CDR matched existing lead → check contact_history (interaction_type=call)
+       ├─ Duplicate active phone → duplicate_submission in contact_history
+       └─ Else → check application logs
 
 Lead created but wrong/missing attribution?
   ├─ aranan in payload vs dni_numbers.virtual_number (format)
@@ -461,21 +553,25 @@ curl works, live calls don't?
 
 ## 14. Code reference map
 
-| Concern                | File                                                                                                            |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------- |
-| API route              | `pages/api/webhooks/netgsm.ts`                                                                                  |
-| Payload normalization  | `lib/webhooks/normalize-netgsm-payload.ts`                                                                      |
-| Processor              | `lib/webhooks/process-netgsm.ts`                                                                                |
-| Token verify           | `lib/webhooks/verify.ts`                                                                                        |
-| Idempotency            | `lib/webhooks/idempotency-key.ts`                                                                               |
-| Webhook log wrapper    | `lib/webhooks/run-with-webhook-log.ts`                                                                          |
-| Replay                 | `lib/webhooks/replay-webhook-log.ts`                                                                            |
-| Lead creation          | `lib/leads/create-lead.ts`                                                                                      |
-| Source details         | `lib/leads/source-details.ts` → `buildNetGsmSourceDetails`                                                      |
-| DNI lookup / increment | `lib/dni/list-active-numbers.ts`                                                                                |
-| DNI normalize          | `lib/dni/normalize-virtual-number.ts`                                                                           |
-| Attribution            | `lib/attribution/build-collected-data.ts`                                                                       |
-| Tests                  | `__tests__/lib/netgsm-normalize.test.ts`, `__tests__/lib/dni-normalize.test.ts`, `__tests__/lib/verify.test.ts` |
+| Concern                   | File                                                                                                                                         |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| API route                 | `pages/api/webhooks/netgsm.ts`                                                                                                               |
+| Payload normalization     | `lib/webhooks/normalize-netgsm-payload.ts`                                                                                                   |
+| Processor + CDR matching  | `lib/webhooks/process-netgsm.ts` → `handleCdrForExistingLead`, `writeCdrToContactHistory`                                                    |
+| Company phone constants   | `lib/constants.ts` → `COMPANY_PHONE_NUMBER`, `COMPANY_PHONE_NUMBER_NORMALIZED`                                                               |
+| Token verify              | `lib/webhooks/verify.ts`                                                                                                                     |
+| Idempotency               | `lib/webhooks/idempotency-key.ts`                                                                                                            |
+| Webhook log wrapper       | `lib/webhooks/run-with-webhook-log.ts`                                                                                                       |
+| Replay                    | `lib/webhooks/replay-webhook-log.ts`                                                                                                         |
+| Lead creation             | `lib/leads/create-lead.ts`                                                                                                                   |
+| Archive / unarchive (CDR) | `lib/leads/archive.ts`; SQL `unarchive_single_lead` (migration **0049**)                                                                     |
+| SLA                       | `lib/leads/sla.ts`                                                                                                                           |
+| Source details            | `lib/leads/source-details.ts` → `buildNetGsmSourceDetails`                                                                                   |
+| DNI lookup / increment    | `lib/dni/list-active-numbers.ts`                                                                                                             |
+| DNI normalize             | `lib/dni/normalize-virtual-number.ts`                                                                                                        |
+| Attribution               | `lib/attribution/build-collected-data.ts`                                                                                                    |
+| Scripted webhook tests    | `test-webhooks.mjs`                                                                                                                          |
+| Unit tests                | `__tests__/lib/netgsm-normalize.test.ts`, `__tests__/lib/dni-normalize.test.ts`, `__tests__/lib/verify.test.ts`, `__tests__/lib/sla.test.ts` |
 
 ---
 
@@ -485,7 +581,8 @@ curl works, live calls don't?
 - [ ] NetGSM HTTP POST URL = `https://panel.marketinguni.app/api/webhooks/netgsm`
 - [ ] CDR / santral dinleme fires **after hangup** with `scenario`, `arayan`, `kimlik`, `sure`
 - [ ] Superadmin activated DNI row with **exact** virtual number format from a real CDR `aranan`
-- [ ] Smoke curl returns 200 + `webhook_logs.success`
+- [ ] Smoke curl (§12.1) returns 200 + `webhook_logs.success` + new lead
+- [ ] Company-line CDR curl (§12.2) logs `contact_history` on existing lead without creating duplicate
 - [ ] Test live call produces log row (not just curl)
 - [ ] GTM DNI tag loads `/api/dni/numbers` and shows new number (allow 1h cache after changes)
 - [ ] Confirm `collected_data.utm_source` on test lead matches DNI `source`
@@ -494,13 +591,13 @@ curl works, live calls don't?
 
 ## 16. Related database tables
 
-| Table             | NetGSM role                               |
-| ----------------- | ----------------------------------------- |
-| `leads`           | `lead_source = netgsm_call`               |
-| `lead_details`    | Empty row on create                       |
-| `contact_history` | First contact + duplicate notes           |
-| `collected_data`  | DNI-derived UTM + confidence              |
-| `webhook_logs`    | Full payload audit                        |
-| `dni_numbers`     | Virtual number → source mapping + metrics |
+| Table             | NetGSM role                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| `leads`           | `lead_source = netgsm_call` on new lead path; unarchived on company-line CDR       |
+| `lead_details`    | Empty row on new lead create only                                                  |
+| `contact_history` | CDR call logs (`call`); new-lead first contact (`whatsapp_call` quirk); duplicates |
+| `collected_data`  | DNI-derived UTM + confidence (new lead path only)                                  |
+| `webhook_logs`    | Full payload audit                                                                 |
+| `dni_numbers`     | Virtual number → source mapping + metrics (increment on new lead only)             |
 
 No NetGSM-specific tables — all data lands in shared lead pipeline tables.

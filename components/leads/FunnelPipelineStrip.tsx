@@ -1,7 +1,7 @@
 /**
  * Horizontal pipeline visualization — stage nodes with current position highlight and hover tooltips.
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { IconChevronRight } from '@tabler/icons-react';
 import { cn } from '@/lib/utils';
@@ -34,8 +34,7 @@ const STAGE_SHORT_LABELS: Record<string, string> = {
   'teklif-gonderildi': 'Teklif',
   'kapora-alindi': 'Kapora',
   'sozlesme-imzalandi': 'Sözleşme',
-  'ziyaret-ama-almayacak': 'Almayacak',
-  ilgilenmiyor: 'İlgilenmiyor',
+  lost: 'Kayıp',
 };
 
 interface TooltipData {
