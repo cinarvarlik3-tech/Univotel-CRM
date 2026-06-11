@@ -60,6 +60,7 @@ import {
 } from '@/types/webhooks';
 import type { Database, Json } from '@/types/database';
 import { writeStageHistory } from '@/lib/leads/write-stage-history';
+import { completeContactTasks } from '@/lib/tasks/auto-tasks';
 
 type LeadsUpdate = Database['public']['Tables']['leads']['Update'];
 
@@ -1389,6 +1390,8 @@ async function syncMessageToLeadMessages(params: {
     console.info(
       `[chatwoot] lead_messages synced lead=${params.leadUuid} message=${params.messageId}`,
     );
+    // Any message (incoming or outgoing) counts as contact made — complete nurture reminder tasks.
+    void completeContactTasks(params.leadUuid);
   }
 }
 

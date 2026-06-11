@@ -26,6 +26,30 @@ const STAGE_AUTO_TASK: Readonly<Partial<Record<string, AutoTaskSpec>>> = {
   'kapora-alindi': { type: 'move_in_reminder', dueDays: 7 },
 };
 
+const CONTACT_COMPLETABLE_TASK_TYPES: AutoTaskType[] = [
+  'nurture_reminder',
+  'post_visit_nurture_reminder',
+];
+
+/**
+ * Marks pending nurture/post-visit reminder tasks as completed when contact is made.
+ * Called from log-contact API and Chatwoot message sync.
+ * Non-fatal — errors are logged, not rethrown.
+ */
+export async function completeContactTasks(leadUuid: string): Promise<void> {
+  try {
+    const client = createServiceClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (client.from('tasks') as any)
+      .update({ is_completed: true, completed_at: new Date().toISOString() })
+      .eq('lead_uuid', leadUuid)
+      .eq('is_completed', false)
+      .in('auto_task_type', CONTACT_COMPLETABLE_TASK_TYPES);
+  } catch (err) {
+    console.error('[auto-tasks] completeContactTasks failed:', err);
+  }
+}
+
 /**
  * Cancels all pending auto-tasks for a lead.
  * Called before creating new auto-tasks on a stage transition.

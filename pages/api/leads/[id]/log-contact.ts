@@ -9,6 +9,7 @@ import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
 import { MANUAL_INTERACTION_TYPES } from '@/lib/constants';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { completeContactTasks } from '@/lib/tasks/auto-tasks';
 
 const LogContactSchema = z.object({
   interaction_type: z.enum(MANUAL_INTERACTION_TYPES),
@@ -56,5 +57,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .single();
 
   if (error) return sendError(res, 'Failed to log contact', 500);
+
+  // Auto-complete any pending nurture/post-visit reminder tasks for this lead.
+  void completeContactTasks(id);
+
   return sendSuccess(res, data, 201);
 }
