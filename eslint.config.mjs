@@ -39,6 +39,7 @@ const eslintConfig = [
       'lib/ref/**',
       'lib/tasks/**',
       'lib/my-day/**',
+      'lib/analytics/**',
     ],
     rules: {
       'no-restricted-imports': [
@@ -48,7 +49,7 @@ const eslintConfig = [
             {
               name: '@/lib/supabase/service',
               message:
-                'Service role client may only be imported from lib/webhooks/, lib/leads/, lib/jobs/, lib/attribution/, lib/dni/, lib/ga4/, and lib/ref/.',
+                'Service role client may only be imported from lib/webhooks/, lib/leads/, lib/jobs/, lib/attribution/, lib/dni/, lib/ga4/, lib/ref/, lib/analytics/, and lib/my-day/.',
             },
           ],
         },

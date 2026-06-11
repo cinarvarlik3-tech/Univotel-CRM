@@ -1588,24 +1588,48 @@ Roll back Worker (Section 3). If DB migration caused issue, check Supabase migra
 
 ## 10. Manager UI Routes
 
-| Route                | Purpose                                                | Access                    |
-| -------------------- | ------------------------------------------------------ | ------------------------- |
-| `/dashboard`         | Analytics (materialized views, refreshed every 5 min)  | manager, superadmin       |
-| `/leads`             | Active lead list                                       | all roles (scoped by RLS) |
-| `/leads/mine`        | Leads assigned to current user                         | all roles                 |
-| `/leads/my`          | Redirect alias → `/leads/mine`                         | all roles                 |
-| `/leads/archived`    | Archived leads                                         | manager, superadmin       |
-| `/leads/new`         | Manual lead entry                                      | authenticated             |
-| `/leads/{uuid}`      | Redirect → `/leads?selected={uuid}` (slide-over panel) | scoped by RLS             |
-| `/tasks`             | Task list                                              | scoped by RLS             |
-| `/campaigns`         | WhatsApp campaigns                                     | manager, superadmin       |
-| `/notifications`     | Manager alert inbox                                    | manager, superadmin       |
-| `/webhook-logs`      | Webhook audit + replay                                 | manager, superadmin       |
-| `/admin/dni-numbers` | DNI virtual number admin                               | **superadmin only**       |
-| `/old-leads`         | Historical Chatwoot imports (read-only)                | manager, superadmin       |
-| `/team`              | Salespeople list                                       | manager, superadmin       |
-| `/properties`        | Property inventory                                     | authenticated             |
-| `/settings`          | Theme, **language (TR/EN)**, sign out                  | authenticated             |
+| Route                | Purpose                                                    | Access                    |
+| -------------------- | ---------------------------------------------------------- | ------------------------- |
+| `/dashboard`         | Analytics — **Overview** + **Team panel** tabs (see below) | manager, superadmin       |
+| `/leads`             | Active lead list                                           | all roles (scoped by RLS) |
+| `/leads/mine`        | Leads assigned to current user                             | all roles                 |
+| `/leads/my`          | Redirect alias → `/leads/mine`                             | all roles                 |
+| `/leads/archived`    | Archived leads                                             | manager, superadmin       |
+| `/leads/new`         | Manual lead entry                                          | authenticated             |
+| `/leads/{uuid}`      | Redirect → `/leads?selected={uuid}` (slide-over panel)     | scoped by RLS             |
+| `/tasks`             | Task list                                                  | scoped by RLS             |
+| `/campaigns`         | WhatsApp campaigns                                         | manager, superadmin       |
+| `/notifications`     | Manager alert inbox                                        | manager, superadmin       |
+| `/webhook-logs`      | Webhook audit + replay                                     | manager, superadmin       |
+| `/admin/dni-numbers` | DNI virtual number admin                                   | **superadmin only**       |
+| `/old-leads`         | Historical Chatwoot imports (read-only)                    | manager, superadmin       |
+| `/team`              | Salespeople list                                           | manager, superadmin       |
+| `/properties`        | Property inventory                                         | authenticated             |
+| `/settings`          | Theme, **language (TR/EN)**, sign out                      | authenticated             |
+
+### Dashboard tabs (manager analytics)
+
+`/dashboard` has two tabs:
+
+| Tab            | Data source                                                                                  | Notes                                               |
+| -------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| **Overview**   | Materialized views (`mv_*`), refreshed every 5 min by `mv_refresh` cron                      | `GET /api/analytics`                                |
+| **Team panel** | Live tables — `leads.claimed_at`, `contact_history`, `visits`, `lead_stage_history`, `tasks` | `GET /api/analytics/manager-panel` (no MV, no cron) |
+
+**Team panel behavior:**
+
+| Setting       | Value                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Access        | manager / superadmin only (API 403 otherwise)                                                                                   |
+| Query params  | `range=this_week \| this_month \| last_30_days` (default `this_month`); optional `salesperson={uuid}`                           |
+| Scoping       | KPI cards + daily trend charts follow the salesperson selector (or table row click); team table always shows everyone           |
+| Trend buckets | Istanbul calendar days (`lib/analytics/trend-buckets.ts`)                                                                       |
+| Credit rules  | Same as My Day performance: stage transitions credit `changed_by`, visits credit `created_by`, contacts credit `salesperson_id` |
+| Conversion    | `deals signed / claimed` per salesperson (claims = `claimed_at` in range)                                                       |
+| Query safety  | Bulk fetches paged at 1000 rows, hard cap 10 pages per table per request                                                        |
+| Code          | `lib/analytics/manager-panel.ts` (service role), `components/analytics/ManagerPanel.tsx`, `hooks/useManagerPanel.ts`            |
+
+If the Team panel shows zeros for older periods: `lead_stage_history` and `claimed_at` only exist since migrations `0070`–`0073` — backfill (`0073`) covers current statuses only, so per-stage credit before that deploy is incomplete (expected, not a bug).
 
 ### UI locale (Turkish / English)
 
