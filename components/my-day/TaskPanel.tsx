@@ -2,6 +2,7 @@
  * My Day task panel — Day/Week toggle with overdue/today/upcoming grouping and inline actions.
  */
 import { useState, useCallback } from 'react';
+import { IconPhone } from '@tabler/icons-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +12,7 @@ import type { TaskCard } from '@/lib/my-day/aggregations';
 interface TaskPanelProps {
   tasks: { overdue: TaskCard[]; today: TaskCard[]; upcoming: TaskCard[] };
   onMutate: () => void;
+  onOpenLead: (leadUuid: string) => void;
 }
 
 type ViewMode = 'day' | 'week';
@@ -53,8 +55,9 @@ async function handleInlineAction(task: TaskCard, onMutate: () => void) {
     await fetch(`/api/leads/${task.leadUuid}/log-contact`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ interaction_type: 'contact' }),
+      body: JSON.stringify({ interaction_type: 'call_success' }),
     });
+    // Task is auto-completed server-side via completeContactTasks, but also PATCH for safety.
     await fetch(`/api/tasks/${task.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -77,9 +80,10 @@ interface TaskGroupProps {
   tasks: TaskCard[];
   variant: 'overdue' | 'today' | 'upcoming';
   onMutate: () => void;
+  onOpenLead: (leadUuid: string) => void;
 }
 
-function TaskGroup({ label, tasks, variant, onMutate }: TaskGroupProps) {
+function TaskGroup({ label, tasks, variant, onMutate, onOpenLead }: TaskGroupProps) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState<string | null>(null);
 
@@ -102,39 +106,61 @@ function TaskGroup({ label, tasks, variant, onMutate }: TaskGroupProps) {
         {tasks.map((task) => (
           <div
             key={task.id}
-            className="flex items-center justify-between gap-3 rounded-lg border border-border-default bg-surface-card px-3 py-2.5"
+            className="rounded-lg border border-border-default bg-surface-card px-3 py-2.5"
           >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                {!task.isAutoCreated && (
-                  <Badge variant="outline" className="shrink-0 text-[10px]">
-                    manual
-                  </Badge>
+            {/* Task type + lead info */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  {!task.isAutoCreated && (
+                    <Badge variant="outline" className="shrink-0 text-[10px]">
+                      manual
+                    </Badge>
+                  )}
+                  <p className="truncate text-xs font-medium text-text-primary">
+                    {task.autoTaskType ?? task.taskType}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="mt-0.5 block truncate text-left text-[11px] text-text-secondary hover:underline"
+                  onClick={() => onOpenLead(task.leadUuid)}
+                >
+                  {task.leadName ?? '—'}
+                  {task.leadFunnelStatus && (
+                    <span className="text-text-tertiary"> · {task.leadFunnelStatus}</span>
+                  )}
+                </button>
+                {task.leadPhone && (
+                  <a
+                    href={`tel:${task.leadPhone}`}
+                    className="mt-0.5 flex items-center gap-0.5 text-[11px] text-brand-blue hover:underline"
+                  >
+                    <IconPhone size={11} />
+                    {task.leadPhone}
+                  </a>
                 )}
-                <p className="truncate text-xs font-medium text-text-primary">
-                  {task.autoTaskType ?? task.taskType}
-                </p>
               </div>
-              <p className="mt-0.5 truncate text-[11px] text-text-tertiary">
-                {task.leadName ?? '—'}{' '}
-                {task.leadFunnelStatus && (
-                  <span className="text-text-secondary">· {task.leadFunnelStatus}</span>
-                )}
-              </p>
+
+              {/* Actions */}
+              <div className="flex shrink-0 flex-col gap-1">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={loading === task.id}
+                  onClick={async () => {
+                    setLoading(task.id);
+                    await handleInlineAction(task, onMutate);
+                    setLoading(null);
+                  }}
+                >
+                  {loading === task.id ? '…' : getInlineActionLabel(task, t)}
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => onOpenLead(task.leadUuid)}>
+                  {t('common.view')}
+                </Button>
+              </div>
             </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={loading === task.id}
-              onClick={async () => {
-                setLoading(task.id);
-                await handleInlineAction(task, onMutate);
-                setLoading(null);
-              }}
-              className="shrink-0"
-            >
-              {loading === task.id ? '…' : getInlineActionLabel(task, t)}
-            </Button>
           </div>
         ))}
       </div>
@@ -142,7 +168,7 @@ function TaskGroup({ label, tasks, variant, onMutate }: TaskGroupProps) {
   );
 }
 
-export function TaskPanel({ tasks, onMutate }: TaskPanelProps) {
+export function TaskPanel({ tasks, onMutate, onOpenLead }: TaskPanelProps) {
   const { t } = useTranslation();
   const [view, setView] = useState<ViewMode>('day');
 
@@ -188,12 +214,14 @@ export function TaskPanel({ tasks, onMutate }: TaskPanelProps) {
           tasks={tasks.overdue}
           variant="overdue"
           onMutate={handleMutate}
+          onOpenLead={onOpenLead}
         />
         <TaskGroup
           label={t('myDay.today')}
           tasks={tasks.today}
           variant="today"
           onMutate={handleMutate}
+          onOpenLead={onOpenLead}
         />
         {view === 'week' && (
           <TaskGroup
@@ -201,6 +229,7 @@ export function TaskPanel({ tasks, onMutate }: TaskPanelProps) {
             tasks={tasks.upcoming}
             variant="upcoming"
             onMutate={handleMutate}
+            onOpenLead={onOpenLead}
           />
         )}
       </div>

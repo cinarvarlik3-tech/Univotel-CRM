@@ -2,7 +2,7 @@
  * My Day — personal salesperson cockpit.
  * Landing page for all roles; self-scoped to the logged-in user.
  */
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -11,16 +11,29 @@ import { TaskPanel } from '@/components/my-day/TaskPanel';
 import { AttentionQueue } from '@/components/my-day/AttentionQueue';
 import { MiniFunnel } from '@/components/my-day/MiniFunnel';
 import { PerformanceTab } from '@/components/my-day/PerformanceTab';
+import { LeadDetailPanel } from '@/components/leads/LeadDetailPanel';
 import { useMyDay } from '@/hooks/useMyDay';
+import { useAuth } from '@/hooks/useAuth';
+import { useSalespeople } from '@/hooks/useSalespeople';
 import { useTranslation } from '@/hooks/useTranslation';
+import { isManagerOrAbove } from '@/lib/auth/roles';
 
 export default function MyDayPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const { data: salespeople } = useSalespeople();
   const { data, isLoading, error, mutate } = useMyDay();
+
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
   const handleMutate = useCallback(() => {
     void mutate();
   }, [mutate]);
+
+  const openLead = useCallback((uuid: string) => setSelectedLeadId(uuid), []);
+  const closeLead = useCallback(() => setSelectedLeadId(null), []);
+
+  const isManager = user ? isManagerOrAbove(user.role) : false;
 
   return (
     <AppShell title={t('myDay.title')}>
@@ -52,8 +65,12 @@ export default function MyDayPage() {
 
               <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
                 <div className="space-y-6">
-                  <TaskPanel tasks={data.tasks} onMutate={handleMutate} />
-                  <AttentionQueue items={data.attentionQueue} onMutate={handleMutate} />
+                  <TaskPanel tasks={data.tasks} onMutate={handleMutate} onOpenLead={openLead} />
+                  <AttentionQueue
+                    items={data.attentionQueue}
+                    onMutate={handleMutate}
+                    onOpenLead={openLead}
+                  />
                 </div>
                 <div>
                   <MiniFunnel data={data.miniFunnel} />
@@ -67,6 +84,14 @@ export default function MyDayPage() {
           <PerformanceTab />
         </TabsContent>
       </Tabs>
+
+      <LeadDetailPanel
+        leadId={selectedLeadId}
+        open={selectedLeadId !== null}
+        onClose={closeLead}
+        isManager={isManager}
+        salespeople={salespeople}
+      />
     </AppShell>
   );
 }

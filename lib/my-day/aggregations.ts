@@ -28,6 +28,8 @@ export interface TaskCard {
   leadUuid: string;
   leadName: string | null;
   leadFunnelStatus: string | null;
+  leadPhone: string | null;
+  chatwootUrl: string | null;
 }
 
 export interface AttentionItem {
@@ -35,6 +37,8 @@ export interface AttentionItem {
   leadUuid: string;
   leadName: string | null;
   leadFunnelStatus: string | null;
+  leadPhone: string | null;
+  chatwootUrl: string | null;
   visitId?: string;
   scheduledDate?: string;
 }
@@ -71,7 +75,7 @@ export async function getMyDayPayload(userId: string): Promise<MyDayPayload> {
   // ── 1. Fetch user's active leads ──────────────────────────────────────────
   const { data: activeLeads } = await client
     .from('leads')
-    .select('uuid, lead_name, funnel_status')
+    .select('uuid, lead_name, funnel_status, lead_phone, source_details')
     .eq('assigned_to', userId)
     .eq('is_archived', false)
     .eq('is_deleted', false)
@@ -103,6 +107,12 @@ export async function getMyDayPayload(userId: string): Promise<MyDayPayload> {
   // Build lead lookup for task cards.
   const leadMap = new Map(myLeads.map((l) => [l.uuid, l]));
 
+  function extractChatwootUrl(sourceDetails: unknown): string | null {
+    if (!sourceDetails || typeof sourceDetails !== 'object') return null;
+    const url = (sourceDetails as Record<string, unknown>).chatwoot_url;
+    return typeof url === 'string' ? url : null;
+  }
+
   function toTaskCard(t: (typeof pendingTasks)[number]): TaskCard {
     const lead = leadMap.get(t.lead_uuid);
     return {
@@ -115,6 +125,8 @@ export async function getMyDayPayload(userId: string): Promise<MyDayPayload> {
       leadUuid: t.lead_uuid,
       leadName: lead?.lead_name ?? null,
       leadFunnelStatus: lead?.funnel_status ?? null,
+      leadPhone: lead?.lead_phone ?? null,
+      chatwootUrl: lead ? extractChatwootUrl(lead.source_details) : null,
     };
   }
 
@@ -210,6 +222,8 @@ export async function getMyDayPayload(userId: string): Promise<MyDayPayload> {
       leadUuid: lead.uuid,
       leadName: lead.lead_name,
       leadFunnelStatus: lead.funnel_status,
+      leadPhone: lead.lead_phone ?? null,
+      chatwootUrl: extractChatwootUrl(lead.source_details),
     });
   }
 
@@ -225,6 +239,8 @@ export async function getMyDayPayload(userId: string): Promise<MyDayPayload> {
       leadUuid: v.lead_uuid,
       leadName: lead?.lead_name ?? null,
       leadFunnelStatus: lead?.funnel_status ?? null,
+      leadPhone: lead?.lead_phone ?? null,
+      chatwootUrl: lead ? extractChatwootUrl(lead.source_details) : null,
       visitId: v.id,
       scheduledDate: v.scheduled_date,
     });
