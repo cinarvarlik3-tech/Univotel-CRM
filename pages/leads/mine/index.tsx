@@ -93,6 +93,7 @@ export default function MyLeadsPage() {
 
   const selectedLeadId = router.isReady ? selectedLeadFromQuery(router.query) : null;
   const panelOpen = selectedLeadId !== null;
+  const searchActive = appliedState.search.trim().length > 0;
   const canFetch = Boolean(user);
 
   const queryString = canFetch
@@ -273,6 +274,7 @@ export default function MyLeadsPage() {
               selectedId={selectedLeadId ?? undefined}
               onRowClick={openLead}
               hideAssignee
+              highlightInactive={searchActive}
             />
           )}
 

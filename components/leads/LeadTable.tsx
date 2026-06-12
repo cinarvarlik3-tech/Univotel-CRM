@@ -4,7 +4,7 @@
  * channel icon per D26, effective name (display_name) per D12,
  * and pin icon per D1/D7.
  */
-import type { LeadDetailRow, LeadWithDetails } from '@/types/domain';
+import type { LeadWithDetails } from '@/types/domain';
 import { IconPhone, IconPin, IconPinnedFilled } from '@tabler/icons-react';
 import {
   Table,
@@ -16,10 +16,11 @@ import {
 } from '@/components/ui/table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { useTranslation } from '@/hooks/useTranslation';
-import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { displayLeadContactIdentifier } from '@/lib/ui/display-phone';
 import { formatRelativeTime } from '@/lib/ui/format-relative-time';
 import { effectiveLeadName } from '@/components/leads/LeadDetailHeader';
+import { InactiveLeadBadge } from '@/components/leads/InactiveLeadBadge';
+import { isIrrelevantLead } from '@/lib/leads/lead-relevance';
 import { cn } from '@/lib/utils';
 
 interface LeadTableProps {
@@ -32,6 +33,8 @@ interface LeadTableProps {
   pinnedIds?: string[];
   /** Toggle pin on a lead. */
   onTogglePin?: (uuid: string) => void;
+  /** When true, irrelevant leads get an orange "inactive" label (search results). */
+  highlightInactive?: boolean;
 }
 
 /**
@@ -47,17 +50,6 @@ function assigneeLabel(lead: LeadWithDetails, emDash: string): string {
 }
 
 /**
- * Reads nested lead_details from a list row.
- * @param lead - Lead row from API.
- * @returns Parsed lead details or null.
- */
-function leadDetails(lead: LeadWithDetails): LeadDetailRow | null {
-  const details = lead.lead_details;
-  if (!details || typeof details !== 'object' || Array.isArray(details)) return null;
-  return details as LeadDetailRow;
-}
-
-/**
  * Renders a table of leads with row selection and status badges.
  * @param props - Array of lead rows to display.
  * @returns Lead table element.
@@ -70,8 +62,9 @@ export function LeadTable({
   renderRowActions,
   pinnedIds,
   onTogglePin,
+  highlightInactive = false,
 }: LeadTableProps) {
-  const { locale, t } = useTranslation();
+  const { t } = useTranslation();
   const emDash = t('common.emDash');
 
   // D1: Pinned leads float to the top of the current agent's view.
@@ -123,6 +116,7 @@ export function LeadTable({
                     <span className={cn('font-medium', selected && 'text-brand-blue')}>
                       {effectiveLeadName(lead) ?? emDash}
                     </span>
+                    {highlightInactive && isIrrelevantLead(lead) && <InactiveLeadBadge />}
                     {/* Channel icon (D26) */}
                     {lead.message_from === 'netgsm' && (
                       <IconPhone className="size-3 shrink-0 text-text-tertiary" />

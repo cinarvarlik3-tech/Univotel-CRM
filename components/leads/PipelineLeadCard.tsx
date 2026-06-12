@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { useTranslation } from '@/hooks/useTranslation';
 import { displayLeadContactIdentifier } from '@/lib/ui/display-phone';
+import { InactiveLeadBadge } from '@/components/leads/InactiveLeadBadge';
+import { isIrrelevantLead } from '@/lib/leads/lead-relevance';
 import type { LeadDetailRow } from '@/types/domain';
 import type { LeadWithDetails } from '@/types/domain';
 
@@ -13,6 +15,7 @@ interface PipelineLeadCardProps {
   lead: LeadWithDetails;
   isSelected: boolean;
   compact?: boolean;
+  highlightInactive?: boolean;
   onClick: (uuid: string) => void;
 }
 
@@ -67,6 +70,7 @@ export function PipelineLeadCard({
   lead,
   isSelected,
   compact = false,
+  highlightInactive = false,
   onClick,
 }: PipelineLeadCardProps) {
   const { locale, t } = useTranslation();
@@ -86,6 +90,8 @@ export function PipelineLeadCard({
   const funnelLabel =
     FUNNEL_SHORT[lead.funnel_status] ?? formatEnumLabel(locale, 'funnel', lead.funnel_status);
   const funnelVariant = FUNNEL_VARIANT[lead.funnel_status] ?? 'default';
+
+  const showInactive = highlightInactive && isIrrelevantLead(lead);
 
   if (compact) {
     return (
@@ -108,6 +114,12 @@ export function PipelineLeadCard({
             )}
           >
             {lead.lead_name ?? t('common.emDash')}
+            {showInactive && (
+              <>
+                {' '}
+                <InactiveLeadBadge className="inline" />
+              </>
+            )}
           </span>
           <span className="flex shrink-0 items-center gap-0.5">
             {isBreached && <span className="size-1 rounded-full bg-brand-red" />}
@@ -140,7 +152,10 @@ export function PipelineLeadCard({
         >
           {lead.lead_name ?? t('common.emDash')}
         </span>
-        {isBreached && <span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-brand-red" />}
+        <div className="flex shrink-0 items-center gap-1">
+          {showInactive && <InactiveLeadBadge />}
+          {isBreached && <span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-brand-red" />}
+        </div>
       </div>
 
       {/* Contact identifier */}

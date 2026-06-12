@@ -1,23 +1,24 @@
--- Migration 0077: Global quick-search RPC with SECURITY DEFINER (§4.6 / D14)
--- Allows any authenticated salesperson to search ALL leads (own + others + unassigned)
--- by name or phone number. This is the SOLE widened-visibility path — list RLS stays tight.
--- Cross-agent search does NOT reassign; it only opens for reading/logging.
+-- Migration 0080: Add is_inactive flag to search_leads_global for search UI badges.
+-- Inactive = hidden from default list views (lost/finalized, moved-in, 24h-restricted).
+-- Must DROP first: Postgres cannot change RETURNS TABLE shape via CREATE OR REPLACE.
 
-CREATE OR REPLACE FUNCTION search_leads_global(
+DROP FUNCTION IF EXISTS search_leads_global(TEXT, INT);
+
+CREATE FUNCTION search_leads_global(
   q TEXT,
   result_limit INT DEFAULT 10
 )
 RETURNS TABLE (
-  uuid          UUID,
-  lead_name     TEXT,
-  display_name  TEXT,
-  lead_phone    TEXT,
-  funnel_status TEXT,
-  assigned_to   UUID,
-  assignee_name TEXT,
+  uuid            UUID,
+  lead_name       TEXT,
+  display_name    TEXT,
+  lead_phone      TEXT,
+  funnel_status   TEXT,
+  assigned_to     UUID,
+  assignee_name   TEXT,
   last_contact_at TIMESTAMPTZ,
-  message_from  TEXT,
-  is_inactive   BOOLEAN
+  message_from    TEXT,
+  is_inactive     BOOLEAN
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -50,12 +51,10 @@ BEGIN
       OR l.lead_phone ILIKE '%' || q || '%'
     )
   ORDER BY
-    -- Exact phone match first, then name relevance, then recency
     CASE WHEN l.lead_phone = q THEN 0 ELSE 1 END,
     l.last_contact_at DESC NULLS LAST
   LIMIT result_limit;
 END;
 $$;
 
--- Grant execute to authenticated users only (SECURITY DEFINER ensures broad lead access).
 GRANT EXECUTE ON FUNCTION search_leads_global(TEXT, INT) TO authenticated;

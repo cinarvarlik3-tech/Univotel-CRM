@@ -50,6 +50,21 @@ export interface PerformancePayload {
   visitShowRate: { attended: number; failed: number; rate: number | null };
   activityVolume: { calls: number; messages: number; contacts: number; total: number };
   taskCompletion: { completed: number; total: number; rate: number | null };
+  /** KPI tiles for the redesigned Performansım tab. */
+  kpi: {
+    leads: number;
+    messages: number;
+    calls: number;
+    visits: number;
+    downpayments: number;
+    dealsSigned: number;
+  };
+  /** Connect rate: answered outbound calls / total outbound calls. */
+  connectRate: { answered: number; total: number; rate: number | null };
+  /** Top loss reasons by lead count (up to 5 + other). */
+  lossReasons: Array<{ reason: string; count: number }>;
+  /** Leads stuck in 'yeni' status for 7+ days. */
+  stuckNewLeads: number;
 }
 
 export async function getPerformancePayload(
@@ -215,5 +230,93 @@ export async function getPerformancePayload(
     rate: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) / 100 : null,
   };
 
-  return { conversionFunnel, visitShowRate, activityVolume, taskCompletion };
+  // ── KPI tiles ─────────────────────────────────────────────────────────────
+  // leads = claimed in range (same as conversion funnel denominator)
+  const kpiLeads = claimedCount ?? 0;
+  const kpiMessages = messages;
+  const kpiCalls = calls;
+  const kpiVisits = visitedCount;
+  const kpiDownpayments = downpaymentLeads.size;
+  const kpiDealsSigned = signedLeads.size;
+
+  // ── Connect rate (outbound CDR calls answered vs total) ───────────────────
+  const { data: outboundCallsRaw } = await client
+    .from('contact_history')
+    .select('metadata')
+    .eq('salesperson_id', userId)
+    .eq('interaction_type', 'call')
+    .eq('interaction_source', 'netgsm')
+    .gte('created_at', fromIso)
+    .lte('created_at', toIso);
+
+  let answeredCalls = 0;
+  let totalOutbound = 0;
+  for (const row of (outboundCallsRaw ?? []) as Array<{
+    metadata: Record<string, unknown> | null;
+  }>) {
+    const meta = row.metadata ?? {};
+    if ((meta.direction as string | undefined) !== 'outbound') continue;
+    totalOutbound++;
+    const dur = (meta.duration_seconds as number | undefined) ?? 0;
+    if (dur > 0) answeredCalls++;
+  }
+  const connectRate = {
+    answered: answeredCalls,
+    total: totalOutbound,
+    rate: totalOutbound > 0 ? Math.round((answeredCalls / totalOutbound) * 100) / 100 : null,
+  };
+
+  // ── Loss reasons (my leads lost in range) ─────────────────────────────────
+  const { data: lostLeadsRaw } = await client
+    .from('leads')
+    .select('loss_reason')
+    .eq('assigned_to', userId)
+    .eq('funnel_status', 'lost')
+    .gte('last_contact_at', fromIso)
+    .lte('last_contact_at', toIso);
+
+  const lossReasonMap = new Map<string, number>();
+  for (const row of (lostLeadsRaw ?? []) as Array<{ loss_reason: string | null }>) {
+    const reason = row.loss_reason ?? 'other';
+    lossReasonMap.set(reason, (lossReasonMap.get(reason) ?? 0) + 1);
+  }
+
+  const sortedReasons = [...lossReasonMap.entries()].sort((a, b) => b[1] - a[1]);
+  const lossReasons: Array<{ reason: string; count: number }> = sortedReasons
+    .slice(0, 5)
+    .map(([reason, count]) => ({ reason, count }));
+
+  if (sortedReasons.length > 5) {
+    const otherCount = sortedReasons.slice(5).reduce((sum, [, n]) => sum + n, 0);
+    lossReasons.push({ reason: 'other', count: otherCount });
+  }
+
+  // ── Stuck leads (assigned now, in 'yeni' for 7+ days) ─────────────────────
+  const sevenDaysAgoIso = new Date(Date.now() - 7 * 24 * 3_600_000).toISOString();
+  const { count: stuckNewLeads } = await client
+    .from('leads')
+    .select('uuid', { count: 'exact', head: true })
+    .eq('assigned_to', userId)
+    .eq('funnel_status', 'yeni')
+    .eq('is_archived', false)
+    .eq('is_deleted', false)
+    .lte('last_contact_at', sevenDaysAgoIso);
+
+  return {
+    conversionFunnel,
+    visitShowRate,
+    activityVolume,
+    taskCompletion,
+    kpi: {
+      leads: kpiLeads,
+      messages: kpiMessages,
+      calls: kpiCalls,
+      visits: kpiVisits,
+      downpayments: kpiDownpayments,
+      dealsSigned: kpiDealsSigned,
+    },
+    connectRate,
+    lossReasons,
+    stuckNewLeads: stuckNewLeads ?? 0,
+  };
 }

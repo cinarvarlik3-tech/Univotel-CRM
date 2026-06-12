@@ -96,6 +96,7 @@ export default function LeadsPage() {
 
   const selectedLeadId = router.isReady ? selectedLeadFromQuery(router.query) : null;
   const panelOpen = selectedLeadId !== null;
+  const searchActive = appliedState.search.trim().length > 0;
 
   const queryString = buildQueryFromLeadListState(appliedState, {
     showAll: isManager && showAll,
@@ -290,6 +291,7 @@ export default function LeadsPage() {
               leads={accumulatedLeads}
               selectedId={selectedLeadId ?? undefined}
               onRowClick={openLead}
+              highlightInactive={searchActive}
             />
           )}
 

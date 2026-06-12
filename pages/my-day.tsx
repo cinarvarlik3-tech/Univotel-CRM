@@ -1,92 +1,133 @@
 /**
- * My Day — personal salesperson cockpit.
- * Landing page for all roles; self-scoped to the logged-in user.
+ * My Day (Günüm) — personal salesperson cockpit.
+ *
+ * Tab 1 "Bugün": six task containers (Nurtures, Calls, Visits, Post-visit, Move-ins, Son Aramalar).
+ *   Zero pipeline numbers — pure "what do I do today."
+ * Tab 2 "Performansım": KPI tiles + conversion + connect rate + loss reasons + stuck leads.
+ *   Personal mirror of the manager Team Panel, self-scoped.
  */
 import { useCallback, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Skeleton } from '@/components/ui/skeleton';
-import { CounterStrip } from '@/components/my-day/CounterStrip';
-import { TaskPanel } from '@/components/my-day/TaskPanel';
-import { AttentionQueue } from '@/components/my-day/AttentionQueue';
-import { MiniFunnel } from '@/components/my-day/MiniFunnel';
+import { useCockpit } from '@/hooks/useCockpit';
+import { NurturesCard } from '@/components/my-day/NurturesCard';
+import { CallsCard } from '@/components/my-day/CallsCard';
+import { VisitsCard } from '@/components/my-day/VisitsCard';
+import { PostVisitCard } from '@/components/my-day/PostVisitCard';
+import { MoveInsCard } from '@/components/my-day/MoveInsCard';
+import { SonAramalarCard } from '@/components/my-day/SonAramalarCard';
 import { PerformanceTab } from '@/components/my-day/PerformanceTab';
-import { SonAramalar } from '@/components/my-day/SonAramalar';
 import { LeadDetailPanel } from '@/components/leads/LeadDetailPanel';
-import { useMyDay } from '@/hooks/useMyDay';
-import { useAuth } from '@/hooks/useAuth';
 import { useSalespeople } from '@/hooks/useSalespeople';
-import { useTranslation } from '@/hooks/useTranslation';
-import { isManagerOrAbove } from '@/lib/auth/roles';
+
+/** Istanbul-localized date string, e.g. "12 Haziran 2026, Cuma". */
+function istanbulDateLabel(): string {
+  return new Intl.DateTimeFormat('tr-TR', {
+    timeZone: 'Europe/Istanbul',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date());
+}
 
 export default function MyDayPage() {
-  const { t } = useTranslation();
-  const { user } = useAuth();
+  const { data: cockpit, isLoading, error, mutate } = useCockpit();
   const { data: salespeople } = useSalespeople();
-  const { data, isLoading, error, mutate } = useMyDay();
 
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
-
-  const handleMutate = useCallback(() => {
+  const openLead = useCallback((uuid: string) => setSelectedLeadId(uuid), []);
+  const closeLead = useCallback(() => {
+    setSelectedLeadId(null);
     void mutate();
   }, [mutate]);
 
-  const openLead = useCallback((uuid: string) => setSelectedLeadId(uuid), []);
-  const closeLead = useCallback(() => setSelectedLeadId(null), []);
-
-  const isManager = user ? isManagerOrAbove(user.role) : false;
+  const isManager = cockpit?.user.isManager ?? false;
 
   return (
-    <AppShell title={t('myDay.title')}>
-      <Tabs defaultValue="today">
-        <TabsList className="mb-4">
-          <TabsTrigger value="today">{t('myDay.todayTab')}</TabsTrigger>
-          <TabsTrigger value="performance">{t('myDay.performanceTab')}</TabsTrigger>
-        </TabsList>
+    <AppShell title="Günüm">
+      <div className="mx-auto w-full max-w-[1400px]">
+        <Tabs defaultValue="today" className="w-full">
+          <TabsList className="mb-5">
+            <TabsTrigger value="today">Bugün</TabsTrigger>
+            <TabsTrigger value="performance">Performansım</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="today">
-          {isLoading && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <Skeleton key={i} className="h-[72px] rounded-[10px]" />
-                ))}
-              </div>
-              <Skeleton className="h-48 w-full" />
-              <Skeleton className="h-32 w-full" />
-              <Skeleton className="h-20 w-full" />
-            </div>
-          )}
-
-          {error && <p className="text-sm text-brand-red">{t('myDay.failedToLoad')}</p>}
-
-          {data && (
-            <div className="space-y-6">
-              <CounterStrip counters={data.counters} />
-
-              <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
-                <div className="space-y-6">
-                  <TaskPanel tasks={data.tasks} onMutate={handleMutate} onOpenLead={openLead} />
-                  <AttentionQueue
-                    items={data.attentionQueue}
-                    onMutate={handleMutate}
-                    onOpenLead={openLead}
-                  />
-                  {/* D22: Son Aramalar — last 20 CDR calls, unlogged ones need action */}
-                  <SonAramalar calls={data.recentCalls} onOpenLead={openLead} />
-                </div>
-                <div>
-                  <MiniFunnel data={data.miniFunnel} />
-                </div>
+          {/* ── Tab 1: Bugün ─────────────────────────────────────────── */}
+          <TabsContent value="today">
+            {/* Greeting strip */}
+            <div className="mb-5 flex items-baseline justify-between">
+              <div>
+                <h1 className="text-xl font-semibold text-text-primary">
+                  {cockpit ? `Merhaba, ${cockpit.user.firstName}` : 'Günüm'}
+                </h1>
+                <p className="text-sm text-text-tertiary capitalize">{istanbulDateLabel()}</p>
               </div>
             </div>
-          )}
-        </TabsContent>
 
-        <TabsContent value="performance">
-          <PerformanceTab />
-        </TabsContent>
-      </Tabs>
+            {error && (
+              <div className="rounded-lg border border-border-default bg-surface-card px-4 py-3 text-sm text-text-secondary">
+                Veriler yüklenemedi.{' '}
+                <button type="button" onClick={() => void mutate()} className="underline">
+                  Tekrar dene
+                </button>
+              </div>
+            )}
+
+            {/* Task container grid
+                xl: 3 cols × 2 rows — [Nurtures][Calls][Post-visit] / [Visits][Move-ins][Son Aramalar]
+                md: 2 cols — priority source order
+                mobile: 1 col — Calls, Nurtures, Post-visit, Visits, Move-ins, Son Aramalar */}
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {/* Row 1 */}
+              <NurturesCard
+                nurtures={cockpit?.nurtures ?? []}
+                isLoading={isLoading}
+                onOpenLead={openLead}
+                onAction={openLead}
+              />
+              <CallsCard
+                calls={cockpit?.calls ?? []}
+                isLoading={isLoading}
+                onOpenLead={openLead}
+                onAction={openLead}
+              />
+              <PostVisitCard
+                postVisit={cockpit?.postVisit ?? []}
+                isLoading={isLoading}
+                onOpenLead={openLead}
+                onAction={openLead}
+              />
+
+              {/* Row 2 */}
+              <VisitsCard
+                visits={cockpit?.visits ?? []}
+                properties={cockpit?.properties ?? []}
+                homePropertyId={cockpit?.user.homePropertyId ?? null}
+                isManager={isManager}
+                isLoading={isLoading}
+                onOpenLead={openLead}
+                onUpdateVisit={openLead}
+              />
+              <MoveInsCard
+                moveIns={cockpit?.moveIns ?? []}
+                isLoading={isLoading}
+                onOpenLead={openLead}
+              />
+              <SonAramalarCard
+                calls={cockpit?.recentCalls ?? []}
+                isLoading={isLoading}
+                onOpenLead={openLead}
+              />
+            </div>
+          </TabsContent>
+
+          {/* ── Tab 2: Performansım ───────────────────────────────────── */}
+          <TabsContent value="performance">
+            <PerformanceTab />
+          </TabsContent>
+        </Tabs>
+      </div>
 
       <LeadDetailPanel
         leadId={selectedLeadId}

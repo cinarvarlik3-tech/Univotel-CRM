@@ -112,6 +112,7 @@ export function PipelineView({
   const url = `/api/leads/pipeline${qs}`;
 
   const funnelFilterActive = isFieldFilterActive(appliedState.fieldFilters.funnel_status);
+  const highlightInactive = appliedState.search.trim().length > 0;
 
   const { data, error, isLoading } = useSWR(url, fetchPipeline, {
     revalidateOnFocus: false,
@@ -170,6 +171,7 @@ export function PipelineView({
               compact={compact}
               selectedId={selectedId}
               onLeadClick={onLeadClick}
+              highlightInactive={highlightInactive}
               labelOverride={t(
                 (COMPARTMENT_I18N_KEYS[compartment] ?? `compartments.${compartment}`) as Parameters<
                   typeof t
@@ -187,6 +189,7 @@ export function PipelineView({
                 compact={compact}
                 selectedId={selectedId}
                 onLeadClick={onLeadClick}
+                highlightInactive={highlightInactive}
               />
             ))}
 
@@ -206,6 +209,7 @@ export function PipelineView({
                 compact={compact}
                 selectedId={selectedId}
                 onLeadClick={onLeadClick}
+                highlightInactive={highlightInactive}
               />
             ))}
           </>

@@ -8,14 +8,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { IconSearch, IconX, IconClock, IconPhone } from '@tabler/icons-react';
 import { createBrowserSupabase } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
+import { InactiveLeadBadge } from '@/components/leads/InactiveLeadBadge';
 
 interface SearchResult {
-  lead_uuid: string;
+  uuid: string;
   lead_name: string | null;
   display_name: string | null;
   lead_phone: string | null;
   funnel_status: string | null;
   assigned_to: string | null;
+  is_inactive?: boolean;
 }
 
 interface RecentSearch {
@@ -201,14 +203,17 @@ export function GlobalQuickSearch({ onSelectLead }: GlobalQuickSearchProps) {
               </div>
               {results.map((r) => (
                 <button
-                  key={r.lead_uuid}
+                  key={r.uuid}
                   type="button"
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-surface-secondary"
-                  onClick={() => handleSelect(r.lead_uuid)}
+                  onClick={() => handleSelect(r.uuid)}
                 >
                   <IconPhone className="size-3.5 shrink-0 text-text-tertiary" />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium">{effectiveName(r)}</div>
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="truncate font-medium">{effectiveName(r)}</span>
+                      {r.is_inactive && <InactiveLeadBadge />}
+                    </div>
                     {r.lead_phone && (
                       <div className="truncate text-xs text-text-secondary">{r.lead_phone}</div>
                     )}

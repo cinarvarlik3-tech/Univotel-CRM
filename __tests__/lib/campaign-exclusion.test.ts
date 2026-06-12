@@ -2,10 +2,8 @@
  * Audit: performance.ts must exclude campaign messages from the personal message count.
  *
  * Campaign messages have sender_agent_id = null (no Chatwoot human agent behind them).
- * Human salesperson sends have sender_agent_id IS NOT NULL.
- *
- * The query in getPerformancePayload must apply .not('sender_agent_id', 'is', null)
- * so that campaign-sent messages do not inflate the personal activity count.
+ * Human salesperson sends are scoped via salespeople.chatwoot_user_id →
+ * lead_messages.sender_agent_id (Chatwoot user ID as string).
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
@@ -17,9 +15,10 @@ const performanceSrc = readFileSync(
 );
 
 describe('campaign exclusion in getPerformancePayload', () => {
-  it('queries lead_messages with sender_agent_id IS NOT NULL to exclude campaigns', () => {
+  it('scopes lead_messages to the rep via chatwoot_user_id (excludes campaign sends)', () => {
     expect(performanceSrc).toContain("from('lead_messages')");
-    expect(performanceSrc).toContain(".not('sender_agent_id', 'is', null)");
+    expect(performanceSrc).toContain('chatwoot_user_id');
+    expect(performanceSrc).toContain(".eq('sender_agent_id', String(chatwootUserId))");
   });
 
   it('scopes lead_messages query to outgoing direction only', () => {

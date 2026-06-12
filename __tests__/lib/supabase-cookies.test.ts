@@ -13,7 +13,7 @@ describe('readApiRequestCookies', () => {
         'sb-test-auth-token.0': 'chunk-0',
       },
       headers: {},
-    } as NextApiRequest;
+    } as unknown as NextApiRequest;
 
     expect(readApiRequestCookies(req)).toEqual([
       { name: 'sb-test-auth-token', value: 'token-value' },
@@ -27,7 +27,7 @@ describe('readApiRequestCookies', () => {
       headers: {
         cookie: 'sb-test-auth-token=header-token; sb-test-auth-token.1=chunk-1',
       },
-    } as NextApiRequest;
+    } as unknown as NextApiRequest;
 
     expect(readApiRequestCookies(req)).toEqual([
       { name: 'sb-test-auth-token', value: 'header-token' },

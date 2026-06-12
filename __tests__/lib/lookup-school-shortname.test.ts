@@ -9,6 +9,12 @@ describe('lookupSchoolShortname', () => {
       uni_name: 'İTÜ - Ayazağa',
       uni_shortname: 'İTÜ',
       district: 'Ayazağa',
+      city: 'İstanbul',
+      country: 'TR',
+      yok_code: null,
+      is_active: true,
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
     },
   ];
 

@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS lead_pins (
   agent_id  UUID NOT NULL REFERENCES salespeople(id) ON DELETE CASCADE,
-  lead_uuid UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  lead_uuid UUID NOT NULL REFERENCES leads(uuid) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (agent_id, lead_uuid)
 );

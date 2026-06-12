@@ -14,6 +14,7 @@ import {
   type FilterError,
 } from '@/lib/query/filter-builder';
 import { requiresLeadDetailsJoin, splitFilters } from '@/lib/query/split-filters';
+import { isLeadsSearchActive } from '@/lib/leads/lead-relevance';
 import type { Database } from '@/types/database';
 
 /** Parsed GET /api/leads query parameters. */
@@ -128,7 +129,9 @@ export function applyLeadsListFilters(
     result = result.eq('deal_awaiting', false);
   }
 
-  if (!params.showAll) {
+  // Search includes irrelevant (inactive) leads; default browse keeps them hidden.
+  const searchActive = isLeadsSearchActive(params.searchTerm, searchUuids);
+  if (!params.showAll && !searchActive) {
     result = result
       .not('funnel_status', 'in', '("lost","sozlesme-imzalandi")')
       .eq('has_moved_in', false)

@@ -28,13 +28,31 @@ export interface TeamMemberMetrics {
   staleAtYeniCount: number;
 }
 
+/** Raw row shape from get_team_panel_metrics RPC. */
+interface TeamPanelMetricsRow {
+  salesperson_id: string;
+  full_name: string;
+  active_lead_count: number | string | null;
+  message_count: number | string | null;
+  call_count: number | string | null;
+  answered_call_count: number | string | null;
+  scheduled_visit_count: number | string | null;
+  downpayment_count: number | string | null;
+  signed_count: number | string | null;
+  conv_yeni_to_signed: number | string | null;
+  conv_yeni_to_downpayment: number | string | null;
+  conv_visit_to_downpayment: number | string | null;
+  conv_downpayment_to_signed: number | string | null;
+  outbound_connect_rate: number | string | null;
+  stale_at_yeni_count: number | string | null;
+}
+
 async function fetcher(url: string): Promise<TeamMemberMetrics[]> {
   const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to fetch team metrics');
   const json = await res.json();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (json.data ?? []).map(
-    (r: any): TeamMemberMetrics => ({
+    (r: TeamPanelMetricsRow): TeamMemberMetrics => ({
       salespersonId: r.salesperson_id,
       fullName: r.full_name,
       activeLeadCount: Number(r.active_lead_count ?? 0),

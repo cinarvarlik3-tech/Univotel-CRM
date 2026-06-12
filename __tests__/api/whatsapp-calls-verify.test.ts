@@ -44,7 +44,7 @@ describe('whatsapp-calls GET verification', () => {
         'hub.verify_token': 'test-whatsapp-secret',
         'hub.challenge': '1234567890',
       },
-    } as NextApiRequest;
+    } as unknown as NextApiRequest;
     const res = createMockRes();
 
     await handler(req, res);
@@ -61,7 +61,7 @@ describe('whatsapp-calls GET verification', () => {
         'hub.verify_token': 'wrong-token',
         'hub.challenge': '1234567890',
       },
-    } as NextApiRequest;
+    } as unknown as NextApiRequest;
     const res = createMockRes();
 
     await handler(req, res);
@@ -78,7 +78,7 @@ describe('whatsapp-calls GET verification', () => {
         'hub.verify_token': 'test-whatsapp-secret',
         'hub.challenge': '1234567890',
       },
-    } as NextApiRequest;
+    } as unknown as NextApiRequest;
     const res = createMockRes();
 
     await handler(req, res);

@@ -15,6 +15,7 @@ interface PipelineColumnProps {
   selectedId?: string | null;
   onLeadClick: (uuid: string) => void;
   labelOverride?: string;
+  highlightInactive?: boolean;
 }
 
 /**
@@ -29,6 +30,7 @@ export function PipelineColumn({
   selectedId,
   onLeadClick,
   labelOverride,
+  highlightInactive = false,
 }: PipelineColumnProps) {
   const { locale } = useTranslation();
   const label = labelOverride ?? formatEnumLabel(locale, 'funnel', stage);
@@ -90,6 +92,7 @@ export function PipelineColumn({
               lead={lead}
               isSelected={selectedId === lead.uuid}
               compact={compact}
+              highlightInactive={highlightInactive}
               onClick={onLeadClick}
             />
           ))
