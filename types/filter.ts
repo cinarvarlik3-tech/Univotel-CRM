@@ -36,6 +36,8 @@ export interface SistemDateRanges {
 /** Full lead list toolbar / pipeline filter state. */
 export interface LeadListFilterState extends SistemDateRanges {
   sort: string;
+  /** Sort direction. Defaults to 'desc'. Use 'asc' for "En son temas" (furthest-past-first). */
+  sortDir: 'asc' | 'desc';
   search: string;
   fieldFilters: Record<string, FieldFilterState>;
 }
@@ -53,6 +55,7 @@ export const EMPTY_SISTEM_DATE_RANGES: SistemDateRanges = {
 
 export const DEFAULT_LEAD_LIST_STATE: LeadListFilterState = {
   sort: 'created_at',
+  sortDir: 'desc',
   search: '',
   fieldFilters: {},
   ...EMPTY_SISTEM_DATE_RANGES,

@@ -1,33 +1,37 @@
 /**
- * Collapsible sidebar navigation — overlay mode, brand blue background.
+ * Always-open labeled sidebar with grouped sections (§5.1 / D24).
+ * Default: expanded with labels. Collapse is opt-in.
+ * Sections: Günüm (+ Görevler) / Pipeline (Aktif satış → Kapanış → Özel durumlar) /
+ *           Yönetim (manager-only) / Ayarlar. Calendars live inside pipeline groups.
  */
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useState } from 'react';
 import {
+  IconAlertTriangle,
   IconArchive,
   IconBuilding,
   IconCalendar,
   IconCalendarEvent,
   IconChartBar,
   IconCheckbox,
-  IconClock,
-  IconClockPause,
+  IconChevronLeft,
+  IconChevronRight,
   IconContract,
   IconCurrencyLira,
   IconFileCheck,
   IconHistory,
   IconInbox,
   IconLayoutDashboard,
-  IconMenu2,
   IconPhoneCall,
+  IconPhonePause,
   IconPlant2,
   IconSettings,
   IconSpeakerphone,
+  IconTruck,
   IconUserCheck,
   IconUsers,
-  IconPhone,
   IconWebhook,
+  IconPhone,
 } from '@tabler/icons-react';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -38,54 +42,25 @@ import { UnivotelLogoWhite } from '@/components/layout/UnivotelLogo';
 
 interface NavItem {
   href: string;
-  labelKey: string;
+  label: string;
   icon: React.ComponentType<{ className?: string; size?: number }>;
-  managerOnly?: boolean;
-  salespersonOnly?: boolean;
-  superadminOnly?: boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { href: '/my-day', labelKey: 'nav.myDay', icon: IconLayoutDashboard },
-  { href: '/leads', labelKey: 'nav.leads', icon: IconUsers },
-  { href: '/leads/mine', labelKey: 'nav.myLeads', icon: IconUserCheck },
-  { href: '/leads/hub', labelKey: 'nav.leadHub', icon: IconInbox },
-  { href: '/leads/expecting-call', labelKey: 'nav.expectingCall', icon: IconPhoneCall },
-  { href: '/leads/nurture', labelKey: 'nav.nurture', icon: IconPlant2 },
-  { href: '/visits', labelKey: 'nav.visitCalendar', icon: IconCalendar },
-  { href: '/leads/post-visit', labelKey: 'nav.postVisit', icon: IconFileCheck },
-  { href: '/leads/24h-restricted', labelKey: 'nav.restricted24h', icon: IconClock },
-  { href: '/leads/downpayment', labelKey: 'nav.downpayment', icon: IconCurrencyLira },
-  { href: '/leads/deal-signed', labelKey: 'nav.dealSigned', icon: IconContract },
-  { href: '/move-in', labelKey: 'nav.moveInCalendar', icon: IconCalendarEvent },
-  { href: '/leads/moved-in', labelKey: 'nav.movedIn', icon: IconBuilding },
-  { href: '/deal-awaiting', labelKey: 'nav.dealAwaiting', icon: IconClockPause },
-  { href: '/tasks', labelKey: 'nav.tasks', icon: IconCheckbox },
-  { href: '/properties', labelKey: 'nav.properties', icon: IconBuilding },
-  { href: '/dashboard', labelKey: 'nav.analytics', icon: IconChartBar, managerOnly: true },
-  { href: '/campaigns', labelKey: 'nav.campaigns', icon: IconSpeakerphone, managerOnly: true },
-  { href: '/webhook-logs', labelKey: 'nav.webhookLogs', icon: IconWebhook, managerOnly: true },
-  { href: '/leads/archived', labelKey: 'nav.archive', icon: IconArchive, managerOnly: true },
-  { href: '/old-leads', labelKey: 'nav.oldLeads', icon: IconHistory, managerOnly: true },
-  { href: '/admin/dni-numbers', labelKey: 'nav.dniNumbers', icon: IconPhone, superadminOnly: true },
-];
-
-const BOTTOM_ITEMS: NavItem[] = [
-  { href: '/settings', labelKey: 'nav.settings', icon: IconSettings },
-];
+interface NavGroup {
+  label?: string;
+  items: NavItem[];
+  managerOnly?: boolean;
+}
 
 interface SidebarProps {
   userName: string;
   userRole: string;
   isManager: boolean;
   isSuperadminUser: boolean;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-/**
- * Returns initials from a full name string.
- * @param name - User display name.
- * @returns Up to two uppercase initials.
- */
 function getInitials(name: string): string {
   return name
     .split(' ')
@@ -96,23 +71,19 @@ function getInitials(name: string): string {
 }
 
 /**
- * Renders collapsible sidebar with icon navigation.
- * @param props - User info and role flags.
- * @returns Sidebar element.
+ * Renders the labeled grouped sidebar navigation.
  */
-export function Sidebar({ userName, userRole, isManager, isSuperadminUser }: SidebarProps) {
+export function Sidebar({
+  userName,
+  userRole,
+  isManager,
+  isSuperadminUser,
+  collapsed = false,
+  onToggleCollapse,
+}: SidebarProps) {
   const router = useRouter();
   const { t, locale } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
-  const [pinned, setPinned] = useState(false);
-
-  const isOpen = expanded || pinned;
-  const visibleNav = NAV_ITEMS.filter((item) => {
-    if (item.superadminOnly && !isSuperadminUser) return false;
-    if (item.managerOnly && !isManager) return false;
-    if (item.salespersonOnly && isManager) return false;
-    return true;
-  });
+  const isOpen = !collapsed;
 
   const EXACT_LEADS_SUBPAGES = new Set([
     '/leads/mine',
@@ -133,7 +104,6 @@ export function Sidebar({ userName, userRole, isManager, isSuperadminUser }: Sid
     if (href === '/deal-awaiting') return router.pathname.startsWith('/deal-awaiting');
     if (href === '/visits') return router.pathname === '/visits';
     if (href === '/move-in') return router.pathname === '/move-in';
-    // Exact-match subroutes under /leads.
     if (EXACT_LEADS_SUBPAGES.has(href)) return router.pathname === href;
     if (href === '/leads') {
       return (
@@ -146,136 +116,187 @@ export function Sidebar({ userName, userRole, isManager, isSuperadminUser }: Sid
     return router.pathname.startsWith(href);
   }
 
+  // Nav groups per D24 spec
+  const navGroups: NavGroup[] = [
+    {
+      items: [
+        { href: '/my-day', label: t('nav.myDay'), icon: IconLayoutDashboard },
+        { href: '/tasks', label: t('nav.tasks'), icon: IconCheckbox },
+      ],
+    },
+    {
+      label: 'AKTİF SATIŞ',
+      items: [
+        ...(isManager ? [{ href: '/leads', label: t('nav.leads'), icon: IconUsers }] : []),
+        { href: '/leads/hub', label: t('nav.leadHub'), icon: IconInbox },
+        { href: '/leads/mine', label: t('nav.myLeads'), icon: IconUserCheck },
+        { href: '/leads/expecting-call', label: t('nav.expectingCall'), icon: IconPhoneCall },
+        { href: '/leads/nurture', label: t('nav.nurture'), icon: IconPlant2 },
+        { href: '/visits', label: t('nav.visitCalendar'), icon: IconCalendar },
+        { href: '/leads/post-visit', label: t('nav.postVisit'), icon: IconFileCheck },
+      ],
+    },
+    {
+      label: 'KAPANIS',
+      items: [
+        { href: '/leads/downpayment', label: t('nav.downpayment'), icon: IconCurrencyLira },
+        { href: '/move-in', label: t('nav.moveInCalendar'), icon: IconCalendarEvent },
+        { href: '/leads/deal-signed', label: t('nav.dealSigned'), icon: IconContract },
+        { href: '/leads/moved-in', label: t('nav.movedIn'), icon: IconTruck },
+      ],
+    },
+    {
+      label: 'ÖZEL DURUMLAR',
+      items: [
+        { href: '/leads/24h-restricted', label: t('nav.restricted24h'), icon: IconAlertTriangle },
+        { href: '/deal-awaiting', label: t('nav.dealAwaiting'), icon: IconPhonePause },
+      ],
+    },
+    {
+      label: 'YÖNETİM',
+      managerOnly: true,
+      items: [
+        { href: '/dashboard', label: t('nav.analytics'), icon: IconChartBar },
+        { href: '/campaigns', label: t('nav.campaigns'), icon: IconSpeakerphone },
+        { href: '/properties', label: t('nav.properties'), icon: IconBuilding },
+        { href: '/webhook-logs', label: t('nav.webhookLogs'), icon: IconWebhook },
+        { href: '/leads/archived', label: t('nav.archive'), icon: IconArchive },
+        { href: '/old-leads', label: t('nav.oldLeads'), icon: IconHistory },
+        ...(isSuperadminUser
+          ? [{ href: '/admin/dni-numbers', label: t('nav.dniNumbers'), icon: IconPhone }]
+          : []),
+      ],
+    },
+  ];
+
   return (
     <>
+      {/* Overlay for mobile */}
       <div
         className={cn(
-          'fixed inset-0 z-30 bg-black/20 transition-opacity duration-300 ease-in-out lg:hidden motion-reduce:transition-none',
-          isOpen && pinned ? 'opacity-100' : 'pointer-events-none opacity-0',
+          'fixed inset-0 z-30 bg-black/20 transition-opacity duration-200 lg:hidden motion-reduce:transition-none',
+          !collapsed ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
-        onClick={() => setPinned(false)}
-        aria-hidden={!(isOpen && pinned)}
+        onClick={onToggleCollapse}
+        aria-hidden={collapsed}
       />
 
       <aside
         className={cn(
-          'fixed left-0 top-0 z-40 flex h-full flex-col bg-surface-sidebar transition-[width] duration-300 ease-in-out motion-reduce:transition-none',
+          'fixed left-0 top-0 z-40 flex h-full flex-col bg-surface-sidebar transition-[width] duration-200 ease-in-out motion-reduce:transition-none',
           isOpen ? 'w-[220px]' : 'w-[60px]',
         )}
-        onMouseEnter={() => setExpanded(true)}
-        onMouseLeave={() => {
-          if (!pinned) setExpanded(false);
-        }}
       >
+        {/* Header */}
         <div
           className={cn(
-            'flex h-[52px] items-center gap-2',
-            isOpen ? 'px-3.5' : 'justify-center px-0',
+            'flex h-[52px] items-center',
+            isOpen ? 'justify-between px-3.5' : 'justify-center px-0',
           )}
         >
+          {isOpen && (
+            <div className="flex items-center gap-2">
+              <UnivotelLogoWhite size={28} />
+            </div>
+          )}
           <button
             type="button"
             className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[var(--sidebar-text)] hover:bg-[var(--sidebar-icon-hover-bg)]"
-            onClick={() => setPinned((p) => !p)}
-            aria-label={t('nav.toggleSidebar')}
+            onClick={onToggleCollapse}
+            aria-label={collapsed ? 'Menüyü aç' : 'Menüyü daralt'}
           >
-            <IconMenu2 size={20} className="opacity-80" />
+            {isOpen ? <IconChevronLeft size={18} /> : <IconChevronRight size={18} />}
           </button>
-          <div
-            className={cn(
-              'overflow-hidden transition-[opacity,max-width] duration-300 ease-in-out motion-reduce:transition-none',
-              isOpen ? 'max-w-[32px] opacity-100' : 'max-w-0 opacity-0',
-            )}
-          >
-            <UnivotelLogoWhite size={32} />
-          </div>
         </div>
 
         <Separator className="bg-[var(--sidebar-icon-hover-bg)]" />
 
-        <nav className={cn('flex flex-1 flex-col gap-0.5 py-3', isOpen ? 'px-2' : 'px-0')}>
-          {visibleNav.map((item) => {
-            const active = isActive(item.href);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex h-10 items-center rounded-lg text-[13px] font-medium transition-colors',
-                  isOpen ? 'gap-3 px-2.5' : 'justify-center px-0',
-                  active
-                    ? 'bg-[var(--sidebar-icon-active-bg)] text-[var(--sidebar-text)]'
-                    : 'text-[var(--sidebar-icon-idle)] hover:bg-[var(--sidebar-icon-hover-bg)] hover:text-[var(--sidebar-text)]',
+        {/* Nav groups */}
+        <nav
+          className={cn(
+            'flex flex-1 flex-col gap-0 overflow-y-auto py-2',
+            isOpen ? 'px-2' : 'px-1.5',
+          )}
+        >
+          {navGroups
+            .filter((group) => !group.managerOnly || isManager)
+            .map((group, gi) => (
+              <div key={gi} className="mb-1">
+                {/* Group label */}
+                {group.label && isOpen && (
+                  <p className="mb-0.5 mt-1.5 px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--sidebar-icon-idle)] opacity-60">
+                    {group.label}
+                  </p>
                 )}
-              >
-                <Icon size={20} className="shrink-0" />
-                <span
-                  className={cn(
-                    'truncate transition-[opacity,max-width] duration-300 ease-in-out motion-reduce:transition-none',
-                    isOpen ? 'max-w-[160px] opacity-100' : 'max-w-0 opacity-0',
-                  )}
-                >
-                  {t(item.labelKey)}
-                </span>
-              </Link>
-            );
-          })}
+                {group.items.map((item) => {
+                  const active = isActive(item.href);
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        'flex h-9 items-center rounded-lg text-[13px] font-medium transition-colors',
+                        isOpen ? 'gap-2.5 px-2' : 'justify-center px-0',
+                        active
+                          ? 'bg-[var(--sidebar-icon-active-bg)] text-[var(--sidebar-text)]'
+                          : 'text-[var(--sidebar-icon-idle)] hover:bg-[var(--sidebar-icon-hover-bg)] hover:text-[var(--sidebar-text)]',
+                      )}
+                      title={!isOpen ? item.label : undefined}
+                    >
+                      <Icon size={18} className="shrink-0" />
+                      {isOpen && <span className="truncate">{item.label}</span>}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
         </nav>
 
-        <div className={cn('mt-auto pb-3', isOpen ? 'px-2' : 'px-0')}>
+        {/* Bottom: settings + user info */}
+        <div className={cn('mt-auto pb-3', isOpen ? 'px-2' : 'px-1.5')}>
           <Separator className="mb-2 bg-[var(--sidebar-icon-hover-bg)]" />
-          {BOTTOM_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const active = router.pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex h-10 items-center rounded-lg text-[13px] font-medium transition-colors',
-                  isOpen ? 'gap-3 px-2.5' : 'justify-center px-0',
-                  active
-                    ? 'bg-[var(--sidebar-icon-active-bg)] text-[var(--sidebar-text)]'
-                    : 'text-[var(--sidebar-icon-idle)] hover:bg-[var(--sidebar-icon-hover-bg)] hover:text-[var(--sidebar-text)]',
-                )}
-              >
-                <Icon size={20} className="shrink-0" />
-                <span
-                  className={cn(
-                    'truncate transition-[opacity,max-width] duration-300 ease-in-out motion-reduce:transition-none',
-                    isOpen ? 'max-w-[160px] opacity-100' : 'max-w-0 opacity-0',
-                  )}
-                >
-                  {t(item.labelKey)}
-                </span>
-              </Link>
-            );
-          })}
-
-          <div
+          <Link
+            href="/settings"
             className={cn(
-              'mt-2 flex items-center py-1.5',
-              isOpen ? 'gap-2.5 px-2.5' : 'justify-center px-0',
+              'flex h-9 items-center rounded-lg text-[13px] font-medium transition-colors',
+              isOpen ? 'gap-2.5 px-2' : 'justify-center px-0',
+              router.pathname.startsWith('/settings')
+                ? 'bg-[var(--sidebar-icon-active-bg)] text-[var(--sidebar-text)]'
+                : 'text-[var(--sidebar-icon-idle)] hover:bg-[var(--sidebar-icon-hover-bg)] hover:text-[var(--sidebar-text)]',
             )}
+            title={!isOpen ? t('nav.settings') : undefined}
           >
-            <Avatar>
-              <AvatarFallback className="bg-[var(--sidebar-icon-active-bg)] text-[var(--sidebar-text)]">
-                {getInitials(userName)}
-              </AvatarFallback>
-            </Avatar>
-            <div
-              className={cn(
-                'min-w-0 overflow-hidden transition-[opacity,max-width] duration-300 ease-in-out motion-reduce:transition-none',
-                isOpen ? 'max-w-[140px] opacity-100' : 'max-w-0 opacity-0',
-              )}
-            >
-              <p className="truncate text-xs font-medium text-[var(--sidebar-text)]">{userName}</p>
-              <p className="truncate text-[11px] capitalize text-[var(--sidebar-icon-idle)]">
-                {formatRoleLabel(locale, userRole)}
-              </p>
+            <IconSettings size={18} className="shrink-0" />
+            {isOpen && <span className="truncate">{t('nav.settings')}</span>}
+          </Link>
+
+          {isOpen && (
+            <div className="mt-2 flex items-center gap-2 rounded-lg px-2 py-1.5">
+              <Avatar className="size-7 shrink-0">
+                <AvatarFallback className="bg-[var(--sidebar-icon-hover-bg)] text-[10px] text-[var(--sidebar-text)]">
+                  {getInitials(userName)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <p className="truncate text-[12px] font-medium text-[var(--sidebar-text)]">
+                  {userName}
+                </p>
+                <p className="text-[10px] text-[var(--sidebar-icon-idle)]">
+                  {formatRoleLabel(locale, userRole)}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
+          {!isOpen && (
+            <div className="mt-2 flex justify-center">
+              <Avatar className="size-7">
+                <AvatarFallback className="bg-[var(--sidebar-icon-hover-bg)] text-[10px] text-[var(--sidebar-text)]">
+                  {getInitials(userName)}
+                </AvatarFallback>
+              </Avatar>
+            </div>
+          )}
         </div>
       </aside>
     </>

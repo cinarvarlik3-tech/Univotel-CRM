@@ -63,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { data: lead, error: leadError } = await supabase
     .from('leads')
     .select(
-      'uuid, lead_name, lead_phone, funnel_status, last_contact_at, assigned_to, lead_details(university, student_gender, campus, budget_max, room_category, rec_hotel)',
+      'uuid, lead_name, lead_phone, funnel_status, last_contact_at, assigned_to, created_at, lead_details(university, student_gender, campus, budget_max, room_category, rec_hotel)',
     )
     .eq('uuid', id)
     .eq('is_deleted', false)
@@ -77,7 +77,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return sendError(res, 'Forbidden', 403);
   }
 
-  const [distributionResult, historyResult, messagesResult, tasksResult, stageEntryResult] =
+  const [distributionResult, historyResult, messagesResult, tasksResult, stageHistoryResult] =
     await Promise.all([
       supabase
         .from('leads')
@@ -110,12 +110,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .eq('lead_uuid', id)
         .order('created_at', { ascending: false }),
 
+      // §1.6: Use lead_stage_history as the primary source for days-in-stage.
+      // The most-recent row for this lead is the current stage entry time.
       supabase
-        .from('contact_history')
+        .from('lead_stage_history')
         .select('created_at')
         .eq('lead_uuid', id)
-        .eq('interaction_type', 'status_change')
-        .eq('funnel_status_at_time', lead.funnel_status)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
@@ -131,10 +131,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  // Time in current stage
-  const stageEntryAt = stageEntryResult.data?.created_at ?? null;
+  // §1.6: Time in current stage from lead_stage_history (most-recent row = current stage entry).
+  // Fallback: if no stage history row exists (pre-migration backfill only), use lead.created_at.
+  const stageEntryAt =
+    stageHistoryResult.data?.created_at ?? (lead as Record<string, unknown>).created_at ?? null;
   const time_in_stage_days = stageEntryAt
-    ? Math.floor((Date.now() - new Date(stageEntryAt).getTime()) / 86_400_000)
+    ? Math.floor((Date.now() - new Date(stageEntryAt as string).getTime()) / 86_400_000)
     : null;
 
   // Stale check — based on last_contact_at

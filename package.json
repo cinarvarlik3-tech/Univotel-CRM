@@ -10,6 +10,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "cf:build": "opennextjs-cloudflare build",
     "cf:preview": "pnpm cf:build && wrangler dev",
     "cf:deploy": "opennextjs-cloudflare build && OPEN_NEXT_DEPLOY=true wrangler deploy",

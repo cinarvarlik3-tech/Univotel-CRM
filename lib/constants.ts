@@ -47,6 +47,25 @@ export const FUNNEL_STATUSES = [
 /** Terminal "lost" funnel status set via Chatwoot kayip_nedeni custom attribute. */
 export const LOST_FUNNEL_STATUS = 'lost' as const;
 
+/** Terminal funnel statuses — auto-advance must never target or originate from these. */
+export const TERMINAL_FUNNEL_STATUSES_SET = new Set<string>(['lost', 'sozlesme-imzalandi']);
+
+/**
+ * Forward-only stage comparator for CDR auto-advance (§1.7 / D19).
+ * Returns true if `target` is strictly ahead of `current` in the funnel order,
+ * and neither stage is terminal (lost / sozlesme-imzalandi).
+ * Safe to use from webhook handlers — throws never.
+ */
+export function isFunnelAdvanceAllowed(current: string, target: string): boolean {
+  if (TERMINAL_FUNNEL_STATUSES_SET.has(current) || TERMINAL_FUNNEL_STATUSES_SET.has(target)) {
+    return false;
+  }
+  const currentIdx = FUNNEL_STATUSES.indexOf(current as (typeof FUNNEL_STATUSES)[number]);
+  const targetIdx = FUNNEL_STATUSES.indexOf(target as (typeof FUNNEL_STATUSES)[number]);
+  if (currentIdx === -1 || targetIdx === -1) return false;
+  return targetIdx > currentIdx;
+}
+
 /** Chatwoot funnel label aliases (display labels → CRM slug). */
 export const CHATWOOT_FUNNEL_LABEL_ALIASES: Readonly<Record<string, string>> = {
   kayıp: LOST_FUNNEL_STATUS,
@@ -517,6 +536,7 @@ export const FILTERABLE_COLUMNS: ReadonlySet<string> = new Set(LEAD_LIST_FILTER_
 /** Columns allowed for single-column sort on lead list. */
 export const SORTABLE_COLUMNS: ReadonlySet<string> = new Set([
   'created_at',
+  'last_contact_at',
   'sla_deadline',
   'lead_score',
   'lead_name',

@@ -2,7 +2,7 @@
  * Toolbar for lead list filters, search, and sort controls.
  * Filter panel mirrors side-panel sections: Genel, Profil, Detay, Sistem.
  */
-import { IconFilter } from '@tabler/icons-react';
+import { IconArrowDown, IconArrowUp, IconFilter } from '@tabler/icons-react';
 import { useMemo, useState } from 'react';
 import { FilterFieldControl } from '@/components/leads/filter/FilterFieldControl';
 import { ListFilterSection } from '@/components/leads/list-filter-controls';
@@ -10,22 +10,14 @@ import { Button } from '@/components/ui/button';
 import { CollapsiblePanel } from '@/components/ui/collapsible-panel';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import { useProperties } from '@/hooks/useProperties';
 import { useTranslation } from '@/hooks/useTranslation';
-import { SORTABLE_COLUMN_OPTIONS } from '@/lib/constants';
 import {
   filterFieldsBySection,
   LEAD_FILTER_FIELD_REGISTRY,
   type FilterFieldDef,
 } from '@/lib/leads/filter-field-registry';
-import { formatSortColumn } from '@/lib/i18n/enum-labels';
 import { DEFAULT_LEAD_LIST_STATE } from '@/types/filter';
 import type { FieldFilterState, LeadListFilterState } from '@/types/filter';
 import type { SalespersonOption } from '@/types/domain';
@@ -219,20 +211,47 @@ export function LeadListToolbar({
           {t('common.filters')}
         </Button>
 
-        <FormField label={t('filters.sort')} htmlFor="lead_sort" className="min-w-[160px]">
-          <Select value={state.sort} onValueChange={(v) => onChange({ ...state, sort: v })}>
-            <SelectTrigger id="lead_sort">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SORTABLE_COLUMN_OPTIONS.map((col) => (
-                <SelectItem key={col} value={col}>
-                  {formatSortColumn(locale, col)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </FormField>
+        {/* D1: Two one-click sort presets — "En son temas" (last-contact ASC) and "Oluşturulma" (created-at DESC) */}
+        <div className="flex items-end gap-1">
+          <FormField label={t('filters.sort')} htmlFor="sort_preset" className="flex-shrink-0">
+            <div id="sort_preset" className="flex gap-1">
+              <Button
+                type="button"
+                size="sm"
+                variant={
+                  state.sort === 'created_at' && state.sortDir === 'desc' ? 'default' : 'secondary'
+                }
+                className={cn('gap-1 text-xs')}
+                onClick={() => {
+                  onChange({ ...state, sort: 'created_at', sortDir: 'desc' });
+                  onApply();
+                }}
+                title="Oluşturulma tarihine göre (en yeni üstte)"
+              >
+                <IconArrowDown size={13} />
+                Oluşturulma
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={
+                  state.sort === 'last_contact_at' && state.sortDir === 'asc'
+                    ? 'default'
+                    : 'secondary'
+                }
+                className={cn('gap-1 text-xs')}
+                onClick={() => {
+                  onChange({ ...state, sort: 'last_contact_at', sortDir: 'asc' });
+                  onApply();
+                }}
+                title="En eski temasa göre (en uzak geçmiş üstte)"
+              >
+                <IconArrowUp size={13} />
+                En son temas
+              </Button>
+            </div>
+          </FormField>
+        </div>
 
         <Button type="button" onClick={onApply}>
           {t('common.apply')}

@@ -1,6 +1,6 @@
 # Univotel CRM — Technical Onboarding Guide
 
-**Last updated:** 2026-06-09  
+**Last updated:** 2026-06-11  
 **Production:** https://panel.marketinguni.app  
 **Audience:** Engineers joining the project — first-week orientation through deep system knowledge.
 
@@ -38,13 +38,14 @@ This is the primary technical onboarding document. It covers product purpose, ar
 26. [Scheduled jobs (pg_cron)](#26-scheduled-jobs-pg_cron)
 27. [Telegram notifications](#27-telegram-notifications)
 28. [Analytics](#28-analytics)
-29. [Internationalization (i18n)](#29-internationalization-i18n)
-30. [Testing strategy](#30-testing-strategy)
-31. [Deployment](#31-deployment)
-32. [Coding conventions](#32-coding-conventions)
-33. [Known quirks and tech debt](#33-known-quirks-and-tech-debt)
-34. [Document index and escalation](#34-document-index-and-escalation)
-35. [Suggested first-week path](#35-suggested-first-week-path)
+29. [My Day cockpit](#29-my-day-cockpit)
+30. [Internationalization (i18n)](#30-internationalization-i18n)
+31. [Testing strategy](#31-testing-strategy)
+32. [Deployment](#32-deployment)
+33. [Coding conventions](#33-coding-conventions)
+34. [Known quirks and tech debt](#34-known-quirks-and-tech-debt)
+35. [Document index and escalation](#35-document-index-and-escalation)
+36. [Suggested first-week path](#36-suggested-first-week-path)
 
 ---
 
@@ -66,6 +67,9 @@ The platform:
 - **Browses historical Chatwoot imports** in read-only `old_leads` (~8.5k rows)
 - **Shows live Conversation tab** on active leads (Chatwoot API cache + 15s poll)
 - **Triggers hotel recommendations** via Make.com with property-level results in `lead_details.rec_hotel`
+- **My Day cockpit** (`/my-day`) — personal counters, tasks, attention queue, performance tab for every salesperson
+- **Manager Team panel** on `/dashboard` — team KPIs, daily trend charts, per-salesperson comparison table
+- **Stage compartment pages** — nurture, expecting-call, post-visit, downpayment, deal-signed, 24h-restricted, move-in, plus visit/move-in calendars
 
 ### Business domain vocabulary
 
@@ -197,26 +201,32 @@ Excluding webhooks also avoids `self is not defined` errors in local `next dev`.
 │   │   ├── leads/archived/     # Archived lead read + unarchive
 │   │   ├── old-leads/          # Historical import (read-only)
 │   │   ├── campaigns/          # Manager campaigns
-│   │   ├── analytics/          # Dashboard aggregates
+│   │   ├── analytics/          # MV overview + manager-panel team metrics
+│   │   ├── my-day/             # Personal cockpit + performance
+│   │   ├── visits/             # Visit calendar CRUD
 │   │   ├── admin/dni-numbers/  # Superadmin DNI CRUD
 │   │   ├── ref/, dni/          # Public attribution APIs
 │   │   └── ...
-│   ├── leads/                  # Active lead inbox, mine, new, archived
+│   ├── my-day.tsx              # Salesperson landing cockpit
+│   ├── leads/                  # Inbox, mine, stage compartments (nurture, post-visit, …), archived
+│   ├── visits/, move-in/       # Calendars
 │   ├── deal-awaiting/          # Parked leads
+│   ├── dashboard/              # Manager analytics (Overview + Team panel tabs)
 │   ├── campaigns/, tasks/, properties/, settings/, ...
 │   └── login.tsx
 │
 ├── lib/
 │   ├── leads/                  # create, assign, dedupe, SLA, archive, update, filters
+│   ├── my-day/                 # My Day + performance aggregations
+│   ├── analytics/              # manager-panel trends + team metrics
 │   ├── webhooks/               # processors, verify, webhook_logs, idempotency
 │   ├── chatwoot/               # API client, label sync, custom attributes, assignee
 │   ├── campaigns/              # segment, worker, WhatsApp template send
 │   ├── attribution/            # collected_data, confidence, GA4
 │   ├── notifications/          # Telegram throttle, lead-message planning
-│   ├── jobs/                   # cron runners
+│   ├── jobs/                   # cron runners (visit reminders, nurture alerts, 24h restriction, …)
 │   ├── query/                  # filter-builder, split-filters, cursor
 │   ├── ui/                     # build-*-query-string, serialize-field-filters
-│   ├── leads/                  # … filter-field-registry, budget-tier
 │   ├── i18n/                   # tr/en messages, enum labels, date formatting
 │   ├── universities/           # search helpers
 │   ├── auth/                   # session user, roles
@@ -225,13 +235,15 @@ Excluding webhooks also avoids `self is not defined` errors in local `next dev`.
 │
 ├── components/
 │   ├── layout/                 # AppShell, Sidebar, Topbar
-│   ├── leads/                  # LeadTable, LeadDetailPanel, PipelineView, filters
+│   ├── leads/                  # LeadTable, LeadDetailPanel, PipelineView, filters, stage pages
+│   ├── my-day/                 # CounterStrip, TaskPanel, AttentionQueue, PerformanceTab
+│   ├── analytics/              # AnalyticsDashboard, ManagerPanel, TrendChart
 │   ├── campaigns/              # CampaignForm
 │   └── ui/                     # shadcn-style primitives
 │
 ├── hooks/                      # SWR data hooks + manual fetch hooks
 ├── types/                      # database.ts (generated), domain.ts, webhooks.ts, api.ts, filter.ts
-├── supabase/migrations/        # 0001–0061 sequential SQL
+├── supabase/migrations/        # 0001–0073 sequential SQL
 ├── scripts/                    # gen-types, imports, telegram, chatwoot agent sync
 ├── __tests__/lib/              # Vitest unit tests
 ├── docs/                       # runbook, onboarding, handoff, netgsm-integration
@@ -347,11 +359,11 @@ Generate: `openssl rand -base64 32`
 
 ### Roles
 
-| Role          | Access                                                                                                                  |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `salesperson` | Own + unassigned active leads; tasks; properties read; **My Leads** `/leads/mine`; deal-awaiting leads assigned to them |
-| `manager`     | All active + archived leads; campaigns; webhook-logs; old-leads; dashboard; analytics; notifications                    |
-| `superadmin`  | Manager + `/admin/dni-numbers`                                                                                          |
+| Role          | Access                                                                                                                                                                 |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `salesperson` | Own + unassigned active leads; tasks; properties read; **My Day** `/my-day`; **My Leads** `/leads/mine`; stage compartment pages; deal-awaiting leads assigned to them |
+| `manager`     | All active + archived leads; campaigns; webhook-logs; old-leads; dashboard; analytics; notifications                                                                   |
+| `superadmin`  | Manager + `/admin/dni-numbers`                                                                                                                                         |
 
 Helpers: `lib/auth/roles.ts` — `isManagerOrAbove()`, `isSuperadmin()`, `canAccessDniAdmin()`.
 
@@ -396,17 +408,19 @@ Browser request
 
 ## 8. Database schema
 
-**61 migrations** in `supabase/migrations/` (`0001`–`0061`). Apply in order. **Do not renumber** migrations on production.
+**61 migrations** in `supabase/migrations/` (`0001`–`0073`, 73 files). Apply in order. **Do not renumber** migrations on production.
 
 ### Core tables
 
-| Table               | Purpose                                                                                        |
-| ------------------- | ---------------------------------------------------------------------------------------------- |
-| **salespeople**     | Agents and managers; assignment routing, shift windows, `active_lead_count`, Chatwoot identity |
-| **leads**           | Central CRM record — funnel, SLA, assignment, Chatwoot sync columns, archive flags             |
-| **lead_details**    | 1:1 extended profile (university, budget_tier, preferences, rec_hotel JSONB)                   |
-| **contact_history** | Append-only interaction audit log — never updated/deleted in normal operation                  |
-| **tasks**           | Salesperson follow-up action items with due dates                                              |
+| Table                  | Purpose                                                                                                                            |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **salespeople**        | Agents and managers; assignment routing, shift windows, `active_lead_count`, Chatwoot identity                                     |
+| **leads**              | Central CRM record — funnel, SLA, assignment, Chatwoot sync columns, archive flags                                                 |
+| **lead_details**       | 1:1 extended profile (university, budget_tier, preferences, rec_hotel JSONB)                                                       |
+| **contact_history**    | Append-only interaction audit log — never updated/deleted in normal operation                                                      |
+| **tasks**              | Salesperson follow-up action items with due dates; auto-created tasks from stage transitions (`is_auto_created`, `auto_task_type`) |
+| **visits**             | Scheduled property visits (`scheduled`, `attended`, `failed`) per lead                                                             |
+| **lead_stage_history** | Append-only funnel transition audit (`changed_by`, `source`) — drives performance + Team panel credit                              |
 
 ### Property inventory
 
@@ -501,12 +515,24 @@ Refreshed every 5 minutes by `mv_refresh` cron:
 | **0059**  | Replace universities seed with Chatwoot-aligned campus-level list (~80 entries)                   |
 | **0060**  | Loss reason trigger fix — `lost` allows optional loss_reason; `ziyaret-ama-almayacak` requires it |
 | **0061**  | `budget_tier` replaces `budget_min`; backfill from legacy `budget_max` bands                      |
+| **0062**  | Funnel consolidation — `bilgi-verildi`; legacy lost statuses → `lost`; archive/SLA cron updates   |
+| **0063**  | `has_moved_in`, `is_24h_restricted`, `move_in_date_set` on leads                                  |
+| **0064**  | `visits` table                                                                                    |
+| **0065**  | Lead details date fields for move-in workflow                                                     |
+| **0066**  | Task auto-creation columns (`is_auto_created`, `auto_task_type`)                                  |
+| **0067**  | Backfill `is_24h_restricted`; SLA cron terminal set → `sozlesme-imzalandi`, `lost` only           |
+| **0068**  | `last_inbound_message_at` on leads (24h restriction input)                                        |
+| **0069**  | `restriction-24h` HTTP cron (every 15 min)                                                        |
+| **0070**  | `leads.claimed_at` — claim timestamp for performance denominators                                 |
+| **0071**  | `lead_stage_history` audit table                                                                  |
+| **0072**  | `lead_messages` sender attribution (`sender_agent_id`)                                            |
+| **0073**  | Stage history backfill + safety-net trigger on funnel writes                                      |
 
 ### Key enums (TEXT + CHECK)
 
 All enforced as TEXT + CHECK, not Postgres enums. Canonical lists in `lib/constants.ts`.
 
-**`leads.funnel_status`:** `yeni`, `aranacak`, `arandi`, `arandi-acmadi`, `bizi-aradi-konustuk`, `ziyaret`, `ziyaret-etmedi`, `ziyaret-etti`, `teklif-gonderildi`, `kapora-alindi`, `sozlesme-imzalandi`, `ziyaret-ama-almayacak`, `ilgilenmiyor`, `24h_window_warning`, `lost`
+**`leads.funnel_status`:** `yeni`, `bilgi-verildi`, `aranacak`, `arandi`, `arandi-acmadi`, `bizi-aradi-konustuk`, `ziyaret`, `ziyaret-etmedi`, `ziyaret-etti`, `teklif-gonderildi`, `kapora-alindi`, `sozlesme-imzalandi`, `lost` (legacy slugs `ilgilenmiyor` / `ziyaret-ama-almayacak` remapped in migration 0062)
 
 **`leads.sla_status`:** `on_time`, `breached`
 
@@ -523,7 +549,9 @@ AND deal_awaiting = false
 AND funnel_status NOT IN (terminal set)
 ```
 
-**Terminal funnel statuses:** `sozlesme-imzalandi`, `ziyaret-ama-almayacak`, `ilgilenmiyor`, `24h_window_warning`, `lost`
+**Terminal funnel statuses (SLA excluded):** `sozlesme-imzalandi`, `lost`
+
+**Nightly auto-archive (80 days):** `lost` only (migration 0062 — won leads require manual `has_moved_in` flow)
 
 ---
 
@@ -744,10 +772,10 @@ Nightly cron `nightly-archive` (03:00 UTC) calls `archive_terminal_leads()`:
 
 ### Terminal funnel mapping
 
-| Funnel status                                   | Archive reason |
-| ----------------------------------------------- | -------------- |
-| `sozlesme-imzalandi`                            | `won`          |
-| `ziyaret-ama-almayacak`, `ilgilenmiyor`, `lost` | `lost`         |
+| Funnel status        | Archive reason                                           |
+| -------------------- | -------------------------------------------------------- |
+| `sozlesme-imzalandi` | `won` (manual archive only — no nightly auto since 0062) |
+| `lost`               | `lost` (nightly auto-archive after 80 days)              |
 
 ### Unarchive
 
@@ -1262,6 +1290,7 @@ LeadDetailPanel (Sheet, right side)
     │   └── Kaynak detayları — source attribution
     ├── LeadChatView — useLeadMessages (sync + 15s poll)
     ├── FunnelView — inline SWR → funnel-view API
+    ├── ActivityTimeline — merged event feed (`GET /api/leads/{id}/activity`)
     ├── ContactHistorySection
     └── ManagerLeadActions — reassign, archive
 ```
@@ -1270,28 +1299,39 @@ LeadDetailPanel (Sheet, right side)
 
 ### Data fetching patterns
 
-| Pattern          | Used for                                                       |
-| ---------------- | -------------------------------------------------------------- |
-| **SWR hooks**    | Lists: leads, archived, old leads, tasks, campaigns, analytics |
-| **Manual hooks** | Detail panels: `useLeadDetail`, `useLeadMessages`              |
-| **Inline SWR**   | PipelineView, FunnelView tab                                   |
-| **Direct fetch** | Mutations, load-more pagination                                |
+| Pattern          | Used for                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------- |
+| **SWR hooks**    | Lists: leads, archived, old leads, tasks, campaigns, analytics, my-day, manager panel |
+| **Manual hooks** | Detail panels: `useLeadDetail`, `useLeadMessages`                                     |
+| **Inline SWR**   | PipelineView, FunnelView tab                                                          |
+| **Direct fetch** | Mutations, load-more pagination                                                       |
 
 ### UI routes summary
 
-| Route                                | Access     | Purpose                                                          |
-| ------------------------------------ | ---------- | ---------------------------------------------------------------- |
-| `/leads`                             | All        | Primary inbox — list/pipeline toggle, filters, slide-over detail |
-| `/leads/mine`                        | All        | Assigned-to-me scope                                             |
-| `/deal-awaiting`                     | All        | Parked leads                                                     |
-| `/leads/new`                         | All        | Manual lead creation                                             |
-| `/leads/archived`                    | Manager    | Archived leads                                                   |
-| `/old-leads`                         | Manager    | Historical import (read-only)                                    |
-| `/campaigns`                         | Manager    | WhatsApp campaigns                                               |
-| `/dashboard`                         | Manager    | Analytics                                                        |
-| `/webhook-logs`                      | Manager    | Failed webhook audit + replay                                    |
-| `/admin/dni-numbers`                 | Superadmin | DNI CRUD                                                         |
-| `/tasks`, `/properties`, `/settings` | All        | Tasks, inventory, preferences                                    |
+| Route                                | Access     | Purpose                                                                |
+| ------------------------------------ | ---------- | ---------------------------------------------------------------------- |
+| `/my-day`                            | All        | Personal salesperson cockpit (counters, tasks, attention, performance) |
+| `/leads`                             | All        | Primary inbox — list/pipeline toggle, filters, slide-over detail       |
+| `/leads/mine`                        | All        | Assigned-to-me scope                                                   |
+| `/leads/hub`                         | All        | Lead hub / unclaimed pool                                              |
+| `/leads/expecting-call`              | All        | Leads awaiting callback                                                |
+| `/leads/nurture`                     | All        | Nurture-stage compartment                                              |
+| `/leads/post-visit`                  | All        | Post-visit nurture compartment                                         |
+| `/leads/24h-restricted`              | All        | Chatwoot 24h window restricted leads                                   |
+| `/leads/downpayment`                 | All        | Downpayment-stage compartment                                          |
+| `/leads/deal-signed`                 | All        | Signed-deal compartment                                                |
+| `/leads/moved-in`                    | All        | Moved-in leads                                                         |
+| `/visits`                            | All        | Cross-property visit calendar                                          |
+| `/move-in`                           | All        | Move-in date calendar                                                  |
+| `/deal-awaiting`                     | All        | Parked leads                                                           |
+| `/leads/new`                         | All        | Manual lead creation                                                   |
+| `/leads/archived`                    | Manager    | Archived leads                                                         |
+| `/old-leads`                         | Manager    | Historical import (read-only)                                          |
+| `/campaigns`                         | Manager    | WhatsApp campaigns                                                     |
+| `/dashboard`                         | Manager    | Analytics — **Overview** + **Team panel** tabs                         |
+| `/webhook-logs`                      | Manager    | Failed webhook audit + replay                                          |
+| `/admin/dni-numbers`                 | Superadmin | DNI CRUD                                                               |
+| `/tasks`, `/properties`, `/settings` | All        | Tasks, inventory, preferences                                          |
 
 Deep link: `/leads/[id]` → redirects to `/leads?selected={id}`
 
@@ -1322,6 +1362,11 @@ All successful responses: `{ data: T }`. Errors: `{ error: string }`.
 | `/api/lead-details/[leadId]`    | GET, PATCH         | Session |
 | `/api/leads/[id]/archive`       | POST               | Manager |
 | `/api/leads/[id]/funnel-view`   | GET                | Session |
+| `/api/leads/[id]/activity`      | GET                | Session |
+| `/api/leads/[id]/log-contact`   | POST               | Session |
+| `/api/leads/[id]/advance-stage` | POST               | Session |
+| `/api/leads/[id]/claim`         | POST               | Session |
+| `/api/leads/[id]/visits`        | GET, POST          | Session |
 | `/api/leads/[id]/messages`      | GET                | Session |
 | `/api/leads/[id]/messages/sync` | POST               | Session |
 | `/api/leads/[id]/rec-hotel`     | GET, PATCH         | Session |
@@ -1329,15 +1374,33 @@ All successful responses: `{ data: T }`. Errors: `{ error: string }`.
 | `/api/contact-history/[leadId]` | GET, POST          | Session |
 | `/api/universities`             | GET                | Session |
 
+### Analytics & My Day
+
+| Route                            | Methods | Auth    |
+| -------------------------------- | ------- | ------- |
+| `/api/analytics`                 | GET     | Manager |
+| `/api/analytics/manager-panel`   | GET     | Manager |
+| `/api/analytics/archive-summary` | GET     | Manager |
+| `/api/analytics/dni-performance` | GET     | Manager |
+| `/api/my-day`                    | GET     | Session |
+| `/api/my-day/performance`        | GET     | Session |
+| `/api/visits`                    | GET     | Session |
+| `/api/visits/[id]`               | PATCH   | Session |
+
 ### Cron endpoints
 
-| Route                           | Purpose                         |
-| ------------------------------- | ------------------------------- |
-| `/api/cron/sla-alerts`          | SLA breach Telegram alerts      |
-| `/api/cron/task-overdue`        | Overdue task notifications      |
-| `/api/cron/campaign-resume`     | Resume paused campaigns         |
-| `/api/cron/ga4-enrichment`      | GA4 attribution enrichment      |
-| `/api/cron/lead-message-notify` | Inbound message Telegram alerts |
+| Route                             | Purpose                                                                          |
+| --------------------------------- | -------------------------------------------------------------------------------- |
+| `/api/cron/sla-alerts`            | SLA breach Telegram alerts                                                       |
+| `/api/cron/task-overdue`          | Overdue task notifications                                                       |
+| `/api/cron/campaign-resume`       | Resume paused campaigns                                                          |
+| `/api/cron/ga4-enrichment`        | GA4 attribution enrichment                                                       |
+| `/api/cron/lead-message-notify`   | Inbound message Telegram alerts                                                  |
+| `/api/cron/restriction-24h`       | Sets `is_24h_restricted` when inbound message > 24h old                          |
+| `/api/cron/visit-reminder`        | Tomorrow visit reminder tasks (endpoint exists; pg_cron schedule may be pending) |
+| `/api/cron/visit-resolution-ping` | End-of-shift unresolved visit ping                                               |
+| `/api/cron/move-in-reminder`      | Move-in date reminder tasks                                                      |
+| `/api/cron/nurture-task-alerts`   | Nurture/post-visit Telegram alerts at shift boundaries                           |
 
 ### Webhooks
 
@@ -1354,19 +1417,20 @@ All successful responses: `{ data: T }`. Errors: `{ error: string }`.
 
 **Extensions required:** `pg_cron`, `pg_net`, `pg_trgm`
 
-| Job                           | Schedule      | Type | Purpose                                 |
-| ----------------------------- | ------------- | ---- | --------------------------------------- |
-| `sla_update`                  | `*/5 * * * *` | SQL  | Update SLA status (business hours only) |
-| `task_overdue_check`          | `*/5 * * * *` | SQL  | Set `tasks.is_late = true`              |
-| `mv_refresh`                  | `*/5 * * * *` | SQL  | Refresh analytics materialized views    |
-| `sla-alerts`                  | `*/5 * * * *` | HTTP | Telegram SLA breach alerts              |
-| `task-overdue`                | `*/5 * * * *` | HTTP | Telegram overdue task alerts            |
-| `campaign-resume`             | `*/5 * * * *` | HTTP | Resume paused campaigns                 |
-| `ga4-enrichment`              | `*/5 * * * *` | HTTP | GA4 Data API enrichment                 |
-| `lead-message-notify`         | `* * * * *`   | HTTP | Inbound message Telegram alerts         |
-| `campaign_daily_reset`        | `0 0 * * *`   | SQL  | Reset daily send count; resume paused   |
-| `nightly-archive`             | `0 3 * * *`   | SQL  | Auto-archive terminal leads (batch 100) |
-| `active_lead_count_reconcile` | `15 3 * * *`  | SQL  | Recompute salesperson active counts     |
+| Job                           | Schedule       | Type | Purpose                                           |
+| ----------------------------- | -------------- | ---- | ------------------------------------------------- |
+| `sla_update`                  | `*/5 * * * *`  | SQL  | Update SLA status (business hours only)           |
+| `task_overdue_check`          | `*/5 * * * *`  | SQL  | Set `tasks.is_late = true`                        |
+| `mv_refresh`                  | `*/5 * * * *`  | SQL  | Refresh analytics materialized views              |
+| `sla-alerts`                  | `*/5 * * * *`  | HTTP | Telegram SLA breach alerts                        |
+| `task-overdue`                | `*/5 * * * *`  | HTTP | Telegram overdue task alerts                      |
+| `campaign-resume`             | `*/5 * * * *`  | HTTP | Resume paused campaigns                           |
+| `ga4-enrichment`              | `*/5 * * * *`  | HTTP | GA4 Data API enrichment                           |
+| `lead-message-notify`         | `* * * * *`    | HTTP | Inbound message Telegram alerts                   |
+| `restriction-24h`             | `*/15 * * * *` | HTTP | Sets `is_24h_restricted` on stale inbound threads |
+| `campaign_daily_reset`        | `0 0 * * *`    | SQL  | Reset daily send count; resume paused             |
+| `nightly-archive`             | `0 3 * * *`    | SQL  | Auto-archive terminal leads (batch 100)           |
+| `active_lead_count_reconcile` | `15 3 * * *`   | SQL  | Recompute salesperson active counts               |
 
 HTTP jobs read `base_url` and `cron_secret` from `cron_settings` table.
 
@@ -1403,24 +1467,55 @@ HTTP jobs read `base_url` and `cron_secret` from `cron_settings` table.
 
 ## 28. Analytics
 
-**API:** `GET /api/analytics` (manager only)  
+**Overview tab** — `GET /api/analytics` (manager only)  
 **Hook:** `hooks/useAnalytics.ts`
 
 **Data source:** Materialized views refreshed every 5 minutes.
 
-**Dashboard metrics:**
+**Overview metrics:**
 
 - Leads by source (active + archived won/lost)
 - Funnel distribution (active leads)
 - Agent performance (conversion, avg response time)
 - SLA breach rate by source
 
-**Archive analytics:** `GET /api/analytics/archive-summary`  
-**DNI performance:** `GET /api/analytics/dni-performance`
+**Team panel tab** — `GET /api/analytics/manager-panel` (manager only)  
+**Hook:** `hooks/useManagerPanel.ts`
+
+**Data source:** Live tables (range-scoped, Istanbul daily buckets). Query params: `range=this_week|this_month|last_30_days`, optional `salesperson={uuid}`.
+
+**Team panel metrics:**
+
+- Summary KPIs: new leads, contacts, visits attended, deals signed
+- Daily trend charts for the four KPI series
+- Per-salesperson table: claims, contacted, visits, show rate, downpayments, signed, conversion, activity volume, task completion
+
+Credit rules match `lib/my-day/performance.ts`. Stage history before migrations `0070`–`0073` is incomplete — see runbook.
+
+**Other analytics APIs:** `GET /api/analytics/archive-summary`, `GET /api/analytics/dni-performance`
 
 ---
 
-## 29. Internationalization (i18n)
+## 29. My Day cockpit
+
+**UI:** `/my-day` (sidebar first item — all roles)  
+**API:** `GET /api/my-day`, `GET /api/my-day/performance?range=this_week|this_month`  
+**Hooks:** `hooks/useMyDay.ts`, `hooks/usePerformance.ts`
+
+**Today tab:**
+
+- Counter strip (active leads, not contacted today, visits, tasks, new claims)
+- Task panel (overdue / today / upcoming) with inline actions
+- Attention queue (not contacted, unresolved visits, expecting call)
+- Mini funnel (compartment counts)
+
+**Performance tab:** conversion funnel, visit show rate, activity volume, task completion — self-scoped to logged-in salesperson.
+
+**Code:** `lib/my-day/aggregations.ts`, `lib/my-day/performance.ts`, `components/my-day/*`
+
+---
+
+## 30. Internationalization (i18n)
 
 ### Architecture
 
@@ -1442,7 +1537,7 @@ lib/i18n/
 
 ---
 
-## 30. Testing strategy
+## 31. Testing strategy
 
 ### Unit tests (Vitest)
 
@@ -1469,11 +1564,11 @@ Run: `pnpm test`
 
 ### ESLint rule
 
-`@/lib/supabase/service` only importable from allowed `lib/` paths — not from `pages/api/`.
+`@/lib/supabase/service` only importable from allowed `lib/` paths (including `lib/analytics/`, `lib/my-day/`) — not from `pages/api/`.
 
 ---
 
-## 31. Deployment
+## 32. Deployment
 
 **Manual CLI** — no GitHub Actions deploy pipeline.
 
@@ -1505,7 +1600,7 @@ pnpm cf:preview
 
 ---
 
-## 32. Coding conventions
+## 33. Coding conventions
 
 From `.cursor/rules/index.mdc` and existing code:
 
@@ -1521,7 +1616,7 @@ Optional team protocol: RESEARCH → PLAN → EXECUTE modes when using AI assist
 
 ---
 
-## 33. Known quirks and tech debt
+## 34. Known quirks and tech debt
 
 | Item                               | Detail                                                                    |
 | ---------------------------------- | ------------------------------------------------------------------------- |
@@ -1538,7 +1633,7 @@ Optional team protocol: RESEARCH → PLAN → EXECUTE modes when using AI assist
 
 ---
 
-## 34. Document index and escalation
+## 35. Document index and escalation
 
 ### Document index
 
@@ -1563,7 +1658,7 @@ Optional team protocol: RESEARCH → PLAN → EXECUTE modes when using AI assist
 
 ---
 
-## 35. Suggested first-week path
+## 36. Suggested first-week path
 
 ### Day 1 — Environment and orientation
 

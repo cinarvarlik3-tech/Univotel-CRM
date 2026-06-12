@@ -135,6 +135,33 @@ export async function resolveVisit(opts: {
 }
 
 /**
+ * Updates only a visit's scheduled date (drag-to-reschedule).
+ * Authorization is enforced by the calling API handler. Does not touch the
+ * lead's funnel status — rescheduling is a calendar move, not a stage change.
+ * @param opts - visitId and the new ISO scheduled date.
+ * @returns The updated visit row.
+ */
+export async function rescheduleVisit(opts: {
+  visitId: string;
+  scheduledDate: string;
+}): Promise<Record<string, unknown>> {
+  const client = createServiceClient();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: updated, error } = await (client as any)
+    .from('visits')
+    .update({ scheduled_date: opts.scheduledDate })
+    .eq('id', opts.visitId)
+    .select('*')
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed to reschedule visit: ${error.message}`);
+  if (!updated) throw new Error('Visit not found after reschedule');
+
+  return updated as Record<string, unknown>;
+}
+
+/**
  * Returns visits with joined lead info, scoped by filters.
  * When isManager=false and no status filter, results are restricted to leads
  * assigned to assignedToUserId.
@@ -152,7 +179,9 @@ export async function listVisits(opts: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let query = (client as any)
     .from('visits')
-    .select('*, leads(uuid, lead_name, funnel_status, assigned_to)')
+    .select(
+      '*, leads(uuid, lead_name, lead_phone, funnel_status, assigned_to, lead_details(room_type))',
+    )
     .order('scheduled_date', { ascending: true });
 
   if (opts.propertyId) query = query.eq('property_id', opts.propertyId);

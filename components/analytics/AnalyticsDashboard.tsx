@@ -139,35 +139,7 @@ export function AnalyticsDashboard({ data }: AnalyticsDashboardProps) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('analytics.slaBreachRate')}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow className="h-[34px] hover:bg-transparent">
-                <TableHead>{t('analytics.tableSource')}</TableHead>
-                <TableHead>{t('analytics.tableBreaches')}</TableHead>
-                <TableHead>{t('analytics.tableTotal')}</TableHead>
-                <TableHead>{t('analytics.tableRate')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.slaBreachRate.map((row) => (
-                <TableRow key={row.lead_source ?? 'unknown'}>
-                  <TableCell>
-                    {row.lead_source ? formatEnumLabel(locale, 'source', row.lead_source) : emDash}
-                  </TableCell>
-                  <TableCell>{formatNumber(row.breach_count ?? 0, locale)}</TableCell>
-                  <TableCell>{formatNumber(row.total_count ?? 0, locale)}</TableCell>
-                  <TableCell>{formatRate(row.breach_rate)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* SLA breach rate panel removed (D16) */}
     </div>
   );
 }

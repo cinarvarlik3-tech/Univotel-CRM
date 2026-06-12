@@ -53,11 +53,27 @@ export interface MyDayCounters {
   newClaimsThisWeek: number;
 }
 
+/** A CDR call record for "Son Aramalar" (D22, §4.5). */
+export interface RecentCallItem {
+  id: string;
+  leadUuid: string;
+  leadName: string | null;
+  leadPhone: string | null;
+  direction: 'inbound' | 'outbound';
+  answered: boolean;
+  durationSeconds: number;
+  calledAt: string;
+  /** Whether the outcome has been manually logged. Resolution condition for attention queue. */
+  isLogged: boolean;
+}
+
 export interface MyDayPayload {
   counters: MyDayCounters;
   tasks: { overdue: TaskCard[]; today: TaskCard[]; upcoming: TaskCard[] };
   attentionQueue: AttentionItem[];
   miniFunnel: { compartment: string; count: number }[];
+  /** D22: Son Aramalar — last 20 inbound+outbound CDR calls, newest first. */
+  recentCalls: RecentCallItem[];
 }
 
 export async function getMyDayPayload(userId: string): Promise<MyDayPayload> {
@@ -246,7 +262,37 @@ export async function getMyDayPayload(userId: string): Promise<MyDayPayload> {
     });
   }
 
-  // ── 7. Mini funnel ────────────────────────────────────────────────────────
+  // ── 7. Son Aramalar — last 20 CDR calls for leads assigned to this agent ─
+  const { data: rawRecentCalls } = await client
+    .from('contact_history')
+    .select(
+      'id, lead_uuid, interaction_type, notes, metadata, created_at, salesperson_id, leads!inner(lead_name, lead_phone, assigned_to)',
+    )
+    .eq('interaction_type', 'call')
+    .eq('interaction_source', 'netgsm')
+    .eq('leads.assigned_to', userId)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  const recentCalls: RecentCallItem[] = (rawRecentCalls ?? []).map((row) => {
+    const meta = (row.metadata ?? {}) as { direction?: string; duration_seconds?: number };
+    const lead = row.leads as { lead_name: string | null; lead_phone: string | null } | null;
+    const duration = meta.duration_seconds ?? 0;
+    return {
+      id: row.id,
+      leadUuid: row.lead_uuid,
+      leadName: lead?.lead_name ?? null,
+      leadPhone: lead?.lead_phone ?? null,
+      direction: (meta.direction as 'inbound' | 'outbound') ?? 'outbound',
+      answered: duration > 0,
+      durationSeconds: duration,
+      calledAt: row.created_at,
+      // Logged = a human set salesperson_id or explicitly marked via log-contact
+      isLogged: Boolean(row.salesperson_id),
+    };
+  });
+
+  // ── 8. Mini funnel ────────────────────────────────────────────────────────
   const statusCounts = new Map<string, number>();
   for (const lead of myLeads) {
     statusCounts.set(lead.funnel_status, (statusCounts.get(lead.funnel_status) ?? 0) + 1);
@@ -275,5 +321,6 @@ export async function getMyDayPayload(userId: string): Promise<MyDayPayload> {
     tasks: { overdue: overdueTasks, today: todayTasks, upcoming: upcomingTasks },
     attentionQueue,
     miniFunnel,
+    recentCalls,
   };
 }

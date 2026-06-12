@@ -23,6 +23,7 @@ export function buildQueryFromLeadListState(
 ): string {
   return buildLeadsQueryString({
     sort: state.sort,
+    sortDir: state.sortDir,
     search: state.search,
     fieldFilters: state.fieldFilters,
     createdFrom: state.createdFrom,

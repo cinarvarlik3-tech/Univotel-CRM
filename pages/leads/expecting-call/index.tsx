@@ -16,8 +16,8 @@ export default function ExpectingCallPage() {
 
   function renderRowActions(lead: LeadWithDetails, onDone: () => void) {
     return (
-      <Button size="sm" variant="secondary" onClick={() => setActive({ lead, onDone })}>
-        {t('actions.logContact')}
+      <Button size="sm" onClick={() => setActive({ lead, onDone })}>
+        {t('actions.logCallOutcome')}
       </Button>
     );
   }

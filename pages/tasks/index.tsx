@@ -1,12 +1,12 @@
 /**
- * Tasks list page — create tasks and mark complete.
+ * Tasks list page — create tasks, filter (D27), and mark complete.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 
 import { AppShell } from '@/components/layout/AppShell';
 import { TaskCreateForm } from '@/components/tasks/TaskCreateForm';
-import { TaskListToolbar } from '@/components/tasks/TaskListToolbar';
+import { TaskListToolbar, type TaskFilters } from '@/components/tasks/TaskListToolbar';
 import { TaskTable } from '@/components/tasks/TaskTable';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
@@ -45,15 +45,28 @@ export default function TasksPage() {
   const isManager = isManagerOrAbove(user?.role);
   const assigneeFilter = router.isReady && isManager ? assigneeFromQuery(router.query) : undefined;
 
+  // D27: server-side filter state
+  const [taskFilters, setTaskFilters] = useState<TaskFilters>({
+    status: 'open',
+    kind: '',
+    assigneeId: assigneeFilter ?? '',
+  });
+
   const visibleTasks = useMemo(() => {
     if (!user || !tasks) return [];
 
-    return filterTasksForListView(tasks, {
+    let list = filterTasksForListView(tasks, {
       isManager,
       userId: user.userId,
-      assigneeId: assigneeFilter,
+      assigneeId: taskFilters.assigneeId || undefined,
     });
-  }, [tasks, user, isManager, assigneeFilter]);
+
+    // Client-side secondary filters (complement the server-side ones)
+    if (taskFilters.kind === 'auto') list = list.filter((t) => t.is_auto_created);
+    else if (taskFilters.kind === 'manual') list = list.filter((t) => !t.is_auto_created);
+
+    return list;
+  }, [tasks, user, isManager, taskFilters]);
 
   const loadTasks = useCallback(async () => {
     await mutate();
@@ -66,20 +79,6 @@ export default function TasksPage() {
       setActionError('');
     }
   }, [tasksError, t]);
-
-  const handleAssigneeChange = useCallback(
-    (nextAssigneeId: string) => {
-      const nextQuery = { ...router.query };
-      if (nextAssigneeId) {
-        nextQuery.assignee = nextAssigneeId;
-      } else {
-        delete nextQuery.assignee;
-      }
-
-      void router.push({ pathname: '/tasks', query: nextQuery }, undefined, { shallow: true });
-    },
-    [router],
-  );
 
   async function completeTask(taskId: string) {
     const res = await fetch(`/api/tasks/${taskId}`, {
@@ -101,13 +100,13 @@ export default function TasksPage() {
     <AppShell title={t('tasks.title')}>
       {actionError && <p className="mb-4 text-sm text-brand-red">{actionError}</p>}
 
-      {isManager && (
-        <TaskListToolbar
-          assigneeId={assigneeFilter ?? ''}
-          salespeople={salespeople}
-          onAssigneeChange={handleAssigneeChange}
-        />
-      )}
+      {/* D27: server-side filter toolbar visible for all users */}
+      <TaskListToolbar
+        filters={taskFilters}
+        isManager={isManager}
+        salespeople={salespeople}
+        onChange={setTaskFilters}
+      />
 
       <TaskCreateForm onCreated={loadTasks} />
 

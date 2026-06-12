@@ -19,11 +19,8 @@ export default function NurturePage() {
   function renderRowActions(lead: LeadWithDetails, onDone: () => void) {
     return (
       <div className="flex gap-1">
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => setActive({ type: 'log-contact', lead, onDone })}
-        >
+        {/* D5: Nurture primary action = İletişim kaydet */}
+        <Button size="sm" onClick={() => setActive({ type: 'log-contact', lead, onDone })}>
           {t('actions.logContact')}
         </Button>
         <Button

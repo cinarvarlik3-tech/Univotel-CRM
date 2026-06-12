@@ -79,10 +79,10 @@ export function LeadHubTable({ leads, onClaimSuccess }: LeadHubTableProps) {
                 {formatEnumLabel(locale, 'stage', lead.student_stage)}
               </TableCell>
               <TableCell>
+                {/* D5: yeni / Lead Hub primary action = Claim */}
                 <Button
                   type="button"
                   size="sm"
-                  variant="secondary"
                   disabled={claimingId === lead.uuid}
                   onClick={() => handleClaim(lead.uuid)}
                 >

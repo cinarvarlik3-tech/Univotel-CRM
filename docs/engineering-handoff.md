@@ -1,6 +1,6 @@
 # Univotel CRM — Engineering Handoff
 
-**Last updated:** 2026-06-09  
+**Last updated:** 2026-06-11  
 **Production:** https://panel.marketinguni.app  
 **Audience:** Engineers taking over development, on-call, or deployment.
 
@@ -21,8 +21,11 @@ Univotel CRM is an internal **student housing sales operations platform** (Turke
 - Browses **historical Chatwoot imports** in read-only `old_leads` (~8.5k rows)
 - Supports **live Conversation tab** on active leads (Chatwoot API cache, 15s poll)
 - Supports **hotel recommendation** workflow (Make.com) with property-level results in `lead_details.rec_hotel`
+- Provides **My Day** salesperson cockpit (`/my-day`) — counters, tasks, attention queue, personal performance
+- Provides **manager Team panel** on `/dashboard` — range-scoped KPIs, daily trends, per-salesperson comparison (`GET /api/analytics/manager-panel`)
+- Organizes active pipeline into **stage compartment pages** (nurture, visits, post-visit, downpayment, deal-signed, 24h-restricted, move-in, etc.) plus `/visits` and `/move-in` calendars
 
-**Not built (by design):** Phase 5 automation rules, n8n orchestration, ElevenLabs voice, Chatwoot custom attributes → CRM auto-sync (labels only today).
+**Not built (by design):** Phase 5 automation rules, n8n orchestration, ElevenLabs voice.
 
 ---
 
@@ -60,27 +63,32 @@ Telegram ─POST /api/webhooks/telegram ────────┘         ▼
 ```
 pages/
   api/webhooks/     chatwoot, netgsm, whatsapp-calls, telegram
-  api/cron/         sla-alerts, task-overdue, campaign-resume, ga4-enrichment
-  api/leads/        list (expanded filters), CRUD, archive, messages, request-rec, rec-hotel
+  api/cron/         sla-alerts, task-overdue, campaign-resume, ga4-enrichment, lead-message-notify, restriction-24h, visit/move-in/nurture crons
+  api/leads/        list (expanded filters), CRUD, archive, messages, request-rec, rec-hotel, log-contact, advance-stage, activity, claim, visits
+  api/my-day/       personal cockpit + performance metrics
+  api/analytics/    MV overview, manager-panel, archive-summary, dni-performance
   api/old-leads/    read-only list + detail + messages (manager+)
   api/campaigns/    manager campaigns
+  api/visits/       visit calendar CRUD
   api/dni/          public number list for GTM
   api/admin/dni-numbers/  superadmin CRUD
-  leads/, old-leads/, campaigns/, webhook-logs/, properties/, ...
+  my-day.tsx, leads/* (stage compartments), visits/, move-in/, dashboard/, ...
 
 lib/
-  leads/            create, assign, dedupe, SLA, archive, save-rec-hotel, parse-rec-hotel, chat sync
+  leads/            create, assign, dedupe, SLA, archive, save-rec-hotel, parse-rec-hotel, chat sync, filters
+  my-day/           My Day + performance aggregations
+  analytics/        manager-panel trends + team metrics
   webhooks/         processors, verify, normalize-netgsm-payload, webhook_logs, replay
   query/            filter-builder, split-filters, composite filters, supabase-query-types
   ui/               build-*-query-string, serialize-field-filters, lead-list-query
-  leads/            … filter-field-registry, budget-tier
-  chatwoot/         API client, label sync, messages
+  chatwoot/         API client, label sync, custom attributes, messages
   campaigns/        segment, worker, WhatsApp template send
   attribution/      collected_data, confidence, GA4
+  jobs/             cron runners (visit reminders, nurture alerts, etc.)
   dni/              lookup, normalize, increment lead_count
   auth/             session, roles
 
-supabase/migrations/   0001–0061 (61 files)
+supabase/migrations/   0001–0073 (73 files)
 types/                 database.ts (generated), domain.ts, webhooks.ts
 docs/                  runbook, onboarding, this file, netgsm-integration
 ```
@@ -91,18 +99,19 @@ After any migration: `pnpm gen:types`.
 
 ## 4. Database — migration snapshot
 
-| Range     | Purpose                                                                                        |
-| --------- | ---------------------------------------------------------------------------------------------- |
-| 0001–0018 | Core CRM: salespeople, properties, leads, tasks, campaigns, webhook_logs                       |
-| 0019–0032 | Analytics, archive, pg_cron, notifications                                                     |
-| 0033–0037 | Superadmin, ref_sessions, dni_numbers, collected_data, GA4 cron                                |
-| 0038–0040 | old_leads, old_lead_details, old_lead_messages                                                 |
-| 0041      | lead_messages (live Chatwoot cache)                                                            |
-| 0042–0044 | Property availability, room types, physical rooms                                              |
-| 0045–0046 | lead_details rec fields (campus, room_category, rec_hotel jsonb); drop redundant gender column |
-| 0047      | `search_old_leads_ids` RPC (fuzzy search on old leads)                                         |
-| 0048–0060 | Lead messaging, universities, deal_awaiting, funnel stages, loss_reason trigger, Chatwoot sync |
-| 0061      | `budget_tier` replaces `budget_min`; derived `budget_max`; Chatwoot `butce` sync               |
+| Range     | Purpose                                                                                                                                                        |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0001–0018 | Core CRM: salespeople, properties, leads, tasks, campaigns, webhook_logs                                                                                       |
+| 0019–0032 | Analytics, archive, pg_cron, notifications                                                                                                                     |
+| 0033–0037 | Superadmin, ref_sessions, dni_numbers, collected_data, GA4 cron                                                                                                |
+| 0038–0040 | old_leads, old_lead_details, old_lead_messages                                                                                                                 |
+| 0041      | lead_messages (live Chatwoot cache)                                                                                                                            |
+| 0042–0044 | Property availability, room types, physical rooms                                                                                                              |
+| 0045–0046 | lead_details rec fields (campus, room_category, rec_hotel jsonb); drop redundant gender column                                                                 |
+| 0047      | `search_old_leads_ids` RPC (fuzzy search on old leads)                                                                                                         |
+| 0048–0060 | Lead messaging, universities, deal_awaiting, funnel stages, loss_reason trigger, Chatwoot sync                                                                 |
+| 0061      | `budget_tier` replaces `budget_min`; derived `budget_max`; Chatwoot `butce` sync                                                                               |
+| 0062–0073 | Major Update — funnel consolidation (`lost`), visits, boolean flags, auto-tasks, 24h restriction cron, `claimed_at`, `lead_stage_history`, message attribution |
 
 **Lead lifecycle states:** Active (`is_deleted=false`, `is_archived=false`) → Archived → soft-deleted.
 
@@ -110,11 +119,11 @@ After any migration: `pnpm gen:types`.
 
 ## 5. Roles and access
 
-| Role          | Access                                                                            |
-| ------------- | --------------------------------------------------------------------------------- |
-| `salesperson` | Own + unassigned active leads; tasks; properties read; **My Leads** `/leads/mine` |
-| `manager`     | All active + archived; campaigns; webhook-logs; old-leads; dashboard; analytics   |
-| `superadmin`  | Manager + `/admin/dni-numbers`                                                    |
+| Role          | Access                                                                                                                           |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `salesperson` | Own + unassigned active leads; tasks; properties read; **My Day** `/my-day`; **My Leads** `/leads/mine`; stage compartment pages |
+| `manager`     | All active + archived; campaigns; webhook-logs; old-leads; dashboard (Overview + Team panel); analytics                          |
+| `superadmin`  | Manager + `/admin/dni-numbers`                                                                                                   |
 
 RLS enforces row access; API routes also check session role. Auth user UUID **must** match `salespeople.id`.
 
@@ -258,7 +267,7 @@ pnpm build         # ESLint + TypeScript (must pass before deploy)
 pnpm cf:deploy     # OpenNext build + wrangler deploy
 ```
 
-**ESLint rule:** `@/lib/supabase/service` only importable from allowed `lib/` paths — not from `pages/api/`.
+**ESLint rule:** `@/lib/supabase/service` only importable from allowed `lib/` paths (including `lib/analytics/`, `lib/my-day/`) — not from `pages/api/`.
 
 **No E2E Playwright suite.** Manual integration checklists in `docs/phase_4_tests.md`.
 
@@ -288,7 +297,19 @@ pnpm cf:deploy     # OpenNext build + wrangler deploy
 
 ---
 
-## 15. Document index
+## 15. Manager analytics & My Day
+
+| Surface                       | API                                              | Data                                                                                | Access    |
+| ----------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------- | --------- |
+| `/dashboard` → **Overview**   | `GET /api/analytics`                             | Materialized views (`mv_*`), refreshed every 5 min                                  | manager+  |
+| `/dashboard` → **Team panel** | `GET /api/analytics/manager-panel`               | Live tables — claims, contacts, visits, stage history, tasks; Istanbul daily trends | manager+  |
+| `/my-day`                     | `GET /api/my-day`, `GET /api/my-day/performance` | Self-scoped counters, tasks, attention queue, conversion funnel                     | all roles |
+
+Team panel credit rules mirror My Day performance (`lib/my-day/performance.ts`): stage transitions credit `changed_by`, visits credit `created_by`, contacts credit `salesperson_id`. Operational detail: [`runbook.md` — Dashboard tabs](./runbook.md).
+
+---
+
+## 16. Document index
 
 | Document                                                   | Use when                                  |
 | ---------------------------------------------------------- | ----------------------------------------- |
@@ -300,7 +321,7 @@ pnpm cf:deploy     # OpenNext build + wrangler deploy
 
 ---
 
-## 16. Escalation
+## 17. Escalation
 
 | Topic                | Contact                    |
 | -------------------- | -------------------------- |

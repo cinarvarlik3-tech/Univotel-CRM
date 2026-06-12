@@ -114,7 +114,7 @@ export async function recordDuplicateSubmission(
     lead_uuid: existingLeadUuid,
     interaction_type: 'duplicate_submission',
     interaction_source: source as 'whatsapp' | 'instagram' | 'netgsm' | 'manual',
-    notes: 'Duplicate submission detected — lead not created.',
+    notes: 'Tekrar başvuru — lead oluşturulmadı.',
     metadata: metadata as Json,
   });
 

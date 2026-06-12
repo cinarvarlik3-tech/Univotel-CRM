@@ -24,6 +24,8 @@ export interface LeadsListParams {
   detailsFilters: FilterCondition[];
   needsDetailsJoin: boolean;
   sortField: string;
+  /** Sort direction — 'asc' for "En son temas" (furthest-past-first, nulls first), 'desc' default. */
+  sortDir: 'asc' | 'desc';
   searchTerm: string;
   useFuzzy: boolean;
   dealAwaitingFilterSet: boolean;
@@ -65,6 +67,8 @@ export function parseLeadsListParams(
   const sortField =
     typeof query.sort === 'string' && SORTABLE_COLUMNS.has(query.sort) ? query.sort : 'created_at';
 
+  const sortDir: 'asc' | 'desc' = query.sort_dir === 'asc' ? 'asc' : 'desc';
+
   const searchTerm = typeof query.search === 'string' ? query.search.trim() : '';
   // allow show_all for managers, or for salespeople viewing their own leads (mine=1).
   const showAll = query.show_all === '1' && (isManagerOrAbove(session.role) || query.mine === '1');
@@ -76,6 +80,7 @@ export function parseLeadsListParams(
     detailsFilters,
     needsDetailsJoin: requiresLeadDetailsJoin(allFilters),
     sortField,
+    sortDir,
     searchTerm,
     useFuzzy: query.fuzzy === '1' && searchTerm.length > 0,
     dealAwaitingFilterSet: allFilters.some((f) => f.field === 'deal_awaiting'),

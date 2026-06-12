@@ -11,6 +11,7 @@ import { TaskPanel } from '@/components/my-day/TaskPanel';
 import { AttentionQueue } from '@/components/my-day/AttentionQueue';
 import { MiniFunnel } from '@/components/my-day/MiniFunnel';
 import { PerformanceTab } from '@/components/my-day/PerformanceTab';
+import { SonAramalar } from '@/components/my-day/SonAramalar';
 import { LeadDetailPanel } from '@/components/leads/LeadDetailPanel';
 import { useMyDay } from '@/hooks/useMyDay';
 import { useAuth } from '@/hooks/useAuth';
@@ -71,6 +72,8 @@ export default function MyDayPage() {
                     onMutate={handleMutate}
                     onOpenLead={openLead}
                   />
+                  {/* D22: Son Aramalar — last 20 CDR calls, unlogged ones need action */}
+                  <SonAramalar calls={data.recentCalls} onOpenLead={openLead} />
                 </div>
                 <div>
                   <MiniFunnel data={data.miniFunnel} />

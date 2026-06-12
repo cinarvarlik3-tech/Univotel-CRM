@@ -164,7 +164,7 @@ async function executeCreateLead(input: CreateLeadInput): Promise<CreateLeadResu
     interaction_type: input.leadSource.includes('call') ? 'whatsapp_call' : 'message_received',
     interaction_source: input.interactionSource,
     funnel_status_at_time: 'yeni',
-    notes: 'First contact — lead created.',
+    notes: 'İlk temas — lead oluşturuldu.',
     metadata: (input.metadata ?? {}) as Json,
   });
 

@@ -58,6 +58,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (error) return sendError(res, 'Failed to log contact', 500);
 
+  // Bump last_contact_at so the last-contact sort and recency pill stay accurate.
+  void client.from('leads').update({ last_contact_at: new Date().toISOString() }).eq('uuid', id);
+
   // Auto-complete any pending nurture/post-visit reminder tasks for this lead.
   void completeContactTasks(id);
 

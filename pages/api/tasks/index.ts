@@ -22,10 +22,60 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const supabase = createServerSupabase(req, res);
 
   if (req.method === 'GET') {
-    let query = supabase.from('tasks').select('*').order('due_when', { ascending: true });
+    // D27: server-side filters — status, kind, type, lead, assignee, due window
+    const { status, kind, task_type, lead_uuid, assignee, due_from, due_to } = req.query;
+
+    let query = supabase
+      .from('tasks')
+      .select('*, leads!inner(lead_name, display_name, lead_phone, funnel_status)')
+      .order('due_when', { ascending: true });
 
     if (!isManagerOrAbove(session.role)) {
       query = query.eq('assigned_to', session.userId);
+    } else if (typeof assignee === 'string' && assignee) {
+      query = query.eq('assigned_to', assignee);
+    }
+
+    // Status filter
+    if (status === 'open') {
+      query = query.eq('is_completed', false).eq('is_cancelled', false);
+    } else if (status === 'overdue') {
+      query = query
+        .eq('is_completed', false)
+        .eq('is_cancelled', false)
+        .lt('due_when', new Date().toISOString());
+    } else if (status === 'completed') {
+      query = query.eq('is_completed', true);
+    } else if (status === 'cancelled') {
+      query = query.eq('is_cancelled', true);
+    } else {
+      // Default: exclude cancelled
+      query = query.eq('is_cancelled', false);
+    }
+
+    // Kind filter: auto vs manual
+    if (kind === 'auto') {
+      query = query.eq('is_auto_created', true);
+    } else if (kind === 'manual') {
+      query = query.eq('is_auto_created', false);
+    }
+
+    // Task type filter
+    if (typeof task_type === 'string' && task_type) {
+      query = query.eq('auto_task_type', task_type);
+    }
+
+    // Lead filter
+    if (typeof lead_uuid === 'string' && lead_uuid) {
+      query = query.eq('lead_uuid', lead_uuid);
+    }
+
+    // Due window
+    if (typeof due_from === 'string' && due_from) {
+      query = query.gte('due_when', due_from);
+    }
+    if (typeof due_to === 'string' && due_to) {
+      query = query.lte('due_when', due_to);
     }
 
     const { data, error } = await query;

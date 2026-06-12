@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/table';
 import { TrendChart } from '@/components/analytics/TrendChart';
 import { useManagerPanel } from '@/hooks/useManagerPanel';
+import { useTeamPanelMetrics } from '@/hooks/useTeamPanelMetrics';
 import { useTranslation } from '@/hooks/useTranslation';
 import { formatNumber } from '@/lib/i18n';
 import type { ManagerPanelRange } from '@/lib/analytics/manager-panel';
@@ -55,6 +56,8 @@ export function ManagerPanel() {
 
   const salespersonId = selected === ALL_TEAM ? undefined : selected;
   const { data, error, isLoading } = useManagerPanel(true, range, salespersonId);
+  // D25: new RPC-based team metrics (Volume / Outcomes / Conversions / Stale)
+  const { data: teamMetrics, isLoading: teamMetricsLoading } = useTeamPanelMetrics(true, range);
 
   const ranges: Array<{ key: ManagerPanelRange; label: string }> = [
     { key: 'this_week', label: t('analytics.rangeThisWeek') },
@@ -155,6 +158,103 @@ export function ManagerPanel() {
               barClassName="bg-brand-red"
             />
           </div>
+
+          {/* D25: New team metrics — Volume / Funnel / Outcomes / Conversions clustered */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Performans Metrikleri</CardTitle>
+              <p className="text-xs text-text-tertiary">
+                Seçili tarih aralığında tüm ekip · Yeni aşamasında 7 günden fazla bekleyen
+                kaydedilir
+              </p>
+            </CardHeader>
+            <CardContent>
+              {teamMetricsLoading && <Skeleton className="h-40 w-full" />}
+              {teamMetrics && (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="h-[34px] hover:bg-transparent">
+                        {/* Volume cluster */}
+                        <TableHead className="min-w-[120px]">Temsilci</TableHead>
+                        <TableHead className="text-right">Aktif</TableHead>
+                        <TableHead className="text-right">Mesaj</TableHead>
+                        <TableHead className="text-right">Arama</TableHead>
+                        <TableHead className="text-right">Bağlantı %</TableHead>
+                        <TableHead className="text-right">Ziyaret</TableHead>
+                        {/* Outcomes cluster */}
+                        <TableHead className="border-l border-border-default text-right">
+                          Kapora
+                        </TableHead>
+                        <TableHead className="text-right font-semibold text-brand-blue">
+                          Sözleşme
+                        </TableHead>
+                        {/* Conversions cluster */}
+                        <TableHead className="border-l border-border-default text-right">
+                          Yeni→İmza
+                        </TableHead>
+                        <TableHead className="text-right">Ziyaret→Kapora</TableHead>
+                        {/* Cliff warning */}
+                        <TableHead className="border-l border-border-default text-right">
+                          Yeni&gt;7g
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {teamMetrics.map((m) => (
+                        <TableRow
+                          key={m.salespersonId}
+                          className={cn(
+                            m.staleAtYeniCount > 5 && 'bg-orange-50/30 dark:bg-orange-950/10',
+                          )}
+                        >
+                          <TableCell>
+                            <span className="font-medium">{m.fullName}</span>
+                          </TableCell>
+                          <TableCell className="text-right">{m.activeLeadCount}</TableCell>
+                          <TableCell className="text-right">{m.messageCount}</TableCell>
+                          <TableCell className="text-right">
+                            {m.answeredCallCount}
+                            <span className="text-text-tertiary">/{m.callCount}</span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {m.outboundConnectRate != null ? `${m.outboundConnectRate}%` : '—'}
+                          </TableCell>
+                          <TableCell className="text-right">{m.scheduledVisitCount}</TableCell>
+                          <TableCell className="border-l border-border-default text-right">
+                            {m.downpaymentCount}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-brand-blue">
+                            {m.signedCount}
+                          </TableCell>
+                          <TableCell className="border-l border-border-default text-right">
+                            {m.convYeniToSigned != null ? `${m.convYeniToSigned}%` : '—'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {m.convVisitToDownpayment != null
+                              ? `${m.convVisitToDownpayment}%`
+                              : '—'}
+                          </TableCell>
+                          <TableCell
+                            className={cn(
+                              'border-l border-border-default text-right font-semibold',
+                              m.staleAtYeniCount > 5
+                                ? 'text-orange-600'
+                                : m.staleAtYeniCount > 0
+                                  ? 'text-text-secondary'
+                                  : 'text-text-tertiary',
+                            )}
+                          >
+                            {m.staleAtYeniCount}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Team comparison table (always full team) */}
           <Card>

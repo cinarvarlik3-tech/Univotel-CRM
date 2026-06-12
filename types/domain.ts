@@ -8,6 +8,10 @@ import type { SourceDetails } from '@/lib/leads/source-details';
 export interface LeadRow {
   uuid: string;
   lead_name: string | null;
+  /** Human-edited display name (§1.1 / D12). Null = use auto_logged_name or lead_name. */
+  display_name?: string | null;
+  /** Immutable auto-logged original name from channel. Never overwritten. */
+  auto_logged_name?: string | null;
   lead_phone: string;
   lead_source: string;
   funnel_status: string;
@@ -34,8 +38,11 @@ export interface LeadRow {
   is_24h_restricted?: boolean;
   move_in_date_set?: boolean;
   last_inbound_message_at?: string | null;
+  last_contact_at?: string | null;
   funnel_status_before_lost?: string | null;
   archived_at?: string | null;
+  /** Chatwoot conversation ID — null for phone-only leads. */
+  chatwoot_conversation_id?: number | null;
 }
 
 /** Hotel recommendation contender from Make.com workflow. */
@@ -165,6 +172,10 @@ export interface TaskRow {
   is_late: boolean;
   notes: string | null;
   created_at: string;
+  /** True for system-generated tasks (stage transitions etc.). Added in 0066. */
+  is_auto_created: boolean;
+  /** Identifies the auto-task scenario (e.g. 'stage_visit_scheduled'). Null for manual tasks. */
+  auto_task_type: string | null;
 }
 
 /** Property row for inventory list. */

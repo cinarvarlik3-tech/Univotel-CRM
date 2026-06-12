@@ -67,7 +67,7 @@ export async function buildActivityTimeline(leadUuid: string): Promise<ActivityE
       happenedAt: row.changed_at,
       summary: row.from_status
         ? `${row.from_status} → ${row.to_status}`
-        : `Stage set to ${row.to_status}`,
+        : `Aşama: ${row.to_status}`,
       meta: {
         fromStatus: row.from_status,
         toStatus: row.to_status,

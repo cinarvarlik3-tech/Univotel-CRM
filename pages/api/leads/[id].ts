@@ -26,6 +26,8 @@ const UpdateLeadSchema = z.object({
   deal_awaiting: z.boolean().optional(),
   is_24h_restricted: z.boolean().optional(),
   has_moved_in: z.boolean().optional(),
+  /** Human-edited display name (§1.1 / D12). Never overwrites auto_logged_name. */
+  display_name: z.string().nullable().optional(),
 });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -71,7 +73,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .maybeSingle(),
       supabase
         .from('leads')
-        .select('funnel_status, assigned_to, is_archived, loss_reason, funnel_status_before_lost')
+        .select(
+          'funnel_status, assigned_to, is_archived, loss_reason, funnel_status_before_lost, display_name, auto_logged_name, lead_name',
+        )
         .eq('uuid', id)
         .maybeSingle(),
     ]);
@@ -124,6 +128,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const funnelFromLossReason = lossTransition.funnel_status as string | undefined;
 
+    // Rename activity log (D12): when display_name changes, write an Aktiviteler entry.
+    if (updates.display_name !== undefined) {
+      const oldName =
+        (existing as Record<string, unknown>).display_name ??
+        (existing as Record<string, unknown>).auto_logged_name ??
+        (existing as Record<string, unknown>).lead_name ??
+        '';
+      const newName = updates.display_name ?? '';
+      if (oldName !== newName) {
+        void supabase.from('contact_history').insert({
+          lead_uuid: id,
+          interaction_type: 'activity',
+          interaction_source: 'manual',
+          status_changed: false,
+          salesperson_id: authSession.user.id,
+          notes: `${String(oldName)} → ${String(newName)} olarak yeniden adlandırıldı`,
+        });
+      }
+    }
+
     if (updates.funnel_status && updates.funnel_status !== existing.funnel_status) {
       void supabase.from('contact_history').insert({
         lead_uuid: id,
@@ -133,7 +157,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         previous_status: existing.funnel_status ?? null,
         status_changed: true,
         salesperson_id: authSession.user.id,
-        notes: `Status changed to ${updates.funnel_status}`,
+        notes: `Aşama değişti: ${updates.funnel_status}`,
       });
     } else if (funnelFromLossReason && funnelFromLossReason !== existing.funnel_status) {
       void supabase.from('contact_history').insert({

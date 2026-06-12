@@ -12,6 +12,8 @@ const UI_FILTER_FIELDS = new Set<string>(LEAD_LIST_FILTER_FIELDS);
 /** Input for building a leads list API query string. */
 export interface LeadListQueryInput {
   sort?: string;
+  /** Sort direction. Defaults to 'desc'. Use 'asc' for "En son temas" (furthest-past-first). */
+  sortDir?: 'asc' | 'desc';
   cursor?: string;
   limit?: number;
   search?: string;
@@ -85,6 +87,10 @@ export function buildLeadsQueryString(input: LeadListQueryInput): string {
 
   const sort = input.sort && SORTABLE_COLUMNS.has(input.sort) ? input.sort : 'created_at';
   params.set('sort', sort);
+
+  if (input.sortDir && input.sortDir !== 'desc') {
+    params.set('sort_dir', input.sortDir);
+  }
 
   if (input.cursor) {
     params.set('cursor', input.cursor);

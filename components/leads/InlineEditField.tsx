@@ -4,7 +4,7 @@
  * InlineEditField — shows label + value as a card; pencil opens inline edit.
  * ReadOnlyField   — same card style but no edit interaction.
  */
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { IconCheck, IconPencil, IconX } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -115,6 +115,7 @@ export function InlineEditField({
   className,
 }: InlineEditFieldProps) {
   const { locale, t } = useTranslation();
+  const editRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,14 +165,40 @@ export function InlineEditField({
   }
 
   function toggleMulti(val: string) {
-    setDraftMulti((prev) => (prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]));
+    const next = draftMulti.includes(val)
+      ? draftMulti.filter((v) => v !== val)
+      : [...draftMulti, val];
+    setDraftMulti(next);
+    setSaving(true);
+    setError(null);
+    void onSave(next)
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : t('leads.saveFailed'));
+        setDraftMulti((value as string[] | null | undefined) ?? []);
+      })
+      .finally(() => setSaving(false));
   }
+
+  const needsExplicitSave = type === 'text' || type === 'textarea';
+
+  useEffect(() => {
+    if (!editing || needsExplicitSave) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (editRef.current && !editRef.current.contains(e.target as Node)) {
+        setEditing(false);
+        setError(null);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [editing, needsExplicitSave]);
 
   const displayed = displayValue(type, value, options, locale);
 
   if (editing) {
     return (
       <div
+        ref={editRef}
         className={cn(
           'rounded-lg border-2 border-brand-blue bg-surface-card p-3 ring-4 ring-brand-blue-light',
           className,
@@ -189,7 +216,6 @@ export function InlineEditField({
               value={draftText}
               onChange={(e) => setDraftText(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') void save();
                 if (e.key === 'Escape') cancel();
               }}
               className="w-full rounded-md border border-border-strong bg-surface-page px-2.5 py-1.5 text-sm text-text-primary outline-none focus:border-brand-blue"
@@ -214,9 +240,20 @@ export function InlineEditField({
               autoFocus
               type="date"
               value={draftText}
-              onChange={(e) => setDraftText(e.target.value)}
+              onChange={(e) => {
+                const nextVal = e.target.value;
+                setDraftText(nextVal);
+                setSaving(true);
+                setError(null);
+                const next = nextVal || (nullable ? null : nextVal);
+                onSave(next)
+                  .then(() => setEditing(false))
+                  .catch((err) => {
+                    setError(err instanceof Error ? err.message : t('leads.saveFailed'));
+                  })
+                  .finally(() => setSaving(false));
+              }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') void save();
                 if (e.key === 'Escape') cancel();
               }}
               className="w-full rounded-md border border-border-strong bg-surface-page px-2.5 py-1.5 text-sm text-text-primary outline-none focus:border-brand-blue"
@@ -224,10 +261,26 @@ export function InlineEditField({
           )}
 
           {type === 'select' && (
+            // D23: auto-save on select change — no explicit Save button needed.
             <select
               autoFocus
               value={draftSelect}
-              onChange={(e) => setDraftSelect(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') cancel();
+              }}
+              onChange={(e) => {
+                setDraftSelect(e.target.value);
+                // Trigger save with the new value directly (don't rely on state update timing)
+                setSaving(true);
+                setError(null);
+                const next = e.target.value || (nullable ? null : e.target.value);
+                onSave(next)
+                  .then(() => setEditing(false))
+                  .catch((err) => {
+                    setError(err instanceof Error ? err.message : t('leads.saveFailed'));
+                  })
+                  .finally(() => setSaving(false));
+              }}
               className="w-full rounded-md border border-border-strong bg-surface-page px-2.5 py-1.5 text-sm text-text-primary outline-none focus:border-brand-blue"
             >
               {nullable && <option value="">—</option>}
@@ -245,6 +298,7 @@ export function InlineEditField({
                 <button
                   key={o.value}
                   type="button"
+                  disabled={saving}
                   onClick={() => toggleMulti(o.value)}
                   className={cn(
                     'rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset transition-colors',
@@ -262,37 +316,48 @@ export function InlineEditField({
 
         {error && <p className="mt-1.5 text-xs text-brand-red">{error}</p>}
 
-        <div className="mt-3 flex gap-1.5">
-          <Button
-            type="button"
-            size="sm"
-            className="h-7 px-3 text-xs"
-            disabled={saving}
-            onClick={() => void save()}
-          >
-            <IconCheck className="size-3.5" />
-            {saving ? t('common.saving') : t('common.save')}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 px-3 text-xs"
-            disabled={saving}
-            onClick={cancel}
-          >
-            <IconX className="size-3.5" />
-            {t('common.cancel')}
-          </Button>
-        </div>
+        {needsExplicitSave && (
+          <div className="mt-3 flex gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 px-3 text-xs"
+              disabled={saving}
+              onClick={() => void save()}
+            >
+              <IconCheck className="size-3.5" />
+              {saving ? t('common.saving') : t('common.save')}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-3 text-xs"
+              disabled={saving}
+              onClick={cancel}
+            >
+              <IconX className="size-3.5" />
+              {t('common.cancel')}
+            </Button>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      onClick={startEdit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          startEdit();
+        }
+      }}
       className={cn(
-        'group relative rounded-lg border border-border-default bg-surface-card p-3 transition-colors hover:border-border-strong',
+        'group relative cursor-pointer rounded-lg border border-border-default bg-surface-card p-3 transition-colors hover:border-border-strong',
         className,
       )}
     >
@@ -302,14 +367,10 @@ export function InlineEditField({
       <div className="mt-1.5 text-sm font-medium text-text-primary">
         {displayed ?? <span className="font-normal text-text-tertiary">—</span>}
       </div>
-      <button
-        type="button"
-        onClick={startEdit}
-        className="absolute right-2.5 top-2.5 rounded-md p-1 text-text-tertiary opacity-0 transition-all hover:bg-surface-page hover:text-text-primary group-hover:opacity-100"
-        aria-label={t('common.edit')}
-      >
-        <IconPencil className="size-3.5" />
-      </button>
+      <IconPencil
+        className="pointer-events-none absolute right-2.5 top-2.5 size-3.5 text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100"
+        aria-hidden
+      />
     </div>
   );
 }

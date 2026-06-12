@@ -1,16 +1,28 @@
 /**
- * Visit Calendar — list of scheduled, attended, and failed property visits.
+ * Visit Calendar — scheduled / attended / failed property visits rendered as a
+ * full Month / Week / Day / List calendar. Visits are timed events; dragging a
+ * scheduled visit to a new slot updates its `scheduled_date` (after a
+ * confirmation) so the change propagates globally.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/router';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LeadDetailPanel } from '@/components/leads/LeadDetailPanel';
+import { ScheduleVisitButton } from '@/components/leads/ScheduleVisitButton';
+import { CalendarBoard } from '@/components/calendar';
+import type { CalendarAccent, CalendarEvent, CalendarFilterGroup } from '@/components/calendar';
+import type { CalendarBadgeVariant } from '@/components/calendar';
 import { useAuth } from '@/hooks/useAuth';
 import { useProperties } from '@/hooks/useProperties';
+import { useSalespeople } from '@/hooks/useSalespeople';
 import { useTranslation } from '@/hooks/useTranslation';
 import { isManagerOrAbove } from '@/lib/auth/roles';
 
 type VisitStatus = 'scheduled' | 'attended' | 'failed';
+
+interface VisitLeadDetails {
+  room_type?: string[] | null;
+}
 
 interface Visit {
   id: string;
@@ -22,199 +34,195 @@ interface Visit {
   leads: {
     uuid: string;
     lead_name: string | null;
+    lead_phone: string | null;
     funnel_status: string;
     assigned_to: string | null;
+    lead_details?: VisitLeadDetails | VisitLeadDetails[] | null;
   } | null;
 }
 
+/** Extracts joined room_type preferences as a display string. */
+function roomPreferenceOf(lead: Visit['leads']): string | null {
+  const raw = lead?.lead_details;
+  if (!raw) return null;
+  const details = Array.isArray(raw) ? raw[0] : raw;
+  const types = details?.room_type;
+  if (!types?.length) return null;
+  return types.join(', ');
+}
+
+const STATUS_ACCENT: Record<VisitStatus, CalendarAccent> = {
+  scheduled: 'blue',
+  attended: 'green',
+  failed: 'red',
+};
+
+const STATUS_BADGE: Record<VisitStatus, CalendarBadgeVariant> = {
+  scheduled: 'visit',
+  attended: 'success',
+  failed: 'danger',
+};
+
+/** Reads the `selected` lead UUID from the router query, if present. */
+function selectedLeadFromQuery(
+  query: Record<string, string | string[] | undefined>,
+): string | null {
+  const selected = query.selected;
+  if (typeof selected === 'string' && selected.length > 0) return selected;
+  return null;
+}
+
 export default function VisitCalendarPage() {
+  const router = useRouter();
   const { t } = useTranslation();
   const { user } = useAuth();
   const { data: properties } = useProperties();
+  const { data: salespeople } = useSalespeople();
 
   const [visits, setVisits] = useState<Visit[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [propertyFilter, setPropertyFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState<VisitStatus | ''>('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
+  const selectedLeadId = router.isReady ? selectedLeadFromQuery(router.query) : null;
+  const panelOpen = selectedLeadId !== null;
   const isManager = user ? isManagerOrAbove(user.role) : false;
 
-  async function fetchVisits() {
+  const fetchVisits = useCallback(async () => {
     setLoading(true);
     setError(null);
-
-    const params = new URLSearchParams();
-    if (propertyFilter) params.set('property_id', propertyFilter);
-    if (statusFilter) params.set('status', statusFilter);
-    if (dateFrom) params.set('date_from', dateFrom);
-    if (dateTo) params.set('date_to', dateTo);
-
-    const qs = params.toString();
-    const res = await fetch(`/api/visits${qs ? `?${qs}` : ''}`);
+    const res = await fetch('/api/visits');
     const json = await res.json();
-
     setLoading(false);
-
-    if (res.ok) {
-      setVisits(json.data ?? []);
-    } else {
-      setError(json.error ?? t('leads.failedToLoad'));
-    }
-  }
+    if (res.ok) setVisits(json.data ?? []);
+    else setError(json.error ?? t('leads.failedToLoad'));
+  }, [t]);
 
   useEffect(() => {
     if (user) void fetchVisits();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, fetchVisits]);
 
-  async function handleMarkStatus(id: string, status: 'attended' | 'failed') {
-    setUpdatingId(id);
-    const res = await fetch(`/api/visits/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+  const openLead = useCallback(
+    (uuid: string) => {
+      router.push({ pathname: '/visits', query: { ...router.query, selected: uuid } }, undefined, {
+        shallow: true,
+      });
+    },
+    [router],
+  );
+
+  const closePanel = useCallback(() => {
+    const nextQuery = { ...router.query };
+    delete nextQuery.selected;
+    router.push({ pathname: '/visits', query: nextQuery }, undefined, { shallow: true });
+  }, [router]);
+
+  /** Property id → hotel name lookup for subtitles and filters. */
+  const propertyName = useMemo(() => {
+    const map = new Map<string, string>();
+    properties?.forEach((p) => map.set(p.id, p.hotel_name));
+    return map;
+  }, [properties]);
+
+  /** Maps visits into timed calendar events. */
+  const events = useMemo<CalendarEvent[]>(() => {
+    return visits.map((visit) => {
+      const property = visit.property_id ? propertyName.get(visit.property_id) : undefined;
+      const subtitleParts = [property, visit.notes].filter(Boolean) as string[];
+      const canDrag =
+        visit.status === 'scheduled' && (isManager || visit.leads?.assigned_to === user?.userId);
+
+      return {
+        id: visit.id,
+        leadUuid: visit.lead_uuid,
+        title: visit.leads?.lead_name ?? visit.lead_uuid,
+        subtitle: subtitleParts.length > 0 ? subtitleParts.join(' · ') : null,
+        start: new Date(visit.scheduled_date),
+        allDay: false,
+        accent: STATUS_ACCENT[visit.status],
+        draggable: canDrag,
+        filterValues: { status: visit.status, property: visit.property_id ?? '' },
+        badges: [
+          { label: t(`visits.status${cap(visit.status)}`), variant: STATUS_BADGE[visit.status] },
+        ],
+        cardDetails: {
+          phone: visit.leads?.lead_phone ?? null,
+          roomPreference: roomPreferenceOf(visit.leads),
+        },
+      };
     });
-    setUpdatingId(null);
-    if (res.ok) void fetchVisits();
-  }
+  }, [visits, propertyName, isManager, user?.userId, t]);
 
-  function statusBadgeClass(status: VisitStatus) {
-    if (status === 'attended')
-      return 'bg-[var(--badge-success-bg)] text-[var(--badge-success-text)]';
-    if (status === 'failed') return 'bg-[var(--badge-danger-bg)] text-[var(--badge-danger-text)]';
-    return 'bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-text)]';
-  }
+  const filterGroups = useMemo<CalendarFilterGroup[]>(() => {
+    const groups: CalendarFilterGroup[] = [
+      {
+        key: 'status',
+        label: t('visitCalendar.filterStatus'),
+        options: [
+          { value: 'scheduled', label: t('visits.statusScheduled') },
+          { value: 'attended', label: t('visits.statusAttended') },
+          { value: 'failed', label: t('visits.statusFailed') },
+        ],
+      },
+    ];
+    if (properties && properties.length > 0) {
+      groups.push({
+        key: 'property',
+        label: t('visitCalendar.filterProperty'),
+        options: properties.map((p) => ({ value: p.id, label: p.hotel_name })),
+      });
+    }
+    return groups;
+  }, [properties, t]);
 
-  function statusLabel(status: VisitStatus) {
-    if (status === 'attended') return t('visits.statusAttended');
-    if (status === 'failed') return t('visits.statusFailed');
-    return t('visits.statusScheduled');
-  }
+  /** Persists a dragged visit's new datetime, then syncs local state. */
+  const handleReschedule = useCallback(
+    async (event: CalendarEvent, newStart: Date): Promise<boolean> => {
+      const res = await fetch(`/api/visits/${event.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduled_date: newStart.toISOString() }),
+      });
+      if (!res.ok) return false;
+
+      setVisits((prev) =>
+        prev.map((v) => (v.id === event.id ? { ...v, scheduled_date: newStart.toISOString() } : v)),
+      );
+      return true;
+    },
+    [],
+  );
 
   if (!user) return null;
 
   return (
-    <AppShell title={t('visitCalendar.title')} count={visits.length || undefined}>
-      {/* Filters */}
-      <div className="mb-4 flex flex-wrap gap-3">
-        <select
-          className="rounded-md border border-border bg-surface px-3 py-2 text-sm"
-          value={propertyFilter}
-          onChange={(e) => setPropertyFilter(e.target.value)}
-        >
-          <option value="">{t('visits.noProperty')}</option>
-          {properties?.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.hotel_name}
-            </option>
-          ))}
-        </select>
+    <AppShell title={t('visitCalendar.title')} count={events.length || undefined}>
+      {error && <p className="mb-3 text-sm text-brand-red">{error}</p>}
 
-        <select
-          className="rounded-md border border-border bg-surface px-3 py-2 text-sm"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as VisitStatus | '')}
-        >
-          <option value="">{t('common.all')}</option>
-          <option value="scheduled">{t('visits.statusScheduled')}</option>
-          <option value="attended">{t('visits.statusAttended')}</option>
-          <option value="failed">{t('visits.statusFailed')}</option>
-        </select>
+      <CalendarBoard
+        events={events}
+        loading={loading}
+        defaultView="week"
+        eventStyle="card"
+        filterGroups={filterGroups}
+        searchPlaceholder={t('calendar.searchPlaceholder')}
+        emptyMessage={t('visitCalendar.noVisits')}
+        actions={<ScheduleVisitButton onScheduled={fetchVisits} />}
+        onEventClick={(event) => event.leadUuid && openLead(event.leadUuid)}
+        onReschedule={handleReschedule}
+      />
 
-        <input
-          type="date"
-          className="rounded-md border border-border bg-surface px-3 py-2 text-sm"
-          value={dateFrom}
-          onChange={(e) => setDateFrom(e.target.value)}
-        />
-        <span className="self-center text-sm text-text-muted">→</span>
-        <input
-          type="date"
-          className="rounded-md border border-border bg-surface px-3 py-2 text-sm"
-          value={dateTo}
-          onChange={(e) => setDateTo(e.target.value)}
-        />
-
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => void fetchVisits()}
-          disabled={loading}
-        >
-          {t('common.apply')}
-        </Button>
-      </div>
-
-      {loading && (
-        <div className="space-y-2">
-          <Skeleton className="h-14 w-full" />
-          <Skeleton className="h-14 w-full" />
-          <Skeleton className="h-14 w-full" />
-        </div>
-      )}
-
-      {error && <p className="text-sm text-brand-red">{error}</p>}
-
-      {!loading && visits.length === 0 && (
-        <p className="text-sm text-text-muted">{t('visitCalendar.noVisits')}</p>
-      )}
-
-      {!loading && visits.length > 0 && (
-        <div className="space-y-2">
-          {visits.map((visit) => (
-            <div
-              key={visit.id}
-              className="flex items-center justify-between rounded-lg border border-border bg-surface p-3"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">
-                  {visit.leads?.lead_name ?? visit.lead_uuid}
-                </p>
-                <p className="text-xs text-text-muted">
-                  {new Date(visit.scheduled_date).toLocaleString()}
-                  {visit.notes && ` · ${visit.notes}`}
-                </p>
-              </div>
-
-              <div className="ml-3 flex items-center gap-2">
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusBadgeClass(visit.status)}`}
-                >
-                  {statusLabel(visit.status)}
-                </span>
-
-                {visit.status === 'scheduled' &&
-                  (isManager || visit.leads?.assigned_to === user?.userId) && (
-                    <>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void handleMarkStatus(visit.id, 'attended')}
-                        disabled={updatingId === visit.id}
-                      >
-                        {t('visits.markAttended')}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void handleMarkStatus(visit.id, 'failed')}
-                        disabled={updatingId === visit.id}
-                      >
-                        {t('visits.markFailed')}
-                      </Button>
-                    </>
-                  )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <LeadDetailPanel
+        leadId={selectedLeadId}
+        open={panelOpen}
+        onClose={closePanel}
+        isManager={isManager}
+        salespeople={salespeople}
+      />
     </AppShell>
   );
+}
+
+/** Capitalizes the first letter (for building `visits.statusXxx` keys). */
+function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

@@ -15,9 +15,14 @@ import { normalizeNetGsmPayload } from '@/lib/webhooks/normalize-netgsm-payload'
 import type { NormalizedNetGsm } from '@/lib/webhooks/normalize-netgsm-payload';
 import { verifyNetGsmToken } from '@/lib/webhooks/verify';
 import { sendTelegramToManagers } from '@/lib/telegram';
-import { COMPANY_PHONE_NUMBER_NORMALIZED, ISTANBUL_TIMEZONE } from '@/lib/constants';
+import {
+  COMPANY_PHONE_NUMBER_NORMALIZED,
+  ISTANBUL_TIMEZONE,
+  isFunnelAdvanceAllowed,
+} from '@/lib/constants';
 import { NetGsmPayloadSchema } from '@/types/webhooks';
 import { createServiceClient } from '@/lib/supabase/service';
+import { updateLeadRecord } from '@/lib/leads/update-lead';
 
 // ---------------------------------------------------------------------------
 // Lead lookup helpers
@@ -27,6 +32,10 @@ interface LeadRow {
   uuid: string;
   lead_name: string | null;
   is_archived: boolean;
+  funnel_status: string;
+  assigned_to: string | null;
+  loss_reason: string | null;
+  funnel_status_before_lost: string | null;
 }
 
 /**
@@ -39,7 +48,9 @@ async function findLeadByPhone(normalizedPhone: string): Promise<LeadRow | null>
   const client = createServiceClient();
   const { data, error } = await client
     .from('leads')
-    .select('uuid, lead_name, is_archived')
+    .select(
+      'uuid, lead_name, is_archived, funnel_status, assigned_to, loss_reason, funnel_status_before_lost',
+    )
     .eq('lead_phone', normalizedPhone)
     .eq('is_deleted', false)
     .limit(1)
@@ -97,7 +108,7 @@ function formatCdrNote(
 // ---------------------------------------------------------------------------
 
 /**
- * CDR verisini contact_history'e yazar.
+ * CDR verisini contact_history'e yazar ve last_contact_at'i günceller.
  * Hata durumunda throw etmez, sadece loglar.
  * @param params - Lead UUID, yön, süreler ve normalize edilmiş numaralar.
  */
@@ -133,9 +144,86 @@ async function writeCdrToContactHistory(params: {
       `[netgsm] contact_history CDR insert failed lead=${params.leadUuid}:`,
       error.message,
     );
-  } else {
+    return;
+  }
+
+  console.info(
+    `[netgsm] contact_history CDR written lead=${params.leadUuid} direction=${params.direction} duration=${duration}s`,
+  );
+
+  // Bump last_contact_at so the last-contact sort and recency pill stay accurate.
+  const { error: touchError } = await client
+    .from('leads')
+    .update({ last_contact_at: callTime.toISOString() })
+    .eq('uuid', params.leadUuid);
+
+  if (touchError) {
+    console.error(
+      `[netgsm] last_contact_at update failed lead=${params.leadUuid}:`,
+      touchError.message,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// CDR auto-advance helpers (D19, D20, §4.4)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the target funnel_status for CDR auto-advance.
+ * D19 mapping:
+ *   inbound + answered  → bizi-aradi-konustuk
+ *   outbound + answered → arandi
+ *   outbound + missed   → arandi-acmadi
+ *   inbound + missed    → aranacak
+ */
+function cdrTargetStage(direction: 'inbound' | 'outbound', durationSeconds: number): string {
+  const answered = (durationSeconds ?? 0) > 0;
+  if (direction === 'inbound') return answered ? 'bizi-aradi-konustuk' : 'aranacak';
+  return answered ? 'arandi' : 'arandi-acmadi';
+}
+
+/**
+ * CDR auto-advance: moves lead to the mapped stage via the updateLeadRecord chokepoint.
+ * Never copies the process-chatwoot.ts bypass pattern — routes through the chokepoint
+ * so lead_stage_history always gets a row.
+ * No attribution (salesperson_id unknown from CDR).
+ */
+async function maybeCdrAutoAdvance(params: {
+  lead: LeadRow;
+  direction: 'inbound' | 'outbound';
+  durationSeconds: number;
+}): Promise<void> {
+  const { lead, direction, durationSeconds } = params;
+  const target = cdrTargetStage(direction, durationSeconds);
+
+  if (!isFunnelAdvanceAllowed(lead.funnel_status, target)) {
     console.info(
-      `[netgsm] contact_history CDR written lead=${params.leadUuid} direction=${params.direction} duration=${duration}s`,
+      `[netgsm] CDR auto-advance no-op lead=${lead.uuid} current=${lead.funnel_status} target=${target}`,
+    );
+    return;
+  }
+
+  try {
+    await updateLeadRecord(
+      lead.uuid,
+      { funnel_status: target },
+      {
+        funnel_status: lead.funnel_status,
+        assigned_to: lead.assigned_to,
+        loss_reason: lead.loss_reason,
+        funnel_status_before_lost: lead.funnel_status_before_lost,
+      },
+      null, // changedBy — no attribution for CDR auto-advance
+      'netgsm', // source
+    );
+    console.info(
+      `[netgsm] CDR auto-advance applied lead=${lead.uuid} ${lead.funnel_status}→${target}`,
+    );
+  } catch (err) {
+    console.error(
+      `[netgsm] CDR auto-advance failed lead=${lead.uuid}:`,
+      err instanceof Error ? err.message : err,
     );
   }
 }
@@ -211,6 +299,13 @@ async function handleCdrForExistingLead(normalized: NormalizedNetGsm): Promise<b
     direction,
     callerNorm,
     calleeNorm,
+  });
+
+  // CDR auto-advance: forward-only stage advancement via chokepoint (D19, D20).
+  await maybeCdrAutoAdvance({
+    lead,
+    direction,
+    durationSeconds: normalized.durationSeconds ?? 0,
   });
 
   return true;

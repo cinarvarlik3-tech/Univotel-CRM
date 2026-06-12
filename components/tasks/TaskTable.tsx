@@ -81,8 +81,23 @@ export function TaskTable({ tasks, onComplete, onNotesUpdated }: TaskTableProps)
         </TableHeader>
         <TableBody>
           {tasks.map((task) => (
-            <TableRow key={task.id}>
-              <TableCell>{formatEnumLabel(locale, 'task', task.task_type)}</TableCell>
+            <TableRow key={task.id} className={task.is_completed ? 'opacity-60' : undefined}>
+              <TableCell>
+                <div className="flex flex-col gap-0.5">
+                  <span>{formatEnumLabel(locale, 'task', task.task_type)}</span>
+                  {/* D27 §7.3: auto-task marker */}
+                  {task.is_auto_created && (
+                    <span className="inline-flex items-center gap-0.5 text-[10px] text-text-tertiary">
+                      <span className="rounded bg-surface-secondary px-1 py-0.5 font-mono">
+                        otomatik
+                      </span>
+                      {task.auto_task_type && (
+                        <span className="opacity-70">{task.auto_task_type}</span>
+                      )}
+                    </span>
+                  )}
+                </div>
+              </TableCell>
               <TableCell className="text-text-secondary">
                 {formatDateTime(task.due_when, locale)}
               </TableCell>

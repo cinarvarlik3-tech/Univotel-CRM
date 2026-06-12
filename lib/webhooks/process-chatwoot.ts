@@ -1265,8 +1265,8 @@ function arraysEqual(a: readonly unknown[], b: readonly unknown[]): boolean {
   return a.every((value, index) => value === b[index]);
 }
 
-/** Yeni konuşma sayılması için minimum sessizlik süresi (saat). */
-const CONVERSATION_GAP_HOURS = 4;
+/** Yeni konuşma sayılması için minimum sessizlik süresi (saat). Retuned from 4h to 2h (§1.5). */
+const CONVERSATION_GAP_HOURS = 2;
 
 /**
  * message_created event'ini lead_messages ve contact_history'e yazar.
@@ -1326,6 +1326,13 @@ async function handleMessageCreated(payload: ChatwootMessageCreated): Promise<vo
     direction,
     senderAgentId,
   });
+
+  // Bump last_contact_at for every message (both inbound and outbound) so the
+  // last-contact sort and recency pill always reflect the true most-recent touch (§1.4).
+  if (!isPrivate) {
+    const client = createServiceClient();
+    void client.from('leads').update({ last_contact_at: messageTimestamp }).eq('uuid', lead.uuid);
+  }
 
   // Incoming customer messages reset the WhatsApp 24h window and reopen restriction.
   if (messageType === 'incoming' && !isPrivate) {

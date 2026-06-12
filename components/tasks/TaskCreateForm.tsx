@@ -1,5 +1,6 @@
 /**
  * Form for creating a new task via POST /api/tasks.
+ * D27: Lead UUID field replaced with LeadPickerInput (name/phone search, never raw UUID).
  */
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
@@ -9,6 +10,7 @@ import { FormField } from '@/components/ui/form-field';
 import { FormSelect } from '@/components/ui/form-select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { LeadPickerInput } from '@/components/leads/LeadPickerInput';
 import { TASK_TYPES } from '@/lib/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -32,6 +34,7 @@ export function TaskCreateForm({ onCreated }: TaskCreateFormProps) {
   const { data: salespeople } = useSalespeople();
 
   const [leadUuid, setLeadUuid] = useState('');
+  const [leadLabel, setLeadLabel] = useState('');
   const [taskType, setTaskType] = useState<string>(TASK_TYPES[0]);
   const [dueWhen, setDueWhen] = useState('');
   const [notes, setNotes] = useState('');
@@ -82,7 +85,10 @@ export function TaskCreateForm({ onCreated }: TaskCreateFormProps) {
 
     setNotes('');
     setDueWhen('');
-    if (!router.query.lead_uuid) setLeadUuid('');
+    if (!router.query.lead_uuid) {
+      setLeadUuid('');
+      setLeadLabel('');
+    }
     onCreated();
   }
 
@@ -93,13 +99,20 @@ export function TaskCreateForm({ onCreated }: TaskCreateFormProps) {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <FormField label={t('tasks.leadUuidRequired')} htmlFor="lead_uuid">
-            <Input
-              id="lead_uuid"
+          {/* D27: lead-picker replaces raw UUID field */}
+          <FormField label={t('tasks.leadRequired')} htmlFor="lead_picker">
+            <LeadPickerInput
+              id="lead_picker"
               value={leadUuid}
-              onChange={(e) => setLeadUuid(e.target.value)}
-              required
+              label={leadLabel}
+              onChange={(uuid, label) => {
+                setLeadUuid(uuid);
+                setLeadLabel(label);
+              }}
             />
+            {!leadUuid && (
+              <p className="mt-1 text-xs text-text-tertiary">İsim veya telefon ile arayın</p>
+            )}
           </FormField>
           <FormSelect
             label={t('tasks.taskType')}

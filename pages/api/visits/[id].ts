@@ -1,18 +1,26 @@
 /**
- * Single visit PATCH route — marks a visit as attended or failed.
- * When the lead is still in 'ziyaret', auto-advances funnel to ziyaret-etti or ziyaret-etmedi.
+ * Single visit PATCH route — two modes:
+ *  • Resolve: marks a visit attended/failed (auto-advances funnel when in 'ziyaret').
+ *  • Reschedule: moves a visit's scheduled_date (calendar drag-and-drop).
+ * Reschedule is restricted to managers or the lead's assigned salesperson.
  */
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
-import { resolveVisit } from '@/lib/leads/visit-ops';
+import { isManagerOrAbove } from '@/lib/auth/roles';
+import { rescheduleVisit, resolveVisit } from '@/lib/leads/visit-ops';
 import { createServerSupabase } from '@/lib/supabase/server';
 
-const UpdateVisitSchema = z.object({
-  status: z.enum(['attended', 'failed']),
-  notes: z.string().optional(),
-});
+const UpdateVisitSchema = z.union([
+  z.object({
+    status: z.enum(['attended', 'failed']),
+    notes: z.string().optional(),
+  }),
+  z.object({
+    scheduled_date: z.string().min(1),
+  }),
+]);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'PATCH') return sendError(res, 'Method not allowed', 405);
@@ -41,6 +49,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const leadRow = visit.leads as { funnel_status: string; assigned_to: string | null } | null;
 
+  // ── Reschedule mode ──────────────────────────────────────────────
+  if ('scheduled_date' in parsed.data) {
+    const canEdit = isManagerOrAbove(session.role) || leadRow?.assigned_to === session.userId;
+    if (!canEdit) return sendError(res, 'Forbidden', 403);
+
+    let updated;
+    try {
+      updated = await rescheduleVisit({ visitId: id, scheduledDate: parsed.data.scheduled_date });
+    } catch {
+      return sendError(res, 'Failed to reschedule visit', 500);
+    }
+    return sendSuccess(res, updated);
+  }
+
+  // ── Resolve mode (attended / failed) ─────────────────────────────
   let updated;
   try {
     updated = await resolveVisit({

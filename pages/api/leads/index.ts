@@ -69,16 +69,18 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse, session: Ses
     ? '*, lead_details!inner(*), salespeople:assigned_to(full_name, email)'
     : '*, lead_details(*), salespeople:assigned_to(full_name, email)';
 
+  const ascending = parsed.sortDir === 'asc';
   let query = supabase
     .from('leads')
     .select(selectClause)
-    .order(parsed.sortField, { ascending: false })
+    .order(parsed.sortField, { ascending, nullsFirst: ascending })
     .limit(limit + 1);
 
   query = applyLeadsListFilters(query, parsed, searchUuids);
 
   if (cursor) {
-    query = query.lt(parsed.sortField, cursor);
+    // For ASC (nulls first), advance forward; for DESC, go backward.
+    query = ascending ? query.gt(parsed.sortField, cursor) : query.lt(parsed.sortField, cursor);
   }
 
   let kpiCounts: { breached: number; onTime: number };

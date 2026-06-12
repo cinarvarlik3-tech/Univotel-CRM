@@ -4,7 +4,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { LeadHubTable } from '@/components/leads/LeadHubTable';
-import { KpiCard } from '@/components/ui/kpi-card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
@@ -68,16 +67,8 @@ export default function LeadHubPage() {
 
   return (
     <AppShell title={t('leadHub.title')} count={data?.totalCount ?? undefined}>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard
-          label={t('leadHub.unclaimedCount')}
-          value={data?.totalCount ?? 0}
-          variant="blue"
-          sub={t('leadHub.subtitle')}
-        />
-      </div>
-
-      <div className="mt-4">
+      {/* D17: header card strip removed — count shown in title badge */}
+      <div className="mt-0">
         {isLoading && (
           <div className="space-y-2">
             <Skeleton className="h-[58px] w-full" />

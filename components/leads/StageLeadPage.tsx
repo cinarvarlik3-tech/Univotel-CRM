@@ -12,9 +12,9 @@ import {
 } from '@/components/leads/LeadListToolbar';
 import { LeadTable } from '@/components/leads/LeadTable';
 import { Button } from '@/components/ui/button';
-import { KpiCard } from '@/components/ui/kpi-card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
+import { useLeadPins } from '@/hooks/useLeadPins';
 import { useLeads } from '@/hooks/useLeads';
 import { useSalespeople } from '@/hooks/useSalespeople';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -55,6 +55,7 @@ export function StageLeadPage({
   const { t } = useTranslation();
   const { user } = useAuth();
   const { data: salespeople } = useSalespeople();
+  const { pinnedIds, togglePin } = useLeadPins();
 
   const [listState, setListState] = useState<LeadListFilterState>(DEFAULT_LEAD_LIST_STATE);
   const [appliedState, setAppliedState] = useState<LeadListFilterState>(DEFAULT_LEAD_LIST_STATE);
@@ -133,16 +134,8 @@ export function StageLeadPage({
 
   return (
     <AppShell title={t(titleKey)} count={totalCount || undefined}>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard
-          label={t(titleKey)}
-          value={totalCount}
-          variant="blue"
-          sub={t('leads.totalMatching')}
-        />
-      </div>
-
-      <div className="mt-4">
+      {/* D17: header card strips removed — count already in title badge */}
+      <div className="mt-0">
         <LeadListToolbar
           state={listState}
           onChange={setListState}
@@ -170,6 +163,8 @@ export function StageLeadPage({
           onRowClick={openLead}
           hideAssignee={hideAssignee ?? !isManager}
           renderRowActions={renderRowActions ? (lead) => renderRowActions(lead, mutate) : undefined}
+          pinnedIds={pinnedIds}
+          onTogglePin={togglePin}
         />
       )}
 

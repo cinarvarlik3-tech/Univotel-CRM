@@ -172,15 +172,26 @@ export async function getPerformancePayload(
     else contacts++;
   }
 
-  // Message count from lead_messages (salesperson-initiated only, campaigns excluded).
-  const { count: sentMessages } = await client
-    .from('lead_messages')
-    .select('id', { count: 'exact', head: true })
-    .eq('direction', 'outgoing')
-    .not('sender_agent_id', 'is', null)
-    .gte('created_at', fromIso)
-    .lte('created_at', toIso);
-  messages = Math.max(messages, sentMessages ?? 0);
+  // Message count from lead_messages — scope per-rep via chatwoot_user_id join (flagged check #2).
+  // sender_agent_id in lead_messages stores Chatwoot user IDs as strings; we join to
+  // salespeople.chatwoot_user_id to ensure only this rep's messages are counted.
+  const { data: spRow } = await client
+    .from('salespeople')
+    .select('chatwoot_user_id')
+    .eq('id', userId)
+    .maybeSingle();
+
+  const chatwootUserId = (spRow as Record<string, unknown> | null)?.chatwoot_user_id;
+  if (chatwootUserId != null) {
+    const { count: sentMessages } = await client
+      .from('lead_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('direction', 'outgoing')
+      .eq('sender_agent_id', String(chatwootUserId))
+      .gte('created_at', fromIso)
+      .lte('created_at', toIso);
+    messages = Math.max(messages, sentMessages ?? 0);
+  }
 
   const activityVolume = { calls, messages, contacts, total: calls + messages + contacts };
 

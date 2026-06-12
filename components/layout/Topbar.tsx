@@ -1,8 +1,11 @@
 /**
- * Page topbar — title, count badge, and action buttons.
+ * Page topbar — title, count badge, global quick-search, and action buttons.
  */
 import type { ReactNode } from 'react';
+import { useCallback, useState } from 'react';
+import { useRouter } from 'next/router';
 import { Badge } from '@/components/ui/badge';
+import { GlobalQuickSearch } from '@/components/leads/GlobalQuickSearch';
 import { useTranslation } from '@/hooks/useTranslation';
 import { formatNumber } from '@/lib/i18n/format-date';
 import { cn } from '@/lib/utils';
@@ -15,12 +18,27 @@ interface TopbarProps {
 }
 
 /**
- * Renders the 52px page header bar with title and actions.
+ * Renders the 52px page header bar with title, global quick-search, and actions.
  * @param props - Title, optional count badge, and action slot.
  * @returns Topbar element.
  */
 export function Topbar({ title, count, actions, className }: TopbarProps) {
   const { locale } = useTranslation();
+  const router = useRouter();
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+
+  // D14: quick-search opens the lead's side panel via URL param (consistent with all stage pages)
+  const handleSelectLead = useCallback(
+    (uuid: string) => {
+      setSelectedLeadId(uuid);
+      // Navigate to a neutral route that can host the panel, or push selected= to current page
+      const current = router.asPath.split('?')[0];
+      router.push({ pathname: current, query: { ...router.query, selected: uuid } }, undefined, {
+        shallow: true,
+      });
+    },
+    [router],
+  );
 
   return (
     <header
@@ -37,6 +55,12 @@ export function Topbar({ title, count, actions, className }: TopbarProps) {
           </Badge>
         )}
       </div>
+
+      {/* D14 / §4.6: Global quick-search — always accessible, every screen */}
+      <div className="flex flex-1 items-center justify-center px-4">
+        <GlobalQuickSearch onSelectLead={handleSelectLead} />
+      </div>
+
       {actions && <div className="flex items-center gap-2">{actions}</div>}
     </header>
   );
