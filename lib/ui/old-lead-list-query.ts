@@ -17,6 +17,7 @@ export function buildQueryFromOldLeadListState(
 ): string {
   return buildOldLeadsQueryString({
     sort: state.sort,
+    sortDir: state.sortDir,
     search: state.search,
     fieldFilters: state.fieldFilters,
     createdFrom: state.createdFrom,

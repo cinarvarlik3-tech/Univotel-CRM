@@ -36,6 +36,18 @@ export function resolvePerformanceRange(rangeParam: string | undefined): Perform
     return { from: monthStart, to: todayEnd };
   }
 
+  if (rangeParam === 'today') {
+    const { start, end } = istanbulTodayBounds(now);
+    return { from: start, to: end };
+  }
+
+  if (rangeParam === 'all_time') {
+    return {
+      from: new Date(0),
+      to: new Date('2099-12-31T23:59:59+03:00'),
+    };
+  }
+
   // Default: this week.
   return { from: istanbulWeekStart(now), to: istanbulTodayBounds(now).end };
 }
@@ -70,19 +82,33 @@ export interface PerformancePayload {
 export async function getPerformancePayload(
   userId: string,
   range: PerformanceDateRange,
+  opts?: { allTimeLeads?: boolean },
 ): Promise<PerformancePayload> {
   const client = createServiceClient();
   const fromIso = range.from.toISOString();
   const toIso = range.to.toISOString();
 
   // ── Conversion funnel ─────────────────────────────────────────────────────
-  // Claimed: leads assigned to this user with claimed_at in range.
-  const { count: claimedCount } = await client
-    .from('leads')
-    .select('uuid', { count: 'exact', head: true })
-    .eq('assigned_to', userId)
-    .gte('claimed_at', fromIso)
-    .lte('claimed_at', toIso);
+  // leadBase feeds both kpi.leads and conversionFunnel[0] so they always agree.
+  // allTimeLeads: total portfolio (assigned_to = userId, no date filter, includes claimed_at = NULL).
+  // windowed:     leads claimed within the selected range.
+  let leadBase: number;
+  if (opts?.allTimeLeads) {
+    const { count: portfolioCount } = await client
+      .from('leads')
+      .select('uuid', { count: 'exact', head: true })
+      .eq('assigned_to', userId)
+      .eq('is_deleted', false);
+    leadBase = portfolioCount ?? 0;
+  } else {
+    const { count: claimedCount } = await client
+      .from('leads')
+      .select('uuid', { count: 'exact', head: true })
+      .eq('assigned_to', userId)
+      .gte('claimed_at', fromIso)
+      .lte('claimed_at', toIso);
+    leadBase = claimedCount ?? 0;
+  }
 
   // Contacted: leads assigned to user with at least one contact_history entry in range.
   const { data: myLeadsData } = await client
@@ -104,21 +130,18 @@ export async function getPerformancePayload(
     contactedCount = new Set((contactedLeads ?? []).map((c) => c.lead_uuid)).size;
   }
 
-  // Visited: leads where a visit was resolved (attended or failed) in range.
-  let visitedCount = 0;
-  if (myLeadUuids.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: visitedLeads } = await (client as any)
-      .from('visits')
-      .select('lead_uuid')
-      .in('lead_uuid', myLeadUuids)
-      .in('status', ['attended', 'failed'])
-      .gte('scheduled_date', fromIso)
-      .lte('scheduled_date', toIso);
-    visitedCount = new Set(
-      ((visitedLeads ?? []) as Array<{ lead_uuid: string }>).map((v) => v.lead_uuid),
-    ).size;
-  }
+  // Visited: distinct leads where this rep booked a resolved visit in range.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: visitedLeads } = await (client as any)
+    .from('visits')
+    .select('lead_uuid')
+    .eq('created_by', userId)
+    .in('status', ['attended', 'failed'])
+    .gte('scheduled_date', fromIso)
+    .lte('scheduled_date', toIso);
+  const visitedCount = new Set(
+    ((visitedLeads ?? []) as Array<{ lead_uuid: string }>).map((v) => v.lead_uuid),
+  ).size;
 
   // Downpayment + deal signed: transitions in lead_stage_history where changed_by = userId.
   const { data: stageTransitions } = await client
@@ -139,7 +162,7 @@ export async function getPerformancePayload(
   );
 
   const conversionFunnel: ConversionFunnelStep[] = [
-    { stage: 'claimed', count: claimedCount ?? 0 },
+    { stage: 'claimed', count: leadBase },
     { stage: 'contacted', count: contactedCount },
     { stage: 'visited', count: visitedCount },
     { stage: 'downpayment', count: downpaymentLeads.size },
@@ -149,19 +172,17 @@ export async function getPerformancePayload(
   // ── Visit show-rate ───────────────────────────────────────────────────────
   let attended = 0;
   let failed = 0;
-  if (myLeadUuids.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: resolvedVisits } = await (client as any)
-      .from('visits')
-      .select('status')
-      .in('lead_uuid', myLeadUuids)
-      .in('status', ['attended', 'failed'])
-      .gte('scheduled_date', fromIso)
-      .lte('scheduled_date', toIso);
-    for (const v of (resolvedVisits ?? []) as Array<{ status: string }>) {
-      if (v.status === 'attended') attended++;
-      else failed++;
-    }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: resolvedVisits } = await (client as any)
+    .from('visits')
+    .select('status')
+    .eq('created_by', userId)
+    .in('status', ['attended', 'failed'])
+    .gte('scheduled_date', fromIso)
+    .lte('scheduled_date', toIso);
+  for (const v of (resolvedVisits ?? []) as Array<{ status: string }>) {
+    if (v.status === 'attended') attended++;
+    else failed++;
   }
   const showRateTotal = attended + failed;
   const visitShowRate = {
@@ -183,7 +204,7 @@ export async function getPerformancePayload(
   let contacts = 0;
   for (const row of activityRows ?? []) {
     if (row.interaction_type === 'call') calls++;
-    else if (row.interaction_type === 'message') messages++;
+    else if (row.interaction_type === 'message_sent') messages++;
     else contacts++;
   }
 
@@ -231,8 +252,8 @@ export async function getPerformancePayload(
   };
 
   // ── KPI tiles ─────────────────────────────────────────────────────────────
-  // leads = claimed in range (same as conversion funnel denominator)
-  const kpiLeads = claimedCount ?? 0;
+  // leads = leadBase (same value used in conversionFunnel[0] — always in sync)
+  const kpiLeads = leadBase;
   const kpiMessages = messages;
   const kpiCalls = calls;
   const kpiVisits = visitedCount;

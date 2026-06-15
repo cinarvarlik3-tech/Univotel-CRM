@@ -42,13 +42,7 @@ function getSalespersonName(
 /**
  * Incoming or outgoing chat message bubble.
  */
-function MessageEntry({
-  entry,
-  salespeople,
-}: {
-  entry: TimelineEntry;
-  salespeople?: SalespersonOption[];
-}) {
+function MessageEntry({ entry }: { entry: TimelineEntry }) {
   const isOutgoing = entry.data.message_type === 'outgoing';
   const content = entry.data.content as string | null;
   const senderName = entry.data.sender_name as string | null;
@@ -256,7 +250,7 @@ export function FunnelTimeline({ timeline, salespeople }: FunnelTimelineProps) {
       {timeline.map((entry) => {
         switch (entry.type) {
           case 'message':
-            return <MessageEntry key={entry.id} entry={entry} salespeople={salespeople} />;
+            return <MessageEntry key={entry.id} entry={entry} />;
           case 'call':
             return <CallEntry key={entry.id} entry={entry} />;
           case 'message_start':

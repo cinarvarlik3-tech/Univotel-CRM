@@ -33,16 +33,29 @@ interface LeadListToolbarProps {
   isManager?: boolean;
   /** Hide these field ids (e.g. deal_awaiting on deal-awaiting page). */
   hiddenFields?: ReadonlySet<string>;
+  /** Filter field registry (defaults to active-lead fields). */
+  fieldRegistry?: FilterFieldDef[];
+  /** Reset target for "Clear all" (defaults to active-lead defaults). */
+  defaultState?: LeadListFilterState;
+  /** Omit SLA date-range shortcuts (old leads). */
+  hideSlaDateRanges?: boolean;
+  /** Prefix for input ids (e.g. "old" on old-leads page). */
+  idPrefix?: string;
 }
 
 function SistemDateRanges({
   state,
   onChange,
+  hideSlaDateRanges,
+  idPrefix,
 }: {
   state: LeadListFilterState;
   onChange: (state: LeadListFilterState) => void;
+  hideSlaDateRanges?: boolean;
+  idPrefix?: string;
 }) {
   const { t } = useTranslation();
+  const prefix = idPrefix ? `${idPrefix}_` : '';
 
   const ranges: {
     fromKey: keyof LeadListFilterState;
@@ -56,12 +69,16 @@ function SistemDateRanges({
       fromLabel: t('filters.createdFrom'),
       toLabel: t('filters.createdTo'),
     },
-    {
-      fromKey: 'slaFrom',
-      toKey: 'slaTo',
-      fromLabel: t('filters.slaFrom'),
-      toLabel: t('filters.slaTo'),
-    },
+    ...(!hideSlaDateRanges
+      ? [
+          {
+            fromKey: 'slaFrom' as const,
+            toKey: 'slaTo' as const,
+            fromLabel: t('filters.slaFrom'),
+            toLabel: t('filters.slaTo'),
+          },
+        ]
+      : []),
     {
       fromKey: 'lastContactFrom',
       toKey: 'lastContactTo',
@@ -80,17 +97,17 @@ function SistemDateRanges({
     <>
       {ranges.map(({ fromKey, toKey, fromLabel, toLabel }) => (
         <div key={fromKey} className="col-span-2 grid grid-cols-2 gap-3">
-          <FormField label={fromLabel} htmlFor={`${fromKey}_from`}>
+          <FormField label={fromLabel} htmlFor={`${prefix}${fromKey}_from`}>
             <Input
-              id={`${fromKey}_from`}
+              id={`${prefix}${fromKey}_from`}
               type="date"
               value={state[fromKey] as string}
               onChange={(e) => onChange({ ...state, [fromKey]: e.target.value })}
             />
           </FormField>
-          <FormField label={toLabel} htmlFor={`${toKey}_to`}>
+          <FormField label={toLabel} htmlFor={`${prefix}${toKey}_to`}>
             <Input
-              id={`${toKey}_to`}
+              id={`${prefix}${toKey}_to`}
               type="date"
               value={state[toKey] as string}
               onChange={(e) => onChange({ ...state, [toKey]: e.target.value })}
@@ -109,6 +126,7 @@ function FilterSectionFields({
   salespeople,
   isManager,
   propertyNames,
+  idPrefix,
 }: {
   fields: FilterFieldDef[];
   state: LeadListFilterState;
@@ -116,6 +134,7 @@ function FilterSectionFields({
   salespeople?: SalespersonOption[];
   isManager?: boolean;
   propertyNames?: string[];
+  idPrefix?: string;
 }) {
   function setFieldFilter(fieldId: string, filter: FieldFilterState | undefined) {
     const fieldFilters = { ...state.fieldFilters };
@@ -139,6 +158,7 @@ function FilterSectionFields({
             onChange={(f) => setFieldFilter(def.id, f)}
             salespeople={salespeople}
             propertyNames={propertyNames}
+            idPrefix={idPrefix ? `${idPrefix}_filter` : undefined}
           />
         );
       })}
@@ -162,23 +182,25 @@ export function LeadListToolbar({
   salespeople,
   isManager,
   hiddenFields,
+  fieldRegistry = LEAD_FILTER_FIELD_REGISTRY,
+  defaultState = DEFAULT_LEAD_LIST_STATE,
+  hideSlaDateRanges = false,
+  idPrefix,
 }: LeadListToolbarProps) {
   const [showFilters, setShowFilters] = useState(false);
   const { data: properties } = useProperties();
-  const { locale, t } = useTranslation();
+  const { t } = useTranslation();
+  const searchId = idPrefix ? `${idPrefix}_search` : 'lead_search';
 
   const propertyNames = useMemo(() => (properties ?? []).map((p) => p.hotel_name), [properties]);
 
   const visibleFields = useMemo(
-    () =>
-      hiddenFields
-        ? LEAD_FILTER_FIELD_REGISTRY.filter((f) => !hiddenFields.has(f.id))
-        : LEAD_FILTER_FIELD_REGISTRY,
-    [hiddenFields],
+    () => (hiddenFields ? fieldRegistry.filter((f) => !hiddenFields.has(f.id)) : fieldRegistry),
+    [hiddenFields, fieldRegistry],
   );
 
   function clearFilters() {
-    onChange(DEFAULT_LEAD_LIST_STATE);
+    onChange(defaultState);
   }
 
   const sections = ['genel', 'profil', 'detay', 'sistem'] as const;
@@ -192,13 +214,9 @@ export function LeadListToolbar({
   return (
     <div className="mb-4 space-y-3">
       <div className="flex flex-wrap items-end gap-3">
-        <FormField
-          label={t('filters.search')}
-          htmlFor="lead_search"
-          className="min-w-[200px] flex-1"
-        >
+        <FormField label={t('filters.search')} htmlFor={searchId} className="min-w-[200px] flex-1">
           <Input
-            id="lead_search"
+            id={searchId}
             value={state.search}
             onChange={(e) => onChange({ ...state, search: e.target.value })}
             onKeyDown={(e) => e.key === 'Enter' && onApply()}
@@ -211,7 +229,6 @@ export function LeadListToolbar({
           {t('common.filters')}
         </Button>
 
-        {/* D1: Two one-click sort presets — "En son temas" (last-contact ASC) and "Oluşturulma" (created-at DESC) */}
         <div className="flex items-end gap-1">
           <FormField label={t('filters.sort')} htmlFor="sort_preset" className="flex-shrink-0">
             <div id="sort_preset" className="flex gap-1">
@@ -266,7 +283,7 @@ export function LeadListToolbar({
         <div className="rounded-[10px] border border-border-default bg-surface-card p-4">
           <div className="space-y-1">
             {sections.map((section) => {
-              const fields = filterFieldsBySection(section).filter((f) =>
+              const fields = filterFieldsBySection(section, fieldRegistry).filter((f) =>
                 visibleFields.some((v) => v.id === f.id),
               );
               if (fields.length === 0 && section !== 'sistem') return null;
@@ -284,8 +301,16 @@ export function LeadListToolbar({
                     salespeople={salespeople}
                     isManager={isManager}
                     propertyNames={propertyNames}
+                    idPrefix={idPrefix}
                   />
-                  {section === 'sistem' && <SistemDateRanges state={state} onChange={onChange} />}
+                  {section === 'sistem' && (
+                    <SistemDateRanges
+                      state={state}
+                      onChange={onChange}
+                      hideSlaDateRanges={hideSlaDateRanges}
+                      idPrefix={idPrefix}
+                    />
+                  )}
                 </ListFilterSection>
               );
             })}

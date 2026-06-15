@@ -27,6 +27,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTranslation } from '@/hooks/useTranslation';
 import { isManagerOrAbove } from '@/lib/auth/roles';
 import { useLeads } from '@/hooks/useLeads';
+import { useLeadRowActions } from '@/hooks/useLeadRowActions';
 import { useSalespeople } from '@/hooks/useSalespeople';
 import { buildQueryFromLeadListState } from '@/lib/ui/lead-list-query';
 import type { LeadRow } from '@/types/domain';
@@ -56,6 +57,10 @@ export default function MyLeadsPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { data: salespeople } = useSalespeople();
+  const { renderRowActions, dialogs: rowActionDialogs } = useLeadRowActions({
+    preset: 'mine',
+    salespeople,
+  });
 
   const [listState, setListState] = useState<LeadListFilterState>(DEFAULT_LEAD_LIST_STATE);
   const [appliedState, setAppliedState] = useState<LeadListFilterState>(DEFAULT_LEAD_LIST_STATE);
@@ -111,10 +116,8 @@ export default function MyLeadsPage() {
 
   const kpis = useMemo(() => {
     const active = data?.totalCount ?? 0;
-    const breached = data?.kpiCounts?.breached ?? 0;
-    const onTime = data?.kpiCounts?.onTime ?? 0;
-    return { active, breached, onTime };
-  }, [data?.totalCount, data?.kpiCounts]);
+    return { active };
+  }, [data?.totalCount]);
 
   function handleApply() {
     setAppliedState(listState);
@@ -225,26 +228,14 @@ export default function MyLeadsPage() {
         </>
       }
     >
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <KpiCard
           label={t('leads.myLeadsKpi')}
           value={kpis.active}
           variant="blue"
           sub={t('leads.totalMatching')}
         />
-        <KpiCard
-          label={t('leads.slaBreached')}
-          value={kpis.breached}
-          variant="red"
-          sub={t('leads.needsAttention')}
-        />
         <TasksDueTodayKpiCard mine assigneeId={user.userId} />
-        <KpiCard
-          label={t('leads.onTime')}
-          value={kpis.onTime}
-          variant="neutral"
-          valueClassName="text-[var(--badge-success-text)]"
-        />
       </div>
 
       <div className="mt-4">
@@ -275,6 +266,7 @@ export default function MyLeadsPage() {
               onRowClick={openLead}
               hideAssignee
               highlightInactive={searchActive}
+              renderRowActions={(lead) => renderRowActions(lead, mutate)}
             />
           )}
 
@@ -304,6 +296,7 @@ export default function MyLeadsPage() {
         isManager={isManagerOrAbove(user.role)}
         salespeople={salespeople}
       />
+      {rowActionDialogs}
     </AppShell>
   );
 }

@@ -55,6 +55,29 @@ export function mapChatwootSenderType(
   return null;
 }
 
+/** Maps CRM message_type to lead_messages.direction (activity → null). */
+export function deriveLeadMessageDirection(
+  messageType: OldLeadMessageType,
+): 'incoming' | 'outgoing' | null {
+  if (messageType === 'incoming') return 'incoming';
+  if (messageType === 'outgoing') return 'outgoing';
+  return null;
+}
+
+/**
+ * Chatwoot agent id for personal message metrics — human outgoing sends only.
+ * Campaign/template sends have no user sender and must stay null.
+ */
+export function deriveSenderAgentId(
+  messageType: OldLeadMessageType,
+  senderType: OldLeadSenderType | null,
+  senderId: number | null,
+): string | null {
+  if (messageType !== 'outgoing') return null;
+  if (senderType === 'user' && senderId != null) return String(senderId);
+  return null;
+}
+
 /**
  * Converts a parsed Chatwoot message into an old_lead_messages row (without lead_uuid).
  * @param message - Parsed message from dump.

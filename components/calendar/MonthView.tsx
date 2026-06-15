@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { EventChip } from './EventChip';
 import { buildMonthGrid, buildWeekDays, dateFnsLocale, eventsForDay } from './calendar-utils';
+import type { ReactNode } from 'react';
 import type { CalendarEvent, CalendarEventStyle } from './types';
 
 interface MonthViewProps {
@@ -18,6 +19,7 @@ interface MonthViewProps {
   onDragStart: (event: CalendarEvent) => void;
   onDragEnd: () => void;
   onDropOnDay: (day: Date) => void;
+  renderEventActions?: (event: CalendarEvent) => ReactNode;
 }
 
 const MAX_VISIBLE_CHIP = 3;
@@ -37,6 +39,7 @@ export function MonthView({
   onDragStart,
   onDragEnd,
   onDropOnDay,
+  renderEventActions,
 }: MonthViewProps) {
   const fnsLocale = dateFnsLocale(locale);
   const days = buildMonthGrid(currentDate);
@@ -73,7 +76,7 @@ export function MonthView({
               onDrop={() => onDropOnDay(day)}
               className={cn(
                 'flex flex-col gap-1 border-b border-r border-border-default p-1.5 transition-colors',
-                isCard ? 'min-h-[132px]' : 'min-h-[104px]',
+                isCard ? 'min-h-[148px]' : 'min-h-[104px]',
                 index % 7 === 6 && 'border-r-0',
                 index >= 35 && 'border-b-0',
                 !inMonth && 'bg-muted/30',
@@ -93,17 +96,20 @@ export function MonthView({
                 {format(day, 'd', { locale: fnsLocale })}
               </div>
 
-              <div className={cn('flex flex-col gap-0.5', isCard && 'min-h-0 flex-1')}>
+              <div className={cn('flex min-h-0 flex-1 flex-col gap-0.5', isCard && 'gap-1')}>
                 {dayEvents.slice(0, maxVisible).map((event) => (
-                  <EventChip
-                    key={event.id}
-                    event={event}
-                    locale={locale}
-                    style={eventStyle}
-                    onClick={onEventClick}
-                    onDragStart={onDragStart}
-                    onDragEnd={onDragEnd}
-                  />
+                  <div key={event.id} className={cn(isCard && 'flex min-h-0 flex-1 flex-col')}>
+                    <EventChip
+                      event={event}
+                      locale={locale}
+                      style={eventStyle}
+                      fill={isCard}
+                      onClick={onEventClick}
+                      onDragStart={onDragStart}
+                      onDragEnd={onDragEnd}
+                      renderEventActions={renderEventActions}
+                    />
+                  </div>
                 ))}
                 {dayEvents.length > maxVisible && (
                   <span className="px-1 text-[10px] font-medium text-text-tertiary">

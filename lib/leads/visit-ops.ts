@@ -5,6 +5,7 @@
  */
 import { createServiceClient } from '@/lib/supabase/service';
 import { cancelAutoTasksForLead, createAutoTasksForStage } from '@/lib/tasks/auto-tasks';
+import { updateLeadRecord } from '@/lib/leads/update-lead';
 import { writeStageHistory } from '@/lib/leads/write-stage-history';
 
 const PRE_VISIT_STAGES = new Set([
@@ -159,6 +160,67 @@ export async function rescheduleVisit(opts: {
   if (!updated) throw new Error('Visit not found after reschedule');
 
   return updated as Record<string, unknown>;
+}
+
+export type VisitOutcome = 'decision_pending' | 'downpayment' | 'dropped';
+
+export { hasVisitOccurred } from '@/lib/leads/visit-time';
+
+/**
+ * Records a visit outcome — updates visit status and advances lead funnel via chokepoint.
+ */
+export async function recordVisitOutcome(opts: {
+  visitId: string;
+  visitLeadUuid: string;
+  outcome: VisitOutcome;
+  lossReason?: string;
+  resolvedBy: string;
+  leadFunnelStatus: string;
+  leadAssignedTo: string | null;
+  existing: {
+    funnel_status: string;
+    assigned_to: string | null;
+    loss_reason?: string | null;
+    funnel_status_before_lost?: string | null;
+  };
+}): Promise<Record<string, unknown>> {
+  const client = createServiceClient();
+  const visitStatus = opts.outcome === 'dropped' ? 'failed' : 'attended';
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: updatedVisit, error: visitError } = await (client as any)
+    .from('visits')
+    .update({ status: visitStatus })
+    .eq('id', opts.visitId)
+    .select('*')
+    .maybeSingle();
+
+  if (visitError) throw new Error(`Failed to update visit: ${visitError.message}`);
+  if (!updatedVisit) throw new Error('Visit not found after update');
+
+  let funnelStatus: string;
+  const leadUpdates: Record<string, unknown> = {};
+
+  switch (opts.outcome) {
+    case 'decision_pending':
+      funnelStatus = 'ziyaret-etti';
+      break;
+    case 'downpayment':
+      funnelStatus = 'kapora-alindi';
+      break;
+    case 'dropped':
+      funnelStatus = 'lost';
+      if (opts.lossReason) leadUpdates.loss_reason = opts.lossReason;
+      break;
+    default:
+      funnelStatus = opts.leadFunnelStatus;
+  }
+
+  leadUpdates.funnel_status = funnelStatus;
+
+  await updateLeadRecord(opts.visitLeadUuid, leadUpdates, opts.existing, opts.resolvedBy, 'manual');
+
+  return updatedVisit as Record<string, unknown>;
 }
 
 /**

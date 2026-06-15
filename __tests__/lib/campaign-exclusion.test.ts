@@ -28,4 +28,9 @@ describe('campaign exclusion in getPerformancePayload', () => {
   it('uses Math.max to take the higher of contact_history messages and lead_messages count', () => {
     expect(performanceSrc).toContain('Math.max(messages, sentMessages');
   });
+
+  it('counts message_sent from contact_history (not the invalid message type)', () => {
+    expect(performanceSrc).toContain("interaction_type === 'message_sent'");
+    expect(performanceSrc).not.toContain("interaction_type === 'message'");
+  });
 });

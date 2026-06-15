@@ -9,6 +9,7 @@ import {
   LEAD_SOURCES,
   LOSS_REASONS,
   MESSAGE_FROM_VALUES,
+  OLD_LEAD_LIST_FILTER_FIELDS,
   PERSONA_TYPES,
   ROOM_CATEGORY_VALUES,
   SPECIAL_STATES,
@@ -363,9 +364,8 @@ export function getFilterFieldDef(id: string): FilterFieldDef | undefined {
   return LEAD_FILTER_FIELD_REGISTRY.find((f) => f.id === id);
 }
 
-/** Old leads: same sections minus fields not on old_leads schema. */
-const oldProfilFields: FilterFieldDef[] = [
-  ...profilFields.filter((f) => f.id !== 'budget_tier' && f.id !== 'school_shortname'),
+/** Old leads: fields that exist on old_leads / old_lead_details and are filterable via the API. */
+const OLD_LEAD_ONLY_FIELDS: FilterFieldDef[] = [
   {
     id: 'budget_min',
     section: 'profil',
@@ -380,11 +380,49 @@ const oldProfilFields: FilterFieldDef[] = [
     table: 'lead_details',
     kind: 'number',
   },
+  {
+    id: 'kvkk_opt_in',
+    section: 'detay',
+    labelKey: 'filters.kvkkOptIn',
+    table: 'lead_details',
+    kind: 'boolean',
+  },
+  {
+    id: 'marketing_opt_in',
+    section: 'detay',
+    labelKey: 'filters.marketingOptIn',
+    table: 'lead_details',
+    kind: 'boolean',
+  },
 ];
 
-export const OLD_LEAD_FILTER_FIELD_REGISTRY: FilterFieldDef[] = [
-  ...genelFields.filter((f) => f.id !== 'deal_awaiting' && f.id !== 'notes'),
-  ...oldProfilFields,
-  ...detayFields,
-  ...sistemFields.filter((f) => f.id !== 'sla_status'),
-];
+/** Active-lead fields not applicable to old_leads schema or API. */
+const OLD_LEAD_EXCLUDED_FIELD_IDS = new Set([
+  'deal_awaiting',
+  'notes',
+  'budget_tier',
+  'school_shortname',
+  'sla_status',
+  'campus',
+  'room_category',
+  'district_preference',
+  'has_moved_in',
+  'is_24h_restricted',
+  'move_in_date_set',
+]);
+
+function buildOldLeadFilterRegistry(): FilterFieldDef[] {
+  const allowed = new Set<string>(OLD_LEAD_LIST_FILTER_FIELDS as readonly string[]);
+  const fromLead = LEAD_FILTER_FIELD_REGISTRY.filter(
+    (f) => allowed.has(f.id) && !OLD_LEAD_EXCLUDED_FIELD_IDS.has(f.id),
+  );
+  const fromOldOnly = OLD_LEAD_ONLY_FIELDS.filter((f) => allowed.has(f.id));
+  const seen = new Set<string>();
+  return [...fromLead, ...fromOldOnly].filter((f) => {
+    if (seen.has(f.id)) return false;
+    seen.add(f.id);
+    return true;
+  });
+}
+
+export const OLD_LEAD_FILTER_FIELD_REGISTRY: FilterFieldDef[] = buildOldLeadFilterRegistry();

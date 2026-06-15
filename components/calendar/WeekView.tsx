@@ -13,6 +13,7 @@ import {
   buildWeekDays,
   dateFnsLocale,
 } from './calendar-utils';
+import type { ReactNode } from 'react';
 import type { CalendarEvent, CalendarEventStyle } from './types';
 
 interface WeekViewProps {
@@ -25,6 +26,7 @@ interface WeekViewProps {
   onDragEnd: () => void;
   onDropOnDay: (day: Date) => void;
   onDropOnHour: (day: Date, hour: number) => void;
+  renderEventActions?: (event: CalendarEvent) => ReactNode;
 }
 
 /** Clamps an event's hour into the visible [start, end) grid range. */
@@ -50,6 +52,7 @@ export function WeekView({
   onDragEnd,
   onDropOnDay,
   onDropOnHour,
+  renderEventActions,
 }: WeekViewProps) {
   const fnsLocale = dateFnsLocale(locale);
   const days = buildWeekDays(currentDate);
@@ -112,6 +115,7 @@ export function WeekView({
                 onEventClick={onEventClick}
                 onDragStart={onDragStart}
                 onDragEnd={onDragEnd}
+                renderEventActions={renderEventActions}
               />
             </div>
           );
@@ -149,6 +153,7 @@ export function WeekView({
                     onEventClick={onEventClick}
                     onDragStart={onDragStart}
                     onDragEnd={onDragEnd}
+                    renderEventActions={renderEventActions}
                   />
                 </div>
               );

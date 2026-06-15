@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { CellEventList } from './CellEventList';
 import { DAY_END_HOUR, DAY_START_HOUR, buildHours, dateFnsLocale } from './calendar-utils';
+import type { ReactNode } from 'react';
 import type { CalendarEvent, CalendarEventStyle } from './types';
 
 interface DayViewProps {
@@ -19,6 +20,7 @@ interface DayViewProps {
   onDragEnd: () => void;
   onDropOnDay: (day: Date) => void;
   onDropOnHour: (day: Date, hour: number) => void;
+  renderEventActions?: (event: CalendarEvent) => ReactNode;
 }
 
 /** Clamps an event's hour into the visible [start, end) grid range. */
@@ -44,6 +46,7 @@ export function DayView({
   onDragEnd,
   onDropOnDay,
   onDropOnHour,
+  renderEventActions,
 }: DayViewProps) {
   const fnsLocale = dateFnsLocale(locale);
   const hours = buildHours();
@@ -74,6 +77,7 @@ export function DayView({
               onEventClick={onEventClick}
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
+              renderEventActions={renderEventActions}
             />
           )}
         </div>
@@ -108,6 +112,7 @@ export function DayView({
                   onEventClick={onEventClick}
                   onDragStart={onDragStart}
                   onDragEnd={onDragEnd}
+                  renderEventActions={renderEventActions}
                 />
               </div>
             </div>

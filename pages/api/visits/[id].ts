@@ -9,7 +9,13 @@ import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
 import { isManagerOrAbove } from '@/lib/auth/roles';
-import { rescheduleVisit, resolveVisit } from '@/lib/leads/visit-ops';
+import { LOSS_REASONS } from '@/lib/constants';
+import {
+  hasVisitOccurred,
+  recordVisitOutcome,
+  rescheduleVisit,
+  resolveVisit,
+} from '@/lib/leads/visit-ops';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 const UpdateVisitSchema = z.union([
@@ -19,6 +25,11 @@ const UpdateVisitSchema = z.union([
   }),
   z.object({
     scheduled_date: z.string().min(1),
+  }),
+  z.object({
+    outcome: z.enum(['decision_pending', 'downpayment', 'dropped']),
+    loss_reason: z.enum(LOSS_REASONS).optional(),
+    lead_uuid: z.string().uuid(),
   }),
 ]);
 
@@ -40,7 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: fetchError } = await (supabase as any)
     .from('visits')
-    .select('id, lead_uuid, status, leads(funnel_status, assigned_to)')
+    .select('id, lead_uuid, status, scheduled_date, leads(funnel_status, assigned_to)')
     .eq('id', id)
     .maybeSingle();
 
@@ -48,6 +59,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!visit) return sendError(res, 'Visit not found', 404);
 
   const leadRow = visit.leads as { funnel_status: string; assigned_to: string | null } | null;
+
+  // ── Visit outcome (Ziyaret Sonucu) ───────────────────────────────
+  if ('outcome' in parsed.data) {
+    if (parsed.data.outcome === 'dropped' && !parsed.data.loss_reason) {
+      return sendError(res, 'Loss reason required', 400);
+    }
+
+    const { data: leadFull, error: leadErr } = await supabase
+      .from('leads')
+      .select('funnel_status, assigned_to, loss_reason, funnel_status_before_lost')
+      .eq('uuid', parsed.data.lead_uuid)
+      .maybeSingle();
+
+    if (leadErr || !leadFull) return sendError(res, 'Lead not found', 404);
+
+    if (!hasVisitOccurred(visit.scheduled_date as string)) {
+      return sendError(res, 'Visit has not occurred yet', 400);
+    }
+
+    let updated;
+    try {
+      updated = await recordVisitOutcome({
+        visitId: id,
+        visitLeadUuid: parsed.data.lead_uuid,
+        outcome: parsed.data.outcome,
+        lossReason: parsed.data.loss_reason,
+        resolvedBy: session.userId,
+        leadFunnelStatus: leadFull.funnel_status,
+        leadAssignedTo: leadFull.assigned_to,
+        existing: leadFull,
+      });
+    } catch {
+      return sendError(res, 'Failed to record visit outcome', 500);
+    }
+    return sendSuccess(res, updated);
+  }
 
   // ── Reschedule mode ──────────────────────────────────────────────
   if ('scheduled_date' in parsed.data) {

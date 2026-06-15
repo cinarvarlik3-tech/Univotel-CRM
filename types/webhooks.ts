@@ -81,11 +81,6 @@ export const ChatwootMessageCreatedSchema = ChatwootInboundMessageSchema.extend(
   event: z.literal('message_created'),
 });
 
-const ChangedAttributeValueSchema = z.object({
-  current_value: z.unknown(),
-  previous_value: z.unknown(),
-});
-
 export const ChatwootConversationUpdatedSchema = z.object({
   event: z.literal('conversation_updated'),
   id: z.number(),

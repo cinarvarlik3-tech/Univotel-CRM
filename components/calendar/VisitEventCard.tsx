@@ -1,10 +1,9 @@
 /**
  * Full-width rectangular visit card for calendar grid cells.
- * Shows lead name, room preference, and phone — sized to fill most of the
- * parent day or hour slot.
+ * Shows lead name, room preference, phone, and always-visible action buttons.
  */
+import { type ReactNode } from 'react';
 import { format } from 'date-fns';
-import { IconGripVertical } from '@tabler/icons-react';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/hooks/useTranslation';
 import { accentChipClasses, dateFnsLocale } from './calendar-utils';
@@ -13,17 +12,18 @@ import type { CalendarEvent } from './types';
 interface VisitEventCardProps {
   event: CalendarEvent;
   locale: string;
-  /** When true the card stretches to fill its grid cell (week/day hour slots). */
+  /** Stretch card to fill its parent grid cell. */
   fill?: boolean;
   onClick: (event: CalendarEvent) => void;
   onDragStart?: (event: CalendarEvent) => void;
   onDragEnd?: () => void;
+  renderEventActions?: (event: CalendarEvent) => ReactNode;
 }
 
 /**
- * Renders a visit as a rectangular card with lead details.
+ * Renders a visit as a rectangular card with lead details and inline actions.
  * @param props - Event data, locale, fill mode, and interaction handlers.
- * @returns Draggable visit card button.
+ * @returns Draggable visit card.
  */
 export function VisitEventCard({
   event,
@@ -32,6 +32,7 @@ export function VisitEventCard({
   onClick,
   onDragStart,
   onDragEnd,
+  renderEventActions,
 }: VisitEventCardProps) {
   const { t } = useTranslation();
   const fnsLocale = dateFnsLocale(locale);
@@ -39,25 +40,28 @@ export function VisitEventCard({
   const timeLabel = event.allDay ? null : format(event.start, 'HH:mm', { locale: fnsLocale });
   const phone = event.cardDetails?.phone;
   const room = event.cardDetails?.roomPreference;
+  const showActions = Boolean(renderEventActions && event.visitStatus === 'scheduled');
 
   return (
-    <button
-      type="button"
-      draggable={draggable}
-      onDragStart={() => onDragStart?.(event)}
-      onDragEnd={onDragEnd}
-      onClick={() => onClick(event)}
+    <div
       className={cn(
-        'flex flex-col overflow-hidden rounded-md border border-border-default text-left shadow-sm transition-shadow',
-        'hover:shadow-md',
+        'flex min-h-0 w-full flex-col overflow-hidden rounded-md border border-border-default text-left shadow-sm',
         accentChipClasses(event.accent),
-        fill ? 'absolute inset-0.5' : 'min-h-[52px] w-full flex-1',
-        draggable && 'cursor-grab active:cursor-grabbing',
+        fill ? 'h-full flex-1' : 'min-h-[72px] flex-1',
       )}
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-0.5 p-1.5">
+      <button
+        type="button"
+        draggable={draggable}
+        onDragStart={() => onDragStart?.(event)}
+        onDragEnd={onDragEnd}
+        onClick={() => onClick(event)}
+        className={cn(
+          'flex w-full min-h-0 flex-1 flex-col gap-0.5 px-2 pb-1 pt-1.5 text-left transition-shadow hover:shadow-md',
+          draggable && 'cursor-grab active:cursor-grabbing',
+        )}
+      >
         <div className="flex items-start gap-1">
-          {draggable && <IconGripVertical className="mt-0.5 size-3 shrink-0 opacity-40" />}
           <p className="min-w-0 flex-1 truncate text-xs font-semibold leading-tight">
             {event.title}
           </p>
@@ -79,7 +83,17 @@ export function VisitEventCard({
             <span className="font-sans font-medium opacity-70">{t('leads.phone')}:</span> {phone}
           </p>
         )}
-      </div>
-    </button>
+      </button>
+
+      {showActions && (
+        <div
+          className="flex w-full shrink-0 flex-wrap gap-1 border-t border-black/10 px-2 pb-1.5 pt-1 [&_button]:h-7 [&_button]:px-2 [&_button]:text-[10px]"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {renderEventActions!(event)}
+        </div>
+      )}
+    </div>
   );
 }

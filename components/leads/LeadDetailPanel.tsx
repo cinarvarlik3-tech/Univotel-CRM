@@ -35,13 +35,7 @@ interface LeadDetailPanelProps {
  * Renders the lead detail slide-over with 3-tab structure.
  * @param props - Lead ID, open state, and role flags.
  */
-export function LeadDetailPanel({
-  leadId,
-  open,
-  onClose,
-  isManager,
-  salespeople,
-}: LeadDetailPanelProps) {
+export function LeadDetailPanel({ leadId, open, onClose, isManager }: LeadDetailPanelProps) {
   const {
     lead,
     details,
@@ -148,7 +142,6 @@ export function LeadDetailPanel({
               <LeadDetailHeader
                 lead={lead}
                 details={details}
-                leadId={leadId}
                 timeInStageDays={timeInStageDays}
                 onClose={onClose}
                 isFullScreen={isFullScreen}

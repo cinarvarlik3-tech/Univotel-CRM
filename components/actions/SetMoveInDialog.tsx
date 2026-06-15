@@ -17,6 +17,8 @@ interface SetMoveInDialogProps {
   /** 'move_in' for expected date (kapora-alindi); 'actual_move_in_date' for deal-signed */
   field: 'move_in' | 'actual_move_in_date';
   currentValue?: string | null;
+  /** Promised move-in date — used by "Söz Verilen Tarih" shortcut on actual date form. */
+  promisedDate?: string | null;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -26,6 +28,7 @@ export function SetMoveInDialog({
   leadUuid,
   field,
   currentValue,
+  promisedDate,
   onClose,
   onSuccess,
 }: SetMoveInDialogProps) {
@@ -74,6 +77,17 @@ export function SetMoveInDialog({
           </FormField>
           {error && <p className="text-xs text-brand-red">{error}</p>}
           <DialogFooter>
+            {field === 'actual_move_in_date' && promisedDate && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="mr-auto"
+                onClick={() => setDate(promisedDate.slice(0, 10))}
+                disabled={saving}
+              >
+                {t('actions.promisedDate')}
+              </Button>
+            )}
             <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
               {t('common.cancel')}
             </Button>

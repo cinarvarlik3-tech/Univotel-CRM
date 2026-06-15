@@ -17,6 +17,7 @@ import { PostVisitCard } from '@/components/my-day/PostVisitCard';
 import { MoveInsCard } from '@/components/my-day/MoveInsCard';
 import { SonAramalarCard } from '@/components/my-day/SonAramalarCard';
 import { PerformanceTab } from '@/components/my-day/PerformanceTab';
+import { GenelPerformansTab } from '@/components/my-day/GenelPerformansTab';
 import { LeadDetailPanel } from '@/components/leads/LeadDetailPanel';
 import { useSalespeople } from '@/hooks/useSalespeople';
 
@@ -50,7 +51,8 @@ export default function MyDayPage() {
         <Tabs defaultValue="today" className="w-full">
           <TabsList className="mb-5">
             <TabsTrigger value="today">Bugün</TabsTrigger>
-            <TabsTrigger value="performance">Performansım</TabsTrigger>
+            <TabsTrigger value="performance">Bugünlük Performans</TabsTrigger>
+            <TabsTrigger value="genel">Genel Performans</TabsTrigger>
           </TabsList>
 
           {/* ── Tab 1: Bugün ─────────────────────────────────────────── */}
@@ -122,9 +124,14 @@ export default function MyDayPage() {
             </div>
           </TabsContent>
 
-          {/* ── Tab 2: Performansım ───────────────────────────────────── */}
+          {/* ── Tab 2: Bugünlük Performans ────────────────────────────── */}
           <TabsContent value="performance">
             <PerformanceTab />
+          </TabsContent>
+
+          {/* ── Tab 3: Genel Performans ───────────────────────────────── */}
+          <TabsContent value="genel">
+            <GenelPerformansTab />
           </TabsContent>
         </Tabs>
       </div>

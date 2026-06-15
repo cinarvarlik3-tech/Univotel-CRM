@@ -1,8 +1,9 @@
 /**
- * Performansım — personal performance tab.
- * A per-salesperson mirror of the manager Team Panel, scoped to the logged-in agent.
- * Layout: time-range selector → KPI tile row → conversion + connect clusters → secondary cluster.
+ * Genel Performans tab — all-time or range-filtered personal stats.
+ * Range selector: Bu hafta | Bu ay | Tüm zamanlar | Özel aralık (date picker).
+ * Reuses PerformancePayload from the shared getPerformancePayload() function.
  */
+import { useState } from 'react';
 import Link from 'next/link';
 import {
   IconUsers,
@@ -14,9 +15,10 @@ import {
   IconArrowUpRight,
   IconArrowDownRight,
   IconPhoneCall,
+  IconCalendar,
 } from '@tabler/icons-react';
 import { cn } from '@/lib/utils';
-import { usePerformance } from '@/hooks/usePerformance';
+import { useGenelPerformance, type GenelRange } from '@/hooks/useGenelPerformance';
 import { Skeleton } from '@/components/ui/skeleton';
 
 // ── Loss reason labels ──────────────────────────────────────────────────────
@@ -56,7 +58,7 @@ function KpiTile({ label, value, chip, icon: Icon }: KpiTileProps) {
   );
 }
 
-// ── Progress row (for conversion ratios) ────────────────────────────────────
+// ── Progress row ─────────────────────────────────────────────────────────────
 
 function ConversionRow({
   label,
@@ -89,7 +91,7 @@ function ConversionRow({
   );
 }
 
-// ── Card section shell ───────────────────────────────────────────────────────
+// ── Card section shell ────────────────────────────────────────────────────────
 
 function SectionCard({
   title,
@@ -115,10 +117,26 @@ function SectionCard({
   );
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
+// ── Preset button labels ──────────────────────────────────────────────────────
 
-export function PerformanceTab() {
-  const { data, isLoading, error } = usePerformance('today');
+const PRESETS = [
+  { value: 'this_week' as const, label: 'Bu hafta' },
+  { value: 'this_month' as const, label: 'Bu ay' },
+  { value: 'all_time' as const, label: 'Tüm zamanlar' },
+];
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+export function GenelPerformansTab() {
+  const [preset, setPreset] = useState<'this_week' | 'this_month' | 'all_time' | 'custom'>(
+    'all_time',
+  );
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+
+  const range: GenelRange = preset === 'custom' ? { from: customFrom, to: customTo } : preset;
+
+  const { data, isLoading, error } = useGenelPerformance(range);
 
   const funnel = data?.conversionFunnel ?? [];
   const claimed = funnel.find((s) => s.stage === 'claimed')?.count ?? 0;
@@ -128,8 +146,62 @@ export function PerformanceTab() {
 
   const kpi = data?.kpi;
 
+  const leadlerimLabel = preset === 'all_time' ? 'Toplam leadlerim' : 'Leadlerim';
+
   return (
     <div className="space-y-5">
+      {/* Range selector */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex rounded-lg border border-border-default text-xs overflow-hidden">
+          {PRESETS.map((p) => (
+            <button
+              key={p.value}
+              type="button"
+              onClick={() => setPreset(p.value)}
+              className={cn(
+                'px-4 py-1.5 transition-colors',
+                preset === p.value
+                  ? 'bg-brand-blue text-white'
+                  : 'text-text-secondary hover:bg-row-hover',
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setPreset('custom')}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-1.5 transition-colors',
+              preset === 'custom'
+                ? 'bg-brand-blue text-white'
+                : 'text-text-secondary hover:bg-row-hover',
+            )}
+          >
+            <IconCalendar className="h-3.5 w-3.5" />
+            Özel
+          </button>
+        </div>
+
+        {preset === 'custom' && (
+          <div className="flex items-center gap-2 text-xs">
+            <input
+              type="date"
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className="rounded-lg border border-border-default bg-surface-card px-2.5 py-1.5 text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-blue"
+            />
+            <span className="text-text-tertiary">—</span>
+            <input
+              type="date"
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className="rounded-lg border border-border-default bg-surface-card px-2.5 py-1.5 text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-blue"
+            />
+          </div>
+        )}
+      </div>
+
       {isLoading && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -157,12 +229,17 @@ export function PerformanceTab() {
         </p>
       )}
 
+      {/* Show prompt when custom mode but dates not yet filled */}
+      {!isLoading && !error && !data && preset === 'custom' && (
+        <p className="text-sm text-text-tertiary">Başlangıç ve bitiş tarihlerini seçin.</p>
+      )}
+
       {data && (
         <>
           {/* KPI tile row */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <KpiTile
-              label="Bugün aldığım leadler"
+              label={leadlerimLabel}
               value={kpi?.leads ?? 0}
               chip="bg-brand-blue/10 text-brand-blue"
               icon={IconUsers}
@@ -332,7 +409,7 @@ export function PerformanceTab() {
             </SectionCard>
           </div>
 
-          {/* Visit show-rate (secondary) */}
+          {/* Visit show-rate */}
           <SectionCard title="Ziyaret Gösterim Oranı">
             {data.visitShowRate.attended + data.visitShowRate.failed === 0 ? (
               <p className="text-xs text-text-tertiary">Bu dönemde ziyaret yok.</p>

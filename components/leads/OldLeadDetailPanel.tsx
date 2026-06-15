@@ -18,7 +18,6 @@ import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { formatDateTime } from '@/lib/i18n/format-date';
 import { displayLeadContactIdentifier } from '@/lib/ui/display-phone';
 import { formatStudentGender } from '@/lib/ui/format-student-gender';
-import type { OldLeadDetailRow } from '@/types/domain';
 
 interface OldLeadDetailPanelProps {
   leadId: string | null;

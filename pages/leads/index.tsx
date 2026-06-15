@@ -29,6 +29,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTranslation } from '@/hooks/useTranslation';
 import { isManagerOrAbove } from '@/lib/auth/roles';
 import { useLeads } from '@/hooks/useLeads';
+import { useLeadRowActions } from '@/hooks/useLeadRowActions';
 import { useSalespeople } from '@/hooks/useSalespeople';
 import { buildQueryFromLeadListState } from '@/lib/ui/lead-list-query';
 import type { LeadRow } from '@/types/domain';
@@ -70,6 +71,10 @@ export default function LeadsPage() {
   const [showAll, setShowAll] = useState(false);
 
   const isManager = isManagerOrAbove(user?.role);
+  const { renderRowActions, dialogs: rowActionDialogs } = useLeadRowActions({
+    preset: 'manager',
+    salespeople,
+  });
 
   useEffect(() => {
     const stored = localStorage.getItem(VIEW_MODE_KEY);
@@ -103,8 +108,6 @@ export default function LeadsPage() {
   });
 
   const { data, error, isLoading, mutate } = useLeads(queryString);
-
-  // Tracks whether the first response for the current queryString has been applied.
   // Prevents SWR background revalidations (focus, reconnect) from resetting
   // accumulated leads that the user loaded via "Load More".
   const initialLoadApplied = useRef(false);
@@ -127,10 +130,8 @@ export default function LeadsPage() {
 
   const kpis = useMemo(() => {
     const active = data?.totalCount ?? 0;
-    const breached = data?.kpiCounts?.breached ?? 0;
-    const onTime = data?.kpiCounts?.onTime ?? 0;
-    return { active, breached, onTime };
-  }, [data?.totalCount, data?.kpiCounts]);
+    return { active };
+  }, [data?.totalCount]);
 
   function handleApply() {
     setAppliedState(listState);
@@ -243,26 +244,14 @@ export default function LeadsPage() {
         </>
       }
     >
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <KpiCard
           label={t('leads.activeLeads')}
           value={kpis.active}
           variant="blue"
           sub={t('leads.totalMatching')}
         />
-        <KpiCard
-          label={t('leads.slaBreached')}
-          value={kpis.breached}
-          variant="red"
-          sub={t('leads.needsAttention')}
-        />
         <TasksDueTodayKpiCard />
-        <KpiCard
-          label={t('leads.onTime')}
-          value={kpis.onTime}
-          variant="neutral"
-          valueClassName="text-[var(--badge-success-text)]"
-        />
       </div>
 
       <div className="mt-4">
@@ -292,6 +281,7 @@ export default function LeadsPage() {
               selectedId={selectedLeadId ?? undefined}
               onRowClick={openLead}
               highlightInactive={searchActive}
+              renderRowActions={isManager ? (lead) => renderRowActions(lead, mutate) : undefined}
             />
           )}
 
@@ -320,6 +310,7 @@ export default function LeadsPage() {
         isManager={isManager}
         salespeople={salespeople}
       />
+      {rowActionDialogs}
     </AppShell>
   );
 }

@@ -20,6 +20,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTranslation } from '@/hooks/useTranslation';
 import { isManagerOrAbove } from '@/lib/auth/roles';
 import { useLeads } from '@/hooks/useLeads';
+import { useLeadRowActions } from '@/hooks/useLeadRowActions';
 import { useSalespeople } from '@/hooks/useSalespeople';
 import { buildQueryFromLeadListState } from '@/lib/ui/lead-list-query';
 import type { LeadRow } from '@/types/domain';
@@ -54,6 +55,10 @@ export default function DealAwaitingPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { data: salespeople } = useSalespeople();
+  const { renderRowActions, dialogs: rowActionDialogs } = useLeadRowActions({
+    preset: 'manager',
+    salespeople,
+  });
 
   const [listState, setListState] = useState<LeadListFilterState>(DEAL_AWAITING_DEFAULT_STATE);
   const [appliedState, setAppliedState] = useState<LeadListFilterState>(
@@ -165,6 +170,7 @@ export default function DealAwaitingPage() {
           leads={accumulatedLeads}
           selectedId={selectedLeadId ?? undefined}
           onRowClick={openLead}
+          renderRowActions={(lead) => renderRowActions(lead, mutate)}
         />
       )}
 
@@ -183,6 +189,7 @@ export default function DealAwaitingPage() {
         isManager={isManagerOrAbove(user.role)}
         salespeople={salespeople}
       />
+      {rowActionDialogs}
     </AppShell>
   );
 }

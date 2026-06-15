@@ -63,6 +63,8 @@ interface CalendarBoardProps {
    * When omitted, events are not draggable.
    */
   onReschedule?: (event: CalendarEvent, newStart: Date) => Promise<boolean>;
+  /** Optional per-event action buttons (list view, etc.). */
+  renderEventActions?: (event: CalendarEvent) => ReactNode;
 }
 
 const VIEW_ORDER: CalendarView[] = ['month', 'week', 'day', 'list'];
@@ -121,6 +123,7 @@ export function CalendarBoard({
   actions,
   onEventClick,
   onReschedule,
+  renderEventActions,
 }: CalendarBoardProps) {
   const { t, locale } = useTranslation();
   const fnsLocale = dateFnsLocale(locale);
@@ -376,6 +379,7 @@ export function CalendarBoard({
           onDragStart={setDraggedEvent}
           onDragEnd={() => setDraggedEvent(null)}
           onDropOnDay={(day) => requestReschedule(day)}
+          renderEventActions={renderEventActions}
         />
       ) : view === 'week' ? (
         <WeekView
@@ -388,6 +392,7 @@ export function CalendarBoard({
           onDragEnd={() => setDraggedEvent(null)}
           onDropOnDay={(day) => requestReschedule(day)}
           onDropOnHour={(day, hour) => requestReschedule(day, hour)}
+          renderEventActions={renderEventActions}
         />
       ) : view === 'day' ? (
         <DayView
@@ -400,6 +405,7 @@ export function CalendarBoard({
           onDragEnd={() => setDraggedEvent(null)}
           onDropOnDay={(day) => requestReschedule(day)}
           onDropOnHour={(day, hour) => requestReschedule(day, hour)}
+          renderEventActions={renderEventActions}
         />
       ) : (
         <AgendaView
@@ -408,6 +414,7 @@ export function CalendarBoard({
           eventStyle={eventStyle}
           emptyMessage={emptyMessage ?? t('calendar.noEvents')}
           onEventClick={onEventClick}
+          renderEventActions={renderEventActions}
         />
       )}
 

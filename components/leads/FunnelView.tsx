@@ -28,12 +28,7 @@ async function fetcher(url: string): Promise<FunnelViewResponse> {
  * @param props - Lead ID, salespeople list, and full screen state.
  * @returns Funnel View panel.
  */
-export function FunnelView({
-  leadId,
-  salespeople,
-  isFullScreen,
-  onToggleFullScreen,
-}: FunnelViewProps) {
+export function FunnelView({ leadId, salespeople, isFullScreen }: FunnelViewProps) {
   const { data, error, isLoading } = useSWR<FunnelViewResponse>(
     `/api/leads/${leadId}/funnel-view`,
     fetcher,

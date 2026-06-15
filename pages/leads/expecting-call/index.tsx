@@ -1,26 +1,13 @@
-import { useState } from 'react';
 import { StageLeadPage } from '@/components/leads/StageLeadPage';
-import { LogContactDialog } from '@/components/actions/LogContactDialog';
-import { Button } from '@/components/ui/button';
-import { useTranslation } from '@/hooks/useTranslation';
-import type { LeadWithDetails } from '@/types/domain';
-
-type ActiveDialog = {
-  lead: LeadWithDetails;
-  onDone: () => void;
-} | null;
+import { useLeadRowActions } from '@/hooks/useLeadRowActions';
+import { useSalespeople } from '@/hooks/useSalespeople';
 
 export default function ExpectingCallPage() {
-  const { t } = useTranslation();
-  const [active, setActive] = useState<ActiveDialog>(null);
-
-  function renderRowActions(lead: LeadWithDetails, onDone: () => void) {
-    return (
-      <Button size="sm" onClick={() => setActive({ lead, onDone })}>
-        {t('actions.logCallOutcome')}
-      </Button>
-    );
-  }
+  const { data: salespeople } = useSalespeople();
+  const { renderRowActions, dialogs } = useLeadRowActions({
+    preset: 'call-awaiting',
+    salespeople,
+  });
 
   return (
     <>
@@ -30,17 +17,7 @@ export default function ExpectingCallPage() {
         basePath="/leads/expecting-call"
         renderRowActions={renderRowActions}
       />
-      {active && (
-        <LogContactDialog
-          open
-          leadUuid={active.lead.uuid}
-          onClose={() => setActive(null)}
-          onSuccess={() => {
-            active.onDone();
-            setActive(null);
-          }}
-        />
-      )}
+      {dialogs}
     </>
   );
 }

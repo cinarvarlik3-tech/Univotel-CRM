@@ -17,6 +17,7 @@ interface AgendaViewProps {
   eventStyle?: CalendarEventStyle;
   emptyMessage: string;
   onEventClick: (event: CalendarEvent) => void;
+  renderEventActions?: (event: CalendarEvent) => React.ReactNode;
 }
 
 /**
@@ -30,6 +31,7 @@ export function AgendaView({
   eventStyle = 'chip',
   emptyMessage,
   onEventClick,
+  renderEventActions,
 }: AgendaViewProps) {
   const { t } = useTranslation();
   const fnsLocale = dateFnsLocale(locale);
@@ -68,54 +70,68 @@ export function AgendaView({
 
           <Card className="divide-y divide-border-default p-0">
             {items.map((event) => (
-              <button
+              <div
                 key={event.id}
-                type="button"
-                onClick={() => onEventClick(event)}
-                className="group flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-row-hover"
+                className="group flex w-full items-start gap-3 px-4 py-3 transition-colors hover:bg-row-hover"
               >
-                <span
-                  className={cn(
-                    'mt-1.5 size-2.5 shrink-0 rounded-full',
-                    accentDotClasses(event.accent),
-                  )}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-medium text-text-primary group-hover:text-brand-blue">
-                      {event.title}
-                    </p>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {event.badges?.map((b) => (
-                        <Badge key={`${b.label}-${b.variant}`} variant={b.variant}>
-                          {b.label}
-                        </Badge>
-                      ))}
+                <button
+                  type="button"
+                  onClick={() => onEventClick(event)}
+                  className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                >
+                  <span
+                    className={cn(
+                      'mt-1.5 size-2.5 shrink-0 rounded-full',
+                      accentDotClasses(event.accent),
+                    )}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-medium text-text-primary group-hover:text-brand-blue">
+                        {event.title}
+                      </p>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {event.badges?.map((b) => (
+                          <Badge key={`${b.label}-${b.variant}`} variant={b.variant}>
+                            {b.label}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                    {event.subtitle && (
+                      <p className="mt-0.5 truncate text-xs text-text-secondary">
+                        {event.subtitle}
+                      </p>
+                    )}
+                    {showCardFields && event.cardDetails?.roomPreference && (
+                      <p className="mt-0.5 truncate text-xs text-text-secondary">
+                        {t('leads.roomPreference')}: {event.cardDetails.roomPreference}
+                      </p>
+                    )}
+                    {showCardFields && event.cardDetails?.phone && (
+                      <p className="mt-0.5 truncate font-mono text-xs text-text-secondary">
+                        {t('leads.phone')}: {event.cardDetails.phone}
+                      </p>
+                    )}
+                    <div className="mt-1 flex items-center gap-1 text-xs text-text-tertiary">
+                      <IconClock className="size-3.5" />
+                      <span>
+                        {event.allDay
+                          ? format(event.start, 'd MMM yyyy', { locale: fnsLocale })
+                          : format(event.start, 'HH:mm', { locale: fnsLocale })}
+                      </span>
                     </div>
                   </div>
-                  {event.subtitle && (
-                    <p className="mt-0.5 truncate text-xs text-text-secondary">{event.subtitle}</p>
-                  )}
-                  {showCardFields && event.cardDetails?.roomPreference && (
-                    <p className="mt-0.5 truncate text-xs text-text-secondary">
-                      {t('leads.roomPreference')}: {event.cardDetails.roomPreference}
-                    </p>
-                  )}
-                  {showCardFields && event.cardDetails?.phone && (
-                    <p className="mt-0.5 truncate font-mono text-xs text-text-secondary">
-                      {t('leads.phone')}: {event.cardDetails.phone}
-                    </p>
-                  )}
-                  <div className="mt-1 flex items-center gap-1 text-xs text-text-tertiary">
-                    <IconClock className="size-3.5" />
-                    <span>
-                      {event.allDay
-                        ? format(event.start, 'd MMM yyyy', { locale: fnsLocale })
-                        : format(event.start, 'HH:mm', { locale: fnsLocale })}
-                    </span>
+                </button>
+                {renderEventActions && (
+                  <div
+                    className="flex shrink-0 items-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {renderEventActions(event)}
                   </div>
-                </div>
-              </button>
+                )}
+              </div>
             ))}
           </Card>
         </div>

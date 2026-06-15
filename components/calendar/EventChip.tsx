@@ -2,7 +2,7 @@
  * Calendar event renderer — compact chip (default) or full-width visit card.
  * Dispatches to VisitEventCard when `style` is `card`.
  */
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { format } from 'date-fns';
 import { IconClock, IconGripVertical } from '@tabler/icons-react';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,7 @@ interface EventChipProps {
   onClick: (event: CalendarEvent) => void;
   onDragStart?: (event: CalendarEvent) => void;
   onDragEnd?: () => void;
+  renderEventActions?: (event: CalendarEvent) => ReactNode;
 }
 
 /**
@@ -38,6 +39,7 @@ export function EventChip({
   onClick,
   onDragStart,
   onDragEnd,
+  renderEventActions,
 }: EventChipProps) {
   const [hovered, setHovered] = useState(false);
 
@@ -50,6 +52,7 @@ export function EventChip({
         onClick={onClick}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
+        renderEventActions={renderEventActions}
       />
     );
   }

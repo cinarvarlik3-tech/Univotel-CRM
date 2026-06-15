@@ -11,8 +11,8 @@ async function fetcher<T>(url: string): Promise<T> {
   return json.data;
 }
 
-export type PerformanceRange = 'this_week' | 'this_month';
+export type PerformanceRange = 'today' | 'this_week' | 'this_month';
 
-export function usePerformance(range: PerformanceRange = 'this_week') {
+export function usePerformance(range: PerformanceRange = 'today') {
   return useSWR<PerformancePayload>(`/api/my-day/performance?range=${range}`, fetcher);
 }

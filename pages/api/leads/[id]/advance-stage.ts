@@ -6,7 +6,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
-import { FUNNEL_STATUSES } from '@/lib/constants';
+import { FUNNEL_STATUSES, isFunnelAdvanceAllowed } from '@/lib/constants';
 import { updateLeadRecord } from '@/lib/leads/update-lead';
 import { createServerSupabase } from '@/lib/supabase/server';
 
@@ -43,6 +43,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (existing.is_archived) return sendError(res, 'Lead is archived', 409);
   if (parsed.data.funnel_status === existing.funnel_status) {
     return sendError(res, 'Lead is already in that stage', 409);
+  }
+  if (
+    parsed.data.funnel_status !== 'lost' &&
+    !isFunnelAdvanceAllowed(existing.funnel_status, parsed.data.funnel_status)
+  ) {
+    return sendError(res, 'Stage advance not allowed', 400);
   }
 
   try {

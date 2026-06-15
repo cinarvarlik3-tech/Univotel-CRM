@@ -43,6 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     typeof req.query.sort === 'string' && OLD_SORTABLE_COLUMNS.has(req.query.sort)
       ? req.query.sort
       : 'created_at';
+  const ascending = req.query.sort_dir === 'asc';
 
   const searchTerm = typeof req.query.search === 'string' ? req.query.search.trim() : '';
   const useFuzzy = req.query.fuzzy === '1' && searchTerm.length > 0;
@@ -54,11 +55,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   let query = supabase
     .from('old_leads')
     .select(selectClause)
-    .order(sortField, { ascending: false })
+    .order(sortField, { ascending, nullsFirst: ascending })
     .limit(limit + 1);
 
   if (cursor) {
-    query = query.lt(sortField, cursor);
+    query = ascending ? query.gt(sortField, cursor) : query.lt(sortField, cursor);
   }
 
   if (useFuzzy) {

@@ -10,6 +10,9 @@ import { format } from 'date-fns';
 import { AppShell } from '@/components/layout/AppShell';
 import { LeadDetailPanel } from '@/components/leads/LeadDetailPanel';
 import { CalendarBoard } from '@/components/calendar';
+import { RescheduleDatePopover } from '@/components/modals/RescheduleDatePopover';
+import { Button } from '@/components/ui/button';
+import { useActionToast } from '@/hooks/useActionToast';
 import type { CalendarEvent, CalendarFilterGroup } from '@/components/calendar';
 import { useAuth } from '@/hooks/useAuth';
 import { useSalespeople } from '@/hooks/useSalespeople';
@@ -55,6 +58,8 @@ export default function MoveInCalendarPage() {
   const [leads, setLeads] = useState<MoveInLead[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { show: showToast, node: toastNode } = useActionToast();
+  const [rescheduleTarget, setRescheduleTarget] = useState<CalendarEvent | null>(null);
 
   const selectedLeadId = router.isReady ? selectedLeadFromQuery(router.query) : null;
   const panelOpen = selectedLeadId !== null;
@@ -153,6 +158,44 @@ export default function MoveInCalendarPage() {
     [t],
   );
 
+  /** Persists a rescheduled move-in date from the list-view action. */
+  const handleRescheduleIso = useCallback(
+    async (event: CalendarEvent, newDateIso: string): Promise<boolean> => {
+      if (!event.leadUuid) return false;
+      const dateStr = newDateIso.slice(0, 10);
+
+      const res = await fetch(`/api/lead-details/${event.leadUuid}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ move_in: dateStr }),
+      });
+      if (!res.ok) return false;
+
+      setLeads((prev) =>
+        prev.map((lead) =>
+          lead.uuid === event.leadUuid
+            ? { ...lead, lead_details: { ...(lead.lead_details ?? {}), move_in: dateStr } }
+            : lead,
+        ),
+      );
+      showToast(t('calendar.rescheduleDateUpdated'));
+      return true;
+    },
+    [showToast, t],
+  );
+
+  const renderEventActions = useCallback(
+    (event: CalendarEvent) => {
+      if (!event.draggable) return null;
+      return (
+        <Button size="sm" variant="secondary" onClick={() => setRescheduleTarget(event)}>
+          {t('calendar.reschedule')}
+        </Button>
+      );
+    },
+    [t],
+  );
+
   /** Persists a dragged move-in date to the lead, then syncs local state. */
   const handleReschedule = useCallback(
     async (event: CalendarEvent, newStart: Date): Promise<boolean> => {
@@ -182,6 +225,7 @@ export default function MoveInCalendarPage() {
 
   return (
     <AppShell title={t('moveInCalendar.title')} count={events.length || undefined}>
+      {toastNode}
       {error && <p className="mb-3 text-sm text-brand-red">{error}</p>}
 
       <CalendarBoard
@@ -192,7 +236,19 @@ export default function MoveInCalendarPage() {
         emptyMessage={t('moveInCalendar.noLeads')}
         onEventClick={(event) => event.leadUuid && openLead(event.leadUuid)}
         onReschedule={handleReschedule}
+        renderEventActions={renderEventActions}
       />
+
+      {rescheduleTarget && (
+        <RescheduleDatePopover
+          label={t('calendar.reschedule')}
+          currentDate={rescheduleTarget.start}
+          inputType="date"
+          open
+          onOpenChange={(open) => !open && setRescheduleTarget(null)}
+          onConfirm={(iso) => handleRescheduleIso(rescheduleTarget, iso)}
+        />
+      )}
 
       <LeadDetailPanel
         leadId={selectedLeadId}

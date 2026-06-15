@@ -26,7 +26,6 @@ import {
   IconPhonePause,
   IconPlant2,
   IconSettings,
-  IconSpeakerphone,
   IconTruck,
   IconUserCheck,
   IconUsers,
@@ -157,7 +156,6 @@ export function Sidebar({
       managerOnly: true,
       items: [
         { href: '/dashboard', label: t('nav.analytics'), icon: IconChartBar },
-        { href: '/campaigns', label: t('nav.campaigns'), icon: IconSpeakerphone },
         { href: '/properties', label: t('nav.properties'), icon: IconBuilding },
         { href: '/webhook-logs', label: t('nav.webhookLogs'), icon: IconWebhook },
         { href: '/leads/archived', label: t('nav.archive'), icon: IconArchive },

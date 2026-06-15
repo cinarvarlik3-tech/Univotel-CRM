@@ -3,12 +3,18 @@ import { StageLeadPage } from '@/components/leads/StageLeadPage';
 import { SetMoveInDialog } from '@/components/actions/SetMoveInDialog';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/useTranslation';
-import type { LeadWithDetails } from '@/types/domain';
+import type { LeadDetailRow, LeadWithDetails } from '@/types/domain';
 
 type ActiveDialog = {
   lead: LeadWithDetails;
   onDone: () => void;
 } | null;
+
+function promisedMoveInDate(lead: LeadWithDetails): string | null {
+  const details = lead.lead_details;
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return null;
+  return (details as LeadDetailRow).move_in ?? null;
+}
 
 export default function DealSignedPage() {
   const { t } = useTranslation();
@@ -35,6 +41,7 @@ export default function DealSignedPage() {
           open
           leadUuid={active.lead.uuid}
           field="actual_move_in_date"
+          promisedDate={promisedMoveInDate(active.lead)}
           onClose={() => setActive(null)}
           onSuccess={() => {
             active.onDone();

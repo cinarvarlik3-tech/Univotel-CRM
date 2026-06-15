@@ -10,6 +10,9 @@ import { AppShell } from '@/components/layout/AppShell';
 import { LeadDetailPanel } from '@/components/leads/LeadDetailPanel';
 import { ScheduleVisitButton } from '@/components/leads/ScheduleVisitButton';
 import { CalendarBoard } from '@/components/calendar';
+import { VisitCalendarEventActions } from '@/components/calendar/VisitCalendarEventActions';
+import type { VisitResultOutcome } from '@/components/modals/VisitResultModal';
+import { useActionToast } from '@/hooks/useActionToast';
 import type { CalendarAccent, CalendarEvent, CalendarFilterGroup } from '@/components/calendar';
 import type { CalendarBadgeVariant } from '@/components/calendar';
 import { useAuth } from '@/hooks/useAuth';
@@ -82,6 +85,7 @@ export default function VisitCalendarPage() {
   const [visits, setVisits] = useState<Visit[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { show: showToast, node: toastNode } = useActionToast();
 
   const selectedLeadId = router.isReady ? selectedLeadFromQuery(router.query) : null;
   const panelOpen = selectedLeadId !== null;
@@ -148,6 +152,7 @@ export default function VisitCalendarPage() {
           phone: visit.leads?.lead_phone ?? null,
           roomPreference: roomPreferenceOf(visit.leads),
         },
+        visitStatus: visit.status,
       };
     });
   }, [visits, propertyName, isManager, user?.userId, t]);
@@ -174,6 +179,49 @@ export default function VisitCalendarPage() {
     return groups;
   }, [properties, t]);
 
+  /** Persists a rescheduled visit datetime from the action popover. */
+  const handleRescheduleIso = useCallback(
+    async (event: CalendarEvent, newDateIso: string): Promise<boolean> => {
+      const res = await fetch(`/api/visits/${event.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduled_date: newDateIso }),
+      });
+      if (!res.ok) return false;
+
+      setVisits((prev) =>
+        prev.map((v) => (v.id === event.id ? { ...v, scheduled_date: newDateIso } : v)),
+      );
+      showToast(t('calendar.rescheduleDateUpdated'));
+      return true;
+    },
+    [showToast, t],
+  );
+
+  const handleVisitResult = useCallback(
+    (outcome: VisitResultOutcome) => {
+      void fetchVisits();
+      const labels: Record<VisitResultOutcome, string> = {
+        decision_pending: t('actions.visitOutcomeDecision'),
+        downpayment: t('actions.visitOutcomeDownpayment'),
+        dropped: t('actions.visitOutcomeDropped'),
+      };
+      showToast(`${t('actions.visitResultRecorded')} — ${labels[outcome]}`);
+    },
+    [fetchVisits, showToast, t],
+  );
+
+  const renderEventActions = useCallback(
+    (event: CalendarEvent) => (
+      <VisitCalendarEventActions
+        event={event}
+        onReschedule={handleRescheduleIso}
+        onResultSuccess={handleVisitResult}
+      />
+    ),
+    [handleRescheduleIso, handleVisitResult],
+  );
+
   /** Persists a dragged visit's new datetime, then syncs local state. */
   const handleReschedule = useCallback(
     async (event: CalendarEvent, newStart: Date): Promise<boolean> => {
@@ -196,6 +244,7 @@ export default function VisitCalendarPage() {
 
   return (
     <AppShell title={t('visitCalendar.title')} count={events.length || undefined}>
+      {toastNode}
       {error && <p className="mb-3 text-sm text-brand-red">{error}</p>}
 
       <CalendarBoard
@@ -209,6 +258,7 @@ export default function VisitCalendarPage() {
         actions={<ScheduleVisitButton onScheduled={fetchVisits} />}
         onEventClick={(event) => event.leadUuid && openLead(event.leadUuid)}
         onReschedule={handleReschedule}
+        renderEventActions={renderEventActions}
       />
 
       <LeadDetailPanel

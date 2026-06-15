@@ -6,7 +6,13 @@ import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
 import { isManagerOrAbove, isSuperadmin, parseUserRole } from '@/lib/auth/roles';
-import { FUNNEL_STATUSES, LANGUAGES, LOSS_REASONS, SPECIAL_STATES } from '@/lib/constants';
+import {
+  FUNNEL_STATUSES,
+  isFunnelAdvanceAllowed,
+  LANGUAGES,
+  LOSS_REASONS,
+  SPECIAL_STATES,
+} from '@/lib/constants';
 import { applyLossReasonUpdate } from '@/lib/leads/apply-loss-reason-update';
 import { normalizePhone } from '@/lib/leads/normalize-phone';
 import { updateLeadRecord } from '@/lib/leads/update-lead';
@@ -108,6 +114,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const currentOrNewFunnel = updates.funnel_status ?? existing.funnel_status;
     if (updates.has_moved_in === true && currentOrNewFunnel !== 'sozlesme-imzalandi') {
       return sendError(res, 'has_moved_in can only be set when status is sozlesme-imzalandi', 400);
+    }
+
+    if (
+      updates.funnel_status &&
+      updates.funnel_status !== existing.funnel_status &&
+      updates.funnel_status !== 'lost' &&
+      !isFunnelAdvanceAllowed(existing.funnel_status, updates.funnel_status)
+    ) {
+      return sendError(res, 'Stage advance not allowed', 400);
     }
 
     let updated: Record<string, unknown>;

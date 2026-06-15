@@ -22,7 +22,6 @@ import type { LeadDetailRow, LeadWithDetails } from '@/types/domain';
 interface LeadDetailHeaderProps {
   lead: LeadWithDetails;
   details?: LeadDetailRow | null;
-  leadId: string;
   timeInStageDays?: number | null;
   onClose?: () => void;
   isFullScreen?: boolean;
@@ -68,7 +67,6 @@ function ChannelIcon({ messageFrom }: { messageFrom?: string | null }) {
  */
 export function LeadDetailHeader({
   lead,
-  leadId,
   timeInStageDays,
   onClose,
   isFullScreen,

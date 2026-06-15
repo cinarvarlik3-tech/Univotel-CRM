@@ -15,6 +15,7 @@ const UI_FILTER_FIELDS = new Set<string>(OLD_LEAD_LIST_FILTER_FIELDS);
 /** Input for building an old leads list API query string. */
 export interface OldLeadsListQueryInput {
   sort?: string;
+  sortDir?: 'asc' | 'desc';
   cursor?: string;
   limit?: number;
   search?: string;
@@ -62,6 +63,10 @@ export function buildOldLeadsQueryString(input: OldLeadsListQueryInput): string 
 
   const sort = input.sort && OLD_SORTABLE_COLUMNS.has(input.sort) ? input.sort : 'created_at';
   params.set('sort', sort);
+
+  if (input.sortDir && input.sortDir !== 'desc') {
+    params.set('sort_dir', input.sortDir);
+  }
 
   if (input.cursor) {
     params.set('cursor', input.cursor);

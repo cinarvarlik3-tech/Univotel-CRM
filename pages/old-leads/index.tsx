@@ -5,11 +5,9 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { AppShell } from '@/components/layout/AppShell';
-import {
-  DEFAULT_OLD_LEAD_LIST_STATE,
-  OldLeadListToolbar,
-  type OldLeadListFilterState,
-} from '@/components/leads/OldLeadListToolbar';
+import { DEFAULT_LEAD_LIST_STATE, LeadListToolbar } from '@/components/leads/LeadListToolbar';
+import { OLD_LEAD_FILTER_FIELD_REGISTRY } from '@/lib/leads/filter-field-registry';
+import type { OldLeadListFilterState } from '@/lib/ui/old-lead-list-query';
 import { OldLeadDetailPanel } from '@/components/leads/OldLeadDetailPanel';
 import { OldLeadTable } from '@/components/leads/OldLeadTable';
 import { Button } from '@/components/ui/button';
@@ -32,10 +30,8 @@ export default function OldLeadsPage() {
   const { user } = useAuth();
   const { data: salespeople } = useSalespeople();
 
-  const [listState, setListState] = useState<OldLeadListFilterState>(DEFAULT_OLD_LEAD_LIST_STATE);
-  const [appliedState, setAppliedState] = useState<OldLeadListFilterState>(
-    DEFAULT_OLD_LEAD_LIST_STATE,
-  );
+  const [listState, setListState] = useState<OldLeadListFilterState>(DEFAULT_LEAD_LIST_STATE);
+  const [appliedState, setAppliedState] = useState<OldLeadListFilterState>(DEFAULT_LEAD_LIST_STATE);
   const [accumulatedLeads, setAccumulatedLeads] = useState<OldLeadRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -116,11 +112,16 @@ export default function OldLeadsPage() {
     >
       <p className="mb-4 text-sm text-text-secondary">{t('oldLeads.description')}</p>
 
-      <OldLeadListToolbar
+      <LeadListToolbar
         state={listState}
         onChange={setListState}
         onApply={handleApply}
         salespeople={salespeople}
+        isManager={canAccess}
+        fieldRegistry={OLD_LEAD_FILTER_FIELD_REGISTRY}
+        defaultState={DEFAULT_LEAD_LIST_STATE}
+        hideSlaDateRanges
+        idPrefix="old"
       />
 
       {isLoading && <Skeleton className="h-64 w-full" />}

@@ -55,6 +55,8 @@ export interface CalendarEvent {
   draggable?: boolean;
   /** Rich fields for full-width card rendering (visit calendar). */
   cardDetails?: CalendarEventCardDetails;
+  /** Visit status for calendar action buttons. */
+  visitStatus?: 'scheduled' | 'attended' | 'failed';
 }
 
 /** A selectable option inside a filter dropdown. */

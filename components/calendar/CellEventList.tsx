@@ -3,6 +3,7 @@
  * Visit cards use fill layout when there is exactly one event in the slot.
  */
 import { EventChip } from './EventChip';
+import { cn } from '@/lib/utils';
 import type { CalendarEvent, CalendarEventStyle } from './types';
 
 interface CellEventListProps {
@@ -12,6 +13,7 @@ interface CellEventListProps {
   onEventClick: (event: CalendarEvent) => void;
   onDragStart: (event: CalendarEvent) => void;
   onDragEnd: () => void;
+  renderEventActions?: (event: CalendarEvent) => React.ReactNode;
 }
 
 /**
@@ -26,23 +28,26 @@ export function CellEventList({
   onEventClick,
   onDragStart,
   onDragEnd,
+  renderEventActions,
 }: CellEventListProps) {
-  const useFill = eventStyle === 'card' && cellEvents.length === 1;
+  const useFill = eventStyle === 'card';
 
   return (
     <>
       {cellEvents.map((event) => (
-        <EventChip
-          key={event.id}
-          event={event}
-          locale={locale}
-          style={eventStyle}
-          size={eventStyle === 'chip' ? 'block' : undefined}
-          fill={useFill}
-          onClick={onEventClick}
-          onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
-        />
+        <div key={event.id} className={cn(useFill && 'flex min-h-0 flex-1 flex-col')}>
+          <EventChip
+            event={event}
+            locale={locale}
+            style={eventStyle}
+            size={eventStyle === 'chip' ? 'block' : undefined}
+            fill={useFill}
+            onClick={onEventClick}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            renderEventActions={renderEventActions}
+          />
+        </div>
       ))}
     </>
   );

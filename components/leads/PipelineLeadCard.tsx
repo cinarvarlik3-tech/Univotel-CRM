@@ -64,7 +64,7 @@ const TAG_CLS = 'px-1.5 py-px text-[9px] leading-tight rounded-full';
 
 /**
  * Renders a lead card for the kanban pipeline board.
- * In compact mode only name + SLA dot + days are shown to fit all columns on screen.
+ * In compact mode only name + days are shown to fit all columns on screen.
  */
 export function PipelineLeadCard({
   lead,
@@ -74,7 +74,6 @@ export function PipelineLeadCard({
   onClick,
 }: PipelineLeadCardProps) {
   const { locale, t } = useTranslation();
-  const isBreached = lead.sla_status === 'breached';
   const days = daysSince(lead.created_at);
   const assignee = assigneeName(lead);
   const contact = displayLeadContactIdentifier(lead);
@@ -103,7 +102,6 @@ export function PipelineLeadCard({
           isSelected
             ? 'border-brand-blue ring-1 ring-brand-blue'
             : 'border-border-default hover:border-border-strong',
-          isBreached && !isSelected && 'border-l-2 border-l-brand-red',
         )}
       >
         <div className="flex items-center justify-between gap-1">
@@ -122,7 +120,6 @@ export function PipelineLeadCard({
             )}
           </span>
           <span className="flex shrink-0 items-center gap-0.5">
-            {isBreached && <span className="size-1 rounded-full bg-brand-red" />}
             <span className="text-[9px] text-text-tertiary">{days}g</span>
           </span>
         </div>
@@ -139,10 +136,8 @@ export function PipelineLeadCard({
         isSelected
           ? 'border-brand-blue ring-1 ring-brand-blue'
           : 'border-border-default hover:border-border-strong',
-        isBreached && !isSelected && 'border-l-2 border-l-brand-red',
       )}
     >
-      {/* Name + SLA dot */}
       <div className="flex items-start justify-between gap-1">
         <span
           className={cn(
@@ -154,7 +149,6 @@ export function PipelineLeadCard({
         </span>
         <div className="flex shrink-0 items-center gap-1">
           {showInactive && <InactiveLeadBadge />}
-          {isBreached && <span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-brand-red" />}
         </div>
       </div>
 
