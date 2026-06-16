@@ -44,6 +44,16 @@ export const FUNNEL_STATUSES = [
   'lost',
 ] as const;
 
+/** Stage transitions requiring purchased_room capture in funnel / visit flows. */
+export function purchasedRoomAdvanceMode(
+  fromStatus: string,
+  toStatus: string,
+): 'required' | 'confirm' | null {
+  if (toStatus === 'kapora-alindi') return 'required';
+  if (fromStatus === 'kapora-alindi' && toStatus === 'sozlesme-imzalandi') return 'confirm';
+  return null;
+}
+
 /** Terminal "lost" funnel status set via Chatwoot kayip_nedeni custom attribute. */
 export const LOST_FUNNEL_STATUS = 'lost' as const;
 

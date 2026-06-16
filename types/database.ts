@@ -598,7 +598,9 @@ export type Database = {
           move_in: string | null;
           nationality: string | null;
           parent_name: string | null;
+          placement_note: string | null;
           preferred_district: string | null;
+          purchased_room: string | null;
           rec_hotel: Json | null;
           room_category: string | null;
           room_type: string[];
@@ -623,7 +625,9 @@ export type Database = {
           move_in?: string | null;
           nationality?: string | null;
           parent_name?: string | null;
+          placement_note?: string | null;
           preferred_district?: string | null;
+          purchased_room?: string | null;
           rec_hotel?: Json | null;
           room_category?: string | null;
           room_type?: string[];
@@ -648,7 +652,9 @@ export type Database = {
           move_in?: string | null;
           nationality?: string | null;
           parent_name?: string | null;
+          placement_note?: string | null;
           preferred_district?: string | null;
+          purchased_room?: string | null;
           rec_hotel?: Json | null;
           room_category?: string | null;
           room_type?: string[];
@@ -672,6 +678,13 @@ export type Database = {
             isOneToOne: true;
             referencedRelation: 'leads';
             referencedColumns: ['uuid'];
+          },
+          {
+            foreignKeyName: 'lead_details_purchased_room_fkey';
+            columns: ['purchased_room'];
+            isOneToOne: false;
+            referencedRelation: 'room_types';
+            referencedColumns: ['id'];
           },
         ];
       };
@@ -741,6 +754,139 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: 'leads';
             referencedColumns: ['uuid'];
+          },
+        ];
+      };
+      lead_pins: {
+        Row: {
+          agent_id: string;
+          created_at: string;
+          lead_uuid: string;
+        };
+        Insert: {
+          agent_id: string;
+          created_at?: string;
+          lead_uuid: string;
+        };
+        Update: {
+          agent_id?: string;
+          created_at?: string;
+          lead_uuid?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'lead_pins_agent_id_fkey';
+            columns: ['agent_id'];
+            isOneToOne: false;
+            referencedRelation: 'mv_agent_performance';
+            referencedColumns: ['salesperson_id'];
+          },
+          {
+            foreignKeyName: 'lead_pins_agent_id_fkey';
+            columns: ['agent_id'];
+            isOneToOne: false;
+            referencedRelation: 'salespeople';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'lead_pins_lead_uuid_fkey';
+            columns: ['lead_uuid'];
+            isOneToOne: false;
+            referencedRelation: 'active_leads';
+            referencedColumns: ['uuid'];
+          },
+          {
+            foreignKeyName: 'lead_pins_lead_uuid_fkey';
+            columns: ['lead_uuid'];
+            isOneToOne: false;
+            referencedRelation: 'leads';
+            referencedColumns: ['uuid'];
+          },
+        ];
+      };
+      lead_rooms: {
+        Row: {
+          created_at: string;
+          id: string;
+          lead_id: string;
+          placed_at: string;
+          placed_by: string | null;
+          room_id: string;
+          vacate_reason: string | null;
+          vacated_at: string | null;
+          vacated_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          lead_id: string;
+          placed_at?: string;
+          placed_by?: string | null;
+          room_id: string;
+          vacate_reason?: string | null;
+          vacated_at?: string | null;
+          vacated_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          lead_id?: string;
+          placed_at?: string;
+          placed_by?: string | null;
+          room_id?: string;
+          vacate_reason?: string | null;
+          vacated_at?: string | null;
+          vacated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'lead_rooms_lead_id_fkey';
+            columns: ['lead_id'];
+            isOneToOne: false;
+            referencedRelation: 'active_leads';
+            referencedColumns: ['uuid'];
+          },
+          {
+            foreignKeyName: 'lead_rooms_lead_id_fkey';
+            columns: ['lead_id'];
+            isOneToOne: false;
+            referencedRelation: 'leads';
+            referencedColumns: ['uuid'];
+          },
+          {
+            foreignKeyName: 'lead_rooms_placed_by_fkey';
+            columns: ['placed_by'];
+            isOneToOne: false;
+            referencedRelation: 'mv_agent_performance';
+            referencedColumns: ['salesperson_id'];
+          },
+          {
+            foreignKeyName: 'lead_rooms_placed_by_fkey';
+            columns: ['placed_by'];
+            isOneToOne: false;
+            referencedRelation: 'salespeople';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'lead_rooms_room_id_fkey';
+            columns: ['room_id'];
+            isOneToOne: false;
+            referencedRelation: 'rooms';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'lead_rooms_vacated_by_fkey';
+            columns: ['vacated_by'];
+            isOneToOne: false;
+            referencedRelation: 'mv_agent_performance';
+            referencedColumns: ['salesperson_id'];
+          },
+          {
+            foreignKeyName: 'lead_rooms_vacated_by_fkey';
+            columns: ['vacated_by'];
+            isOneToOne: false;
+            referencedRelation: 'salespeople';
+            referencedColumns: ['id'];
           },
         ];
       };
@@ -1432,6 +1578,53 @@ export type Database = {
           },
         ];
       };
+      recent_searches: {
+        Row: {
+          agent_id: string;
+          lead_uuid: string;
+          searched_at: string;
+        };
+        Insert: {
+          agent_id: string;
+          lead_uuid: string;
+          searched_at?: string;
+        };
+        Update: {
+          agent_id?: string;
+          lead_uuid?: string;
+          searched_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'recent_searches_agent_id_fkey';
+            columns: ['agent_id'];
+            isOneToOne: false;
+            referencedRelation: 'mv_agent_performance';
+            referencedColumns: ['salesperson_id'];
+          },
+          {
+            foreignKeyName: 'recent_searches_agent_id_fkey';
+            columns: ['agent_id'];
+            isOneToOne: false;
+            referencedRelation: 'salespeople';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'recent_searches_lead_uuid_fkey';
+            columns: ['lead_uuid'];
+            isOneToOne: false;
+            referencedRelation: 'active_leads';
+            referencedColumns: ['uuid'];
+          },
+          {
+            foreignKeyName: 'recent_searches_lead_uuid_fkey';
+            columns: ['lead_uuid'];
+            isOneToOne: false;
+            referencedRelation: 'leads';
+            referencedColumns: ['uuid'];
+          },
+        ];
+      };
       ref_sessions: {
         Row: {
           created_at: string;
@@ -1465,6 +1658,92 @@ export type Database = {
         };
         Relationships: [];
       };
+      room_types: {
+        Row: {
+          capacity: number;
+          created_at: string;
+          hotel_id: string;
+          id: string;
+          is_active: boolean;
+          name: string;
+          size_m2: number | null;
+        };
+        Insert: {
+          capacity: number;
+          created_at?: string;
+          hotel_id: string;
+          id: string;
+          is_active?: boolean;
+          name: string;
+          size_m2?: number | null;
+        };
+        Update: {
+          capacity?: number;
+          created_at?: string;
+          hotel_id?: string;
+          id?: string;
+          is_active?: boolean;
+          name?: string;
+          size_m2?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'room_types_hotel_id_fkey';
+            columns: ['hotel_id'];
+            isOneToOne: false;
+            referencedRelation: 'properties';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      rooms: {
+        Row: {
+          created_at: string;
+          floor: number;
+          id: string;
+          property_id: string;
+          room_number: string;
+          room_position: Database['public']['Enums']['room_position'] | null;
+          room_type_id: string;
+          size: number | null;
+        };
+        Insert: {
+          created_at?: string;
+          floor: number;
+          id?: string;
+          property_id: string;
+          room_number: string;
+          room_position?: Database['public']['Enums']['room_position'] | null;
+          room_type_id: string;
+          size?: number | null;
+        };
+        Update: {
+          created_at?: string;
+          floor?: number;
+          id?: string;
+          property_id?: string;
+          room_number?: string;
+          room_position?: Database['public']['Enums']['room_position'] | null;
+          room_type_id?: string;
+          size?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'rooms_property_id_fkey';
+            columns: ['property_id'];
+            isOneToOne: false;
+            referencedRelation: 'properties';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'rooms_room_type_id_fkey';
+            columns: ['room_type_id'];
+            isOneToOne: false;
+            referencedRelation: 'room_types';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       salespeople: {
         Row: {
           active_lead_count: number;
@@ -1474,6 +1753,7 @@ export type Database = {
           created_at: string;
           email: string;
           full_name: string;
+          home_property_id: string | null;
           id: string;
           is_active: boolean;
           languages: string[];
@@ -1494,6 +1774,7 @@ export type Database = {
           created_at?: string;
           email: string;
           full_name: string;
+          home_property_id?: string | null;
           id?: string;
           is_active?: boolean;
           languages?: string[];
@@ -1514,6 +1795,7 @@ export type Database = {
           created_at?: string;
           email?: string;
           full_name?: string;
+          home_property_id?: string | null;
           id?: string;
           is_active?: boolean;
           languages?: string[];
@@ -1526,7 +1808,15 @@ export type Database = {
           shift_start?: string;
           telegram_chat_id?: string | null;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'salespeople_home_property_id_fkey';
+            columns: ['home_property_id'];
+            isOneToOne: false;
+            referencedRelation: 'properties';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       tasks: {
         Row: {
@@ -1538,6 +1828,7 @@ export type Database = {
           due_when: string;
           id: string;
           is_auto_created: boolean;
+          is_cancelled: boolean;
           is_completed: boolean;
           is_late: boolean;
           lead_uuid: string;
@@ -1553,6 +1844,7 @@ export type Database = {
           due_when: string;
           id?: string;
           is_auto_created?: boolean;
+          is_cancelled?: boolean;
           is_completed?: boolean;
           is_late?: boolean;
           lead_uuid: string;
@@ -1568,6 +1860,7 @@ export type Database = {
           due_when?: string;
           id?: string;
           is_auto_created?: boolean;
+          is_cancelled?: boolean;
           is_completed?: boolean;
           is_late?: boolean;
           lead_uuid?: string;
@@ -2025,17 +2318,61 @@ export type Database = {
         Returns: undefined;
       };
       get_cron_setting: { Args: { p_key: string }; Returns: string };
+      get_loss_reason_breakdown: {
+        Args: { date_from: string; date_to: string; p_agent_id?: string };
+        Returns: {
+          cnt: number;
+          loss_reason: string;
+          salesperson_id: string;
+        }[];
+      };
+      get_team_panel_metrics: {
+        Args: { date_from: string; date_to: string };
+        Returns: {
+          active_lead_count: number;
+          answered_call_count: number;
+          call_count: number;
+          conv_downpayment_to_signed: number;
+          conv_visit_to_downpayment: number;
+          conv_yeni_to_downpayment: number;
+          conv_yeni_to_signed: number;
+          downpayment_count: number;
+          full_name: string;
+          message_count: number;
+          outbound_connect_rate: number;
+          salesperson_id: string;
+          scheduled_visit_count: number;
+          signed_count: number;
+          stale_at_yeni_count: number;
+        }[];
+      };
       get_user_role: { Args: never; Returns: string };
       increment_active_lead_count: {
         Args: { agent_id: string };
         Returns: undefined;
       };
       is_manager_or_superadmin: { Args: never; Returns: boolean };
+      is_pms_writer: { Args: never; Returns: boolean };
       is_superadmin: { Args: never; Returns: boolean };
       search_archived_leads_ids: {
         Args: { search_term: string };
         Returns: {
           lead_uuid: string;
+        }[];
+      };
+      search_leads_global: {
+        Args: { q: string; result_limit?: number };
+        Returns: {
+          assigned_to: string;
+          assignee_name: string;
+          display_name: string;
+          funnel_status: string;
+          is_inactive: boolean;
+          last_contact_at: string;
+          lead_name: string;
+          lead_phone: string;
+          message_from: string;
+          uuid: string;
         }[];
       };
       search_leads_ids: {
@@ -2060,7 +2397,7 @@ export type Database = {
       validate_dorm_awaiting: { Args: { arr: string[] }; Returns: boolean };
     };
     Enums: {
-      [_ in never]: never;
+      room_position: 'corner' | 'middle';
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -2185,6 +2522,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      room_position: ['corner', 'middle'],
+    },
   },
 } as const;

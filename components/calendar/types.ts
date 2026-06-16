@@ -26,6 +26,10 @@ export interface CalendarEventCardDetails {
   phone?: string | null;
   /** Room preference (e.g. joined room_type values). */
   roomPreference?: string | null;
+  /** Visit property hotel name. */
+  propertyName?: string | null;
+  /** Localized student gender label. */
+  genderLabel?: string | null;
 }
 
 /** How events are rendered inside grid cells. */

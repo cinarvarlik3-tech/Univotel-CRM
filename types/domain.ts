@@ -77,6 +77,11 @@ export interface LeadDetailRow {
   school_shortname?: string | null;
   updated_at?: string;
   actual_move_in_date?: string | null;
+  purchased_room?: string | null;
+  placement_note?: string | null;
+  purchased_room_label?: string | null;
+  purchased_property_id?: string | null;
+  has_active_placement?: boolean;
 }
 
 /** Reference row from the universities table — drives the university combobox. */
@@ -395,4 +400,43 @@ export interface AnalyticsPayload {
     total_count: number | null;
     breach_rate: number | null;
   }>;
+}
+
+/** PMS room occupant line on a room card. */
+export interface PmsRoomOccupant {
+  leadRoomId: string;
+  leadUuid: string;
+  leadName: string | null;
+  moveIn: string | null;
+  actualMoveIn: string | null;
+}
+
+/** PMS room with computed occupancy. */
+export interface PmsRoomWithOccupancy {
+  id: string;
+  propertyId: string;
+  roomNumber: string;
+  floor: number;
+  roomPosition: string | null;
+  size: number | null;
+  roomTypeId: string;
+  roomTypeName: string;
+  capacity: number;
+  occupantCount: number;
+  isFull: boolean;
+  occupants: PmsRoomOccupant[];
+}
+
+/** Unplaced lead in the PMS worklist. */
+export interface PmsUnplacedLead {
+  leadUuid: string;
+  leadName: string | null;
+  funnelStatus: string;
+  studentGender: string | null;
+  schoolShortname: string | null;
+  purchasedRoomTypeId: string;
+  purchasedRoomTypeName: string;
+  purchasedPropertyId: string;
+  purchasedPropertyName: string;
+  placementNote: string | null;
 }

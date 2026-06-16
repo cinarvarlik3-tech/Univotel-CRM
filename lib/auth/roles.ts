@@ -3,7 +3,7 @@
  */
 
 /** Valid salespeople.role values. */
-export type UserRole = 'salesperson' | 'manager' | 'superadmin';
+export type UserRole = 'salesperson' | 'operator' | 'manager' | 'superadmin';
 
 /**
  * Returns true for manager and superadmin roles.
@@ -39,8 +39,35 @@ export function canAccessDniAdmin(role: string | undefined | null): boolean {
  * @returns Typed role or null when unknown.
  */
 export function parseUserRole(role: string): UserRole | null {
-  if (role === 'salesperson' || role === 'manager' || role === 'superadmin') {
+  if (
+    role === 'salesperson' ||
+    role === 'operator' ||
+    role === 'manager' ||
+    role === 'superadmin'
+  ) {
     return role;
   }
   return null;
+}
+
+/**
+ * Returns true when role may write PMS data (place, vacate, notes, room admin).
+ * Operator, manager, and superadmin inherit PMS write (P18).
+ */
+export function canWritePms(role: string | undefined | null): boolean {
+  return role === 'operator' || isManagerOrAbove(role);
+}
+
+/** Alias for canWritePms — operator, manager, or superadmin. */
+export function isOperatorOrAbove(role: string | undefined | null): boolean {
+  return canWritePms(role);
+}
+
+/**
+ * Session guard helper — throws if role lacks PMS write access.
+ */
+export function requireOperatorWrite(role: string | undefined | null): void {
+  if (!canWritePms(role)) {
+    throw new Error('PMS_WRITE_FORBIDDEN');
+  }
 }

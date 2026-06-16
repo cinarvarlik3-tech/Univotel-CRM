@@ -35,7 +35,13 @@ interface LeadDetailPanelProps {
  * Renders the lead detail slide-over with 3-tab structure.
  * @param props - Lead ID, open state, and role flags.
  */
-export function LeadDetailPanel({ leadId, open, onClose, isManager }: LeadDetailPanelProps) {
+export function LeadDetailPanel({
+  leadId,
+  open,
+  onClose,
+  isManager,
+  salespeople,
+}: LeadDetailPanelProps) {
   const {
     lead,
     details,
@@ -195,7 +201,7 @@ export function LeadDetailPanel({ leadId, open, onClose, isManager }: LeadDetail
                         value="gecmis"
                         className="mt-0 min-h-0 flex-1 overflow-y-auto px-4 py-3 data-[state=inactive]:hidden"
                       >
-                        <ActivityTimeline leadId={leadId} />
+                        <ActivityTimeline leadId={leadId} salespeople={salespeople} />
                       </TabsContent>
                     </Tabs>
                   </div>
@@ -248,7 +254,9 @@ export function LeadDetailPanel({ leadId, open, onClose, isManager }: LeadDetail
                     value="gecmis"
                     className="mt-0 min-h-0 flex-1 overflow-y-auto px-5 py-4 data-[state=inactive]:hidden"
                   >
-                    {tab === 'gecmis' && <ActivityTimeline leadId={leadId} />}
+                    {tab === 'gecmis' && (
+                      <ActivityTimeline leadId={leadId} salespeople={salespeople} />
+                    )}
                   </TabsContent>
                 </Tabs>
               )}
@@ -257,6 +265,7 @@ export function LeadDetailPanel({ leadId, open, onClose, isManager }: LeadDetail
               <PanelBottomActionBar
                 lead={lead}
                 leadId={leadId}
+                details={details}
                 isManager={isManager}
                 onPrimaryAction={() => setLogContactOpen(true)}
                 onReload={safeReload}

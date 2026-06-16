@@ -11,6 +11,7 @@ import {
   IconArchive,
   IconBuilding,
   IconCalendar,
+  IconBed,
   IconCalendarEvent,
   IconChartBar,
   IconCheckbox,
@@ -102,6 +103,7 @@ export function Sidebar({
     if (href === '/old-leads') return router.pathname.startsWith('/old-leads');
     if (href === '/deal-awaiting') return router.pathname.startsWith('/deal-awaiting');
     if (href === '/visits') return router.pathname === '/visits';
+    if (href === '/pms') return router.pathname.startsWith('/pms');
     if (href === '/move-in') return router.pathname === '/move-in';
     if (EXACT_LEADS_SUBPAGES.has(href)) return router.pathname === href;
     if (href === '/leads') {
@@ -254,6 +256,20 @@ export function Sidebar({
         {/* Bottom: settings + user info */}
         <div className={cn('mt-auto pb-3', isOpen ? 'px-2' : 'px-1.5')}>
           <Separator className="mb-2 bg-[var(--sidebar-icon-hover-bg)]" />
+          <Link
+            href="/pms"
+            className={cn(
+              'flex h-9 items-center rounded-lg text-[13px] font-medium transition-colors',
+              isOpen ? 'gap-2.5 px-2' : 'justify-center px-0',
+              isActive('/pms')
+                ? 'bg-[var(--sidebar-icon-active-bg)] text-[var(--sidebar-text)]'
+                : 'text-[var(--sidebar-icon-idle)] hover:bg-[var(--sidebar-icon-hover-bg)] hover:text-[var(--sidebar-text)]',
+            )}
+            title={!isOpen ? t('nav.pms') : undefined}
+          >
+            <IconBed size={18} className="shrink-0" />
+            {isOpen && <span className="truncate">{t('nav.pms')}</span>}
+          </Link>
           <Link
             href="/settings"
             className={cn(

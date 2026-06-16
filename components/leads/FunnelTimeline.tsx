@@ -11,6 +11,7 @@ import {
 } from '@tabler/icons-react';
 import { cn } from '@/lib/utils';
 import { formatEnumLabel } from '@/lib/i18n/enum-labels';
+import { formatDateTime } from '@/lib/i18n/format-date';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TimelineEntry } from '@/pages/api/leads/[id]/funnel-view';
 import type { SalespersonOption } from '@/types/domain';
@@ -18,17 +19,6 @@ import type { SalespersonOption } from '@/types/domain';
 interface FunnelTimelineProps {
   timeline: TimelineEntry[];
   salespeople?: SalespersonOption[];
-}
-
-function formatTimestamp(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 function getSalespersonName(
@@ -43,6 +33,7 @@ function getSalespersonName(
  * Incoming or outgoing chat message bubble.
  */
 function MessageEntry({ entry }: { entry: TimelineEntry }) {
+  const { locale } = useTranslation();
   const isOutgoing = entry.data.message_type === 'outgoing';
   const content = entry.data.content as string | null;
   const senderName = entry.data.sender_name as string | null;
@@ -69,7 +60,7 @@ function MessageEntry({ entry }: { entry: TimelineEntry }) {
         )}
         <p className="line-clamp-2 break-words">{content ?? '—'}</p>
         <p className={cn('mt-1 text-[10px]', isOutgoing ? 'text-blue-200' : 'text-text-tertiary')}>
-          {formatTimestamp(entry.created_at)}
+          {formatDateTime(entry.created_at, locale)}
         </p>
       </div>
     </div>
@@ -80,13 +71,14 @@ function MessageEntry({ entry }: { entry: TimelineEntry }) {
  * CDR phone call pill.
  */
 function CallEntry({ entry }: { entry: TimelineEntry }) {
+  const { locale } = useTranslation();
   const notes = entry.data.notes as string | null;
   return (
     <div className="flex items-center gap-2 rounded-full border border-border-default bg-surface-card px-3 py-1.5 text-xs text-text-secondary">
       <IconPhone className="size-3.5 shrink-0 text-text-tertiary" />
       <span className="flex-1 truncate">{notes ?? 'Çağrı kaydı'}</span>
       <span className="shrink-0 text-[10px] text-text-tertiary">
-        {formatTimestamp(entry.created_at)}
+        {formatDateTime(entry.created_at, locale)}
       </span>
     </div>
   );
@@ -96,11 +88,12 @@ function CallEntry({ entry }: { entry: TimelineEntry }) {
  * Conversation start divider.
  */
 function MessageStartEntry({ entry }: { entry: TimelineEntry }) {
+  const { locale } = useTranslation();
   return (
     <div className="flex items-center gap-2">
       <div className="h-px flex-1 bg-border-default" />
       <span className="text-[10px] text-text-tertiary">
-        Yeni konuşma başladı · {formatTimestamp(entry.created_at)}
+        Yeni konuşma başladı · {formatDateTime(entry.created_at, locale)}
       </span>
       <div className="h-px flex-1 bg-border-default" />
     </div>
@@ -145,7 +138,7 @@ function TaskCreatedEntry({
         {notes && <p className="mt-0.5 truncate text-text-tertiary">{notes}</p>}
       </div>
       <span className="shrink-0 text-[10px] text-text-tertiary">
-        {formatTimestamp(entry.created_at)}
+        {formatDateTime(entry.created_at, locale)}
       </span>
     </div>
   );
@@ -165,7 +158,7 @@ function TaskCompletedEntry({ entry }: { entry: TimelineEntry }) {
       <span className="flex-1">
         {label} · <span className="text-emerald-600">Tamamlandı</span>
       </span>
-      <span className="shrink-0 text-[10px]">{formatTimestamp(entry.created_at)}</span>
+      <span className="shrink-0 text-[10px]">{formatDateTime(entry.created_at, locale)}</span>
     </div>
   );
 }
@@ -201,7 +194,7 @@ function StatusChangeEntry({
         )}
       </span>
       <span className="shrink-0 text-[10px] text-text-tertiary">
-        {formatTimestamp(entry.created_at)}
+        {formatDateTime(entry.created_at, locale)}
       </span>
     </div>
   );
@@ -224,7 +217,7 @@ function HistoryEntry({ entry }: { entry: TimelineEntry }) {
         {notes && <p className="mt-0.5 truncate text-text-tertiary">{notes}</p>}
       </div>
       <span className="shrink-0 text-[10px] text-text-tertiary">
-        {formatTimestamp(entry.created_at)}
+        {formatDateTime(entry.created_at, locale)}
       </span>
     </div>
   );

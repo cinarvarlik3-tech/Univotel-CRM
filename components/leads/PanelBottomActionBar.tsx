@@ -8,10 +8,11 @@ import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAuth } from '@/hooks/useAuth';
 import { isManagerOrAbove } from '@/lib/auth/roles';
-import { FUNNEL_STATUSES } from '@/lib/constants';
+import { FUNNEL_STATUSES, purchasedRoomAdvanceMode } from '@/lib/constants';
 import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { cn } from '@/lib/utils';
-import type { LeadWithDetails } from '@/types/domain';
+import { PurchasedRoomDialog } from '@/components/leads/PurchasedRoomDialog';
+import type { LeadDetailRow, LeadWithDetails } from '@/types/domain';
 
 /** D5 primary next-action label per stage. */
 function primaryActionLabel(funnel_status: string): string {
@@ -42,6 +43,7 @@ function primaryActionLabel(funnel_status: string): string {
 interface PanelBottomActionBarProps {
   lead: LeadWithDetails;
   leadId: string;
+  details: LeadDetailRow | null;
   isManager: boolean;
   onPrimaryAction: () => void;
   onReload: () => void;
@@ -55,6 +57,7 @@ interface PanelBottomActionBarProps {
 export function PanelBottomActionBar({
   lead,
   leadId,
+  details,
   isManager,
   onPrimaryAction,
   onReload,
@@ -68,6 +71,8 @@ export function PanelBottomActionBar({
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [archiveConfirm, setArchiveConfirm] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [roomDialogOpen, setRoomDialogOpen] = useState(false);
+  const [pendingStage, setPendingStage] = useState<string | null>(null);
 
   const isTerminal = lead.funnel_status === 'lost' || lead.funnel_status === 'sozlesme-imzalandi';
   const canManage = isManager || isManagerOrAbove(user?.role ?? '');
@@ -90,23 +95,41 @@ export function PanelBottomActionBar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [stagePickerOpen]);
 
-  async function handleStageSelect(funnelStatus: string) {
-    if (advanceSaving || funnelStatus === lead.funnel_status) return;
-    setAdvanceSaving(true);
-    setActionError(null);
+  async function advanceStage(funnelStatus: string, purchasedRoom?: string) {
     const res = await fetch(`/api/leads/${leadId}/advance-stage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ funnel_status: funnelStatus }),
+      body: JSON.stringify({
+        funnel_status: funnelStatus,
+        purchased_room: purchasedRoom,
+      }),
     });
-    setAdvanceSaving(false);
     if (res.ok) {
       setStagePickerOpen(false);
+      setRoomDialogOpen(false);
+      setPendingStage(null);
       onReload();
     } else {
       const json = await res.json().catch(() => ({}));
       setActionError(json.error ?? 'İşlem başarısız');
     }
+  }
+
+  async function handleStageSelect(funnelStatus: string) {
+    if (advanceSaving || funnelStatus === lead.funnel_status) return;
+
+    const roomMode = purchasedRoomAdvanceMode(lead.funnel_status, funnelStatus);
+    if (roomMode) {
+      setPendingStage(funnelStatus);
+      setRoomDialogOpen(true);
+      setStagePickerOpen(false);
+      return;
+    }
+
+    setAdvanceSaving(true);
+    setActionError(null);
+    await advanceStage(funnelStatus);
+    setAdvanceSaving(false);
   }
 
   async function handleDelete() {
@@ -132,127 +155,152 @@ export function PanelBottomActionBar({
   }
 
   return (
-    <div className="shrink-0 border-t border-border-default bg-surface-primary px-4 py-3">
-      {actionError && <p className="mb-2 text-xs text-brand-red">{actionError}</p>}
+    <>
+      <div className="shrink-0 border-t border-border-default bg-surface-primary px-4 py-3">
+        {actionError && <p className="mb-2 text-xs text-brand-red">{actionError}</p>}
 
-      {/* Stage change — tap to open list, pick to advance, click outside to close */}
-      {!isTerminal && (
-        <div ref={stagePickerRef} className="relative mb-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="w-full justify-between"
-            disabled={advanceSaving}
-            onClick={() => setStagePickerOpen((open) => !open)}
-          >
-            <span>{currentStageLabel}</span>
-            <span className="text-[11px] font-normal text-text-tertiary">
-              {advanceSaving ? t('common.saving') : 'Aşamayı değiştir'}
-            </span>
-          </Button>
+        {/* Stage change — tap to open list, pick to advance, click outside to close */}
+        {!isTerminal && (
+          <div ref={stagePickerRef} className="relative mb-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="w-full justify-between"
+              disabled={advanceSaving}
+              onClick={() => setStagePickerOpen((open) => !open)}
+            >
+              <span>{currentStageLabel}</span>
+              <span className="text-[11px] font-normal text-text-tertiary">
+                {advanceSaving ? t('common.saving') : 'Aşamayı değiştir'}
+              </span>
+            </Button>
 
-          {stagePickerOpen && (
-            <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-56 overflow-y-auto rounded-lg border border-border-default bg-surface-card py-1 shadow-lg">
-              {stageOptions.map((opt) => (
-                <button
-                  key={opt.value}
+            {stagePickerOpen && (
+              <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-56 overflow-y-auto rounded-lg border border-border-default bg-surface-card py-1 shadow-lg">
+                {stageOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    disabled={advanceSaving}
+                    className={cn(
+                      'flex w-full px-3 py-2 text-left text-sm hover:bg-surface-secondary',
+                      advanceSaving && 'opacity-50',
+                    )}
+                    onClick={() => void handleStageSelect(opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Primary stage-action */}
+        {!isTerminal && (
+          <div className="mb-2">
+            <Button type="button" size="sm" className="w-full" onClick={onPrimaryAction}>
+              {primaryActionLabel(lead.funnel_status)}
+            </Button>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          {canManage && (
+            <>
+              {!archiveConfirm ? (
+                <Button
                   type="button"
-                  disabled={advanceSaving}
-                  className={cn(
-                    'flex w-full px-3 py-2 text-left text-sm hover:bg-surface-secondary',
-                    advanceSaving && 'opacity-50',
-                  )}
-                  onClick={() => void handleStageSelect(opt.value)}
+                  size="sm"
+                  variant="ghost"
+                  className="text-text-secondary"
+                  onClick={() => setArchiveConfirm(true)}
                 >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+                  Arşivle
+                </Button>
+              ) : (
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    className="h-7 text-xs"
+                    onClick={handleArchive}
+                  >
+                    Onayla
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs"
+                    onClick={() => setArchiveConfirm(false)}
+                  >
+                    İptal
+                  </Button>
+                </div>
+              )}
+
+              {!deleteConfirm ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="text-brand-red"
+                  onClick={() => setDeleteConfirm(true)}
+                >
+                  Sil
+                </Button>
+              ) : (
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    className="h-7 text-xs"
+                    onClick={handleDelete}
+                  >
+                    Kalıcı sil
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs"
+                    onClick={() => setDeleteConfirm(false)}
+                  >
+                    İptal
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
-      )}
-
-      {/* Primary stage-action */}
-      {!isTerminal && (
-        <div className="mb-2">
-          <Button type="button" size="sm" className="w-full" onClick={onPrimaryAction}>
-            {primaryActionLabel(lead.funnel_status)}
-          </Button>
-        </div>
-      )}
-
-      <div className="flex flex-wrap gap-2">
-        {canManage && (
-          <>
-            {!archiveConfirm ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="text-text-secondary"
-                onClick={() => setArchiveConfirm(true)}
-              >
-                Arşivle
-              </Button>
-            ) : (
-              <div className="flex gap-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="destructive"
-                  className="h-7 text-xs"
-                  onClick={handleArchive}
-                >
-                  Onayla
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs"
-                  onClick={() => setArchiveConfirm(false)}
-                >
-                  İptal
-                </Button>
-              </div>
-            )}
-
-            {!deleteConfirm ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="text-brand-red"
-                onClick={() => setDeleteConfirm(true)}
-              >
-                Sil
-              </Button>
-            ) : (
-              <div className="flex gap-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="destructive"
-                  className="h-7 text-xs"
-                  onClick={handleDelete}
-                >
-                  Kalıcı sil
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs"
-                  onClick={() => setDeleteConfirm(false)}
-                >
-                  İptal
-                </Button>
-              </div>
-            )}
-          </>
-        )}
       </div>
-    </div>
+
+      <PurchasedRoomDialog
+        open={roomDialogOpen}
+        onOpenChange={(open) => {
+          setRoomDialogOpen(open);
+          if (!open) setPendingStage(null);
+        }}
+        leadName={lead.lead_name ?? lead.display_name}
+        mode={
+          pendingStage && purchasedRoomAdvanceMode(lead.funnel_status, pendingStage) === 'confirm'
+            ? 'confirm'
+            : 'required'
+        }
+        initialPropertyId={details?.purchased_property_id}
+        initialRoomTypeId={details?.purchased_room}
+        onConfirm={async (roomTypeId) => {
+          if (!pendingStage) return;
+          setAdvanceSaving(true);
+          setActionError(null);
+          await advanceStage(pendingStage, roomTypeId);
+          setAdvanceSaving(false);
+        }}
+      />
+    </>
   );
 }

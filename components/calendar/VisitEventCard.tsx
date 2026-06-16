@@ -1,12 +1,13 @@
 /**
  * Full-width rectangular visit card for calendar grid cells.
- * Shows lead name, room preference, phone, and always-visible action buttons.
+ * Shows lead name, property/gender pills, room preference, phone, and action buttons.
  */
 import { type ReactNode } from 'react';
-import { format } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/hooks/useTranslation';
-import { accentChipClasses, dateFnsLocale } from './calendar-utils';
+import { formatTimeOnly } from '@/lib/i18n/format-date';
+import { accentChipClasses } from './calendar-utils';
 import type { CalendarEvent } from './types';
 
 interface VisitEventCardProps {
@@ -27,20 +28,22 @@ interface VisitEventCardProps {
  */
 export function VisitEventCard({
   event,
-  locale,
+  locale: _locale,
   fill = false,
   onClick,
   onDragStart,
   onDragEnd,
   renderEventActions,
 }: VisitEventCardProps) {
-  const { t } = useTranslation();
-  const fnsLocale = dateFnsLocale(locale);
+  const { t, locale: appLocale } = useTranslation();
   const draggable = Boolean(event.draggable && onDragStart);
-  const timeLabel = event.allDay ? null : format(event.start, 'HH:mm', { locale: fnsLocale });
+  const timeLabel = event.allDay ? null : formatTimeOnly(event.start, appLocale);
   const phone = event.cardDetails?.phone;
   const room = event.cardDetails?.roomPreference;
+  const propertyName = event.cardDetails?.propertyName;
+  const genderLabel = event.cardDetails?.genderLabel;
   const showActions = Boolean(renderEventActions && event.visitStatus === 'scheduled');
+  const hasPills = Boolean(propertyName || genderLabel);
 
   return (
     <div
@@ -71,6 +74,21 @@ export function VisitEventCard({
             </span>
           )}
         </div>
+
+        {hasPills && (
+          <div className="flex flex-wrap gap-1">
+            {propertyName && (
+              <Badge variant="secondary" className="max-w-full truncate px-1.5 py-0 text-[9px]">
+                {propertyName}
+              </Badge>
+            )}
+            {genderLabel && (
+              <Badge variant="outline" className="px-1.5 py-0 text-[9px]">
+                {genderLabel}
+              </Badge>
+            )}
+          </div>
+        )}
 
         {room && (
           <p className="truncate text-[10px] leading-snug opacity-90">

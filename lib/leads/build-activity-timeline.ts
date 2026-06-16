@@ -52,7 +52,7 @@ export async function buildActivityTimeline(leadUuid: string): Promise<ActivityE
     (client as any)
       .from('tasks')
       .select(
-        'id, task_type, auto_task_type, is_auto_created, is_completed, due_when, completed_at, created_at, notes',
+        'id, task_type, auto_task_type, is_auto_created, is_completed, due_when, completed_at, created_at, notes, created_by, assigned_to',
       )
       .eq('lead_uuid', leadUuid)
       .order('created_at', { ascending: false }),
@@ -72,6 +72,7 @@ export async function buildActivityTimeline(leadUuid: string): Promise<ActivityE
         fromStatus: row.from_status,
         toStatus: row.to_status,
         changedBy: row.changed_by,
+        actorId: row.changed_by,
         source: row.source,
       },
     });
@@ -89,6 +90,7 @@ export async function buildActivityTimeline(leadUuid: string): Promise<ActivityE
         statusChanged: row.status_changed,
         funnelStatusAtTime: row.funnel_status_at_time,
         salespersonId: row.salesperson_id,
+        actorId: row.salesperson_id,
       },
     });
   }
@@ -104,6 +106,7 @@ export async function buildActivityTimeline(leadUuid: string): Promise<ActivityE
         scheduledDate: row.scheduled_date,
         notes: row.notes,
         createdBy: row.created_by,
+        actorId: row.created_by,
       },
     });
   }
@@ -124,6 +127,7 @@ export async function buildActivityTimeline(leadUuid: string): Promise<ActivityE
         isAutoCreated: row.is_auto_created,
         dueWhen: row.due_when,
         notes: row.notes,
+        actorId: row.is_completed ? row.assigned_to : row.created_by,
       },
     });
   }

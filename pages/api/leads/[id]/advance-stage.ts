@@ -7,11 +7,17 @@ import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
 import { FUNNEL_STATUSES, isFunnelAdvanceAllowed } from '@/lib/constants';
+import {
+  purchasedRoomAdvanceMode,
+  resolvePurchasedRoomForAdvance,
+  setPurchasedRoom,
+} from '@/lib/pms/purchased-room';
 import { updateLeadRecord } from '@/lib/leads/update-lead';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 const AdvanceStageSchema = z.object({
   funnel_status: z.enum(FUNNEL_STATUSES),
+  purchased_room: z.string().uuid().optional(),
 });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -52,6 +58,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    const roomMode = purchasedRoomAdvanceMode(existing.funnel_status, parsed.data.funnel_status);
+
+    if (roomMode) {
+      if (parsed.data.purchased_room) {
+        await setPurchasedRoom({ leadId: id, roomTypeId: parsed.data.purchased_room });
+      } else {
+        await resolvePurchasedRoomForAdvance({
+          leadId: id,
+          fromStatus: existing.funnel_status,
+          toStatus: parsed.data.funnel_status,
+        });
+      }
+    }
+
     const result = await updateLeadRecord(
       id,
       { funnel_status: parsed.data.funnel_status },

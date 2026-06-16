@@ -20,11 +20,13 @@ import { useProperties } from '@/hooks/useProperties';
 import { useSalespeople } from '@/hooks/useSalespeople';
 import { useTranslation } from '@/hooks/useTranslation';
 import { isManagerOrAbove } from '@/lib/auth/roles';
+import { formatStudentGender } from '@/lib/ui/format-student-gender';
 
 type VisitStatus = 'scheduled' | 'attended' | 'failed';
 
 interface VisitLeadDetails {
   room_type?: string[] | null;
+  student_gender?: string | null;
 }
 
 interface Visit {
@@ -44,12 +46,16 @@ interface Visit {
   } | null;
 }
 
-/** Extracts joined room_type preferences as a display string. */
-function roomPreferenceOf(lead: Visit['leads']): string | null {
+/** Extracts joined lead_details row from a visit lead join. */
+function leadDetailsOf(lead: Visit['leads']): VisitLeadDetails | null {
   const raw = lead?.lead_details;
   if (!raw) return null;
-  const details = Array.isArray(raw) ? raw[0] : raw;
-  const types = details?.room_type;
+  return Array.isArray(raw) ? (raw[0] ?? null) : raw;
+}
+
+/** Extracts joined room_type preferences as a display string. */
+function roomPreferenceOf(lead: Visit['leads']): string | null {
+  const types = leadDetailsOf(lead)?.room_type;
   if (!types?.length) return null;
   return types.join(', ');
 }
@@ -151,6 +157,11 @@ export default function VisitCalendarPage() {
         cardDetails: {
           phone: visit.leads?.lead_phone ?? null,
           roomPreference: roomPreferenceOf(visit.leads),
+          propertyName: property ?? null,
+          genderLabel: (() => {
+            const gender = leadDetailsOf(visit.leads)?.student_gender;
+            return gender ? formatStudentGender(gender, 'tr') : null;
+          })(),
         },
         visitStatus: visit.status,
       };

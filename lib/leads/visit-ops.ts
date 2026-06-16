@@ -6,6 +6,7 @@
 import { createServiceClient } from '@/lib/supabase/service';
 import { cancelAutoTasksForLead, createAutoTasksForStage } from '@/lib/tasks/auto-tasks';
 import { updateLeadRecord } from '@/lib/leads/update-lead';
+import { setPurchasedRoom } from '@/lib/pms/purchased-room';
 import { writeStageHistory } from '@/lib/leads/write-stage-history';
 
 const PRE_VISIT_STAGES = new Set([
@@ -174,6 +175,7 @@ export async function recordVisitOutcome(opts: {
   visitLeadUuid: string;
   outcome: VisitOutcome;
   lossReason?: string;
+  purchasedRoom?: string;
   resolvedBy: string;
   leadFunnelStatus: string;
   leadAssignedTo: string | null;
@@ -218,6 +220,13 @@ export async function recordVisitOutcome(opts: {
 
   leadUpdates.funnel_status = funnelStatus;
 
+  if (opts.outcome === 'downpayment') {
+    if (!opts.purchasedRoom) {
+      throw new Error('Kapora için oda tipi seçilmelidir');
+    }
+    await setPurchasedRoom({ leadId: opts.visitLeadUuid, roomTypeId: opts.purchasedRoom });
+  }
+
   await updateLeadRecord(opts.visitLeadUuid, leadUpdates, opts.existing, opts.resolvedBy, 'manual');
 
   return updatedVisit as Record<string, unknown>;
@@ -242,7 +251,7 @@ export async function listVisits(opts: {
   let query = (client as any)
     .from('visits')
     .select(
-      '*, leads(uuid, lead_name, lead_phone, funnel_status, assigned_to, lead_details(room_type))',
+      '*, leads(uuid, lead_name, lead_phone, funnel_status, assigned_to, lead_details(room_type, student_gender))',
     )
     .order('scheduled_date', { ascending: true });
 

@@ -1106,20 +1106,21 @@ LIMIT 10;
 
 All times **UTC**. Turkey (TRT) = UTC+3 → 03:00 UTC = 06:00 TRT.
 
-| Job name                      | Schedule (UTC) | Type                                   | What it does                                                             |
-| ----------------------------- | -------------- | -------------------------------------- | ------------------------------------------------------------------------ |
-| `sla_update`                  | `*/5 * * * *`  | SQL                                    | Updates `leads.sla_status` (`on_time` / `breached`; business hours only) |
-| `task_overdue_check`          | `*/5 * * * *`  | SQL                                    | Sets `tasks.is_late = true` where overdue                                |
-| `mv_refresh`                  | `*/5 * * * *`  | SQL                                    | Refreshes 4 materialized views (analytics Overview tab)                  |
-| `sla-alerts`                  | `*/5 * * * *`  | HTTP → `/api/cron/sla-alerts`          | Telegram SLA breach alerts to managers                                   |
-| `task-overdue`                | `*/5 * * * *`  | HTTP → `/api/cron/task-overdue`        | Telegram task alerts to salespeople + manager escalation                 |
-| `campaign-resume`             | `*/5 * * * *`  | HTTP → `/api/cron/campaign-resume`     | Resumes paused campaigns under daily quota                               |
-| `ga4-enrichment`              | `*/5 * * * *`  | HTTP → `/api/cron/ga4-enrichment`      | GA4 Data API retries for `collected_data` (attempts 2–4)                 |
-| `lead-message-notify`         | `* * * * *`    | HTTP → `/api/cron/lead-message-notify` | Telegram inbound message alerts to salespeople                           |
-| `restriction-24h`             | `*/15 * * * *` | HTTP → `/api/cron/restriction-24h`     | Sets `is_24h_restricted` when last inbound message > 24h old             |
-| `campaign_daily_reset`        | `0 0 * * *`    | SQL                                    | Resets `daily_send_count`, unpauses campaigns at midnight UTC            |
-| `nightly-archive`             | `0 3 * * *`    | SQL                                    | Archives up to **100** eligible terminal leads                           |
-| `active_lead_count_reconcile` | `15 3 * * *`   | SQL                                    | Recounts `salespeople.active_lead_count`                                 |
+| Job name                      | Schedule (UTC) | Type                                   | What it does                                                                    |
+| ----------------------------- | -------------- | -------------------------------------- | ------------------------------------------------------------------------------- |
+| `sla_update`                  | `*/5 * * * *`  | SQL                                    | Updates `leads.sla_status` (`on_time` / `breached`; business hours only)        |
+| `task_overdue_check`          | `*/5 * * * *`  | SQL                                    | Sets `tasks.is_late = true` where overdue                                       |
+| `mv_refresh`                  | `*/5 * * * *`  | SQL                                    | Refreshes 4 materialized views (analytics Overview tab)                         |
+| `sla-alerts`                  | `*/5 * * * *`  | HTTP → `/api/cron/sla-alerts`          | Telegram SLA breach alerts to managers                                          |
+| `task-overdue`                | `*/5 * * * *`  | HTTP → `/api/cron/task-overdue`        | Telegram task alerts to salespeople + manager escalation                        |
+| `campaign-resume`             | `*/5 * * * *`  | HTTP → `/api/cron/campaign-resume`     | Resumes paused campaigns under daily quota                                      |
+| `ga4-enrichment`              | `*/5 * * * *`  | HTTP → `/api/cron/ga4-enrichment`      | GA4 Data API retries for `collected_data` (attempts 2–4)                        |
+| `lead-message-notify`         | `* * * * *`    | HTTP → `/api/cron/lead-message-notify` | Telegram inbound message alerts to salespeople                                  |
+| `restriction-24h`             | `*/15 * * * *` | HTTP → `/api/cron/restriction-24h`     | Sets `is_24h_restricted` when last inbound message > 24h old                    |
+| `pms-sync-reconcile`          | `0 4 * * *`    | HTTP → `/api/cron/pms-sync-reconcile`  | Nightly full-scan univotel hotels/room*types → CRM (requires `UNIVOTEL*\*` env) |
+| `campaign_daily_reset`        | `0 0 * * *`    | SQL                                    | Resets `daily_send_count`, unpauses campaigns at midnight UTC                   |
+| `nightly-archive`             | `0 3 * * *`    | SQL                                    | Archives up to **100** eligible terminal leads                                  |
+| `active_lead_count_reconcile` | `15 3 * * *`   | SQL                                    | Recounts `salespeople.active_lead_count`                                        |
 
 **Check last runs:**
 

@@ -13,6 +13,7 @@ import { BUDGET_TIERS, DORM_AWAITING_VALUES, UNI_YEARS } from '@/lib/constants';
 import { isChatwootLabelSyncEnabled } from '@/lib/env';
 import { applyLeadFlagsFromDetails } from '@/lib/leads/update-lead';
 import { budgetTierWritePayload } from '@/lib/leads/budget-tier';
+import { isLeadPlaced } from '@/lib/pms/queries';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 const UpdateLeadDetailsSchema = z.object({
@@ -34,6 +35,7 @@ const UpdateLeadDetailsSchema = z.object({
   room_category: z.enum(['single', 'double', 'triple', 'quad']).nullable().optional(),
   district_preference: z.string().nullable().optional(),
   school_shortname: z.string().nullable().optional(),
+  purchased_room: z.string().uuid().nullable().optional(),
 });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -47,6 +49,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const detailsTable = isManagerOrAbove(session.role) ? 'lead_details' : 'lead_details_safe';
 
   if (req.method === 'GET') {
+    if (detailsTable === 'lead_details') {
+      const { data, error } = await supabase
+        .from('lead_details')
+        .select(
+          '*, purchased_room_type:room_types!lead_details_purchased_room_fkey(id, name, hotel_id, properties!inner(hotel_name))',
+        )
+        .eq('lead_uuid', leadId)
+        .maybeSingle();
+
+      if (error) return sendError(res, 'Failed to fetch lead details', 500);
+      if (!data) return sendError(res, 'Lead details not found', 404);
+
+      let hasActivePlacement = false;
+      try {
+        hasActivePlacement = await isLeadPlaced(leadId);
+      } catch {
+        /* non-fatal */
+      }
+
+      const row = data as Record<string, unknown>;
+      const prt = row.purchased_room_type as
+        | { id: string; name: string; hotel_id: string; properties: { hotel_name: string } }
+        | null
+        | undefined;
+
+      return sendSuccess(res, {
+        ...row,
+        purchased_room_type: undefined,
+        purchased_room_label: prt ? `${prt.properties.hotel_name} · ${prt.name}` : null,
+        purchased_property_id: prt?.hotel_id ?? null,
+        has_active_placement: hasActivePlacement,
+      });
+    }
+
     const { data, error } = await supabase
       .from(detailsTable)
       .select('*')
@@ -80,6 +116,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const moveInDateCapableStatuses = new Set(['kapora-alindi', 'sozlesme-imzalandi']);
     const canSetMoveInDate = leadRow && moveInDateCapableStatuses.has(leadRow.funnel_status);
 
+    if ('purchased_room' in patch && patch.purchased_room !== undefined) {
+      const placed = await isLeadPlaced(leadId);
+      if (placed) {
+        return sendError(
+          res,
+          'Bu lead bir odada — değişiklik için PMS\'te "Oda/Tesis Değiştir" kullanın',
+          409,
+        );
+      }
+    }
+
     const { data, error } = await supabase
       .from('lead_details')
       .update(patch)
@@ -88,7 +135,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .maybeSingle();
 
     if (error) return sendError(res, 'Failed to update lead details', 500);
-    if (!data) return sendError(res, 'Lead details not found', 404);
+
+    let row = data;
+    if (!row) {
+      const { data: inserted, error: insertError } = await supabase
+        .from('lead_details')
+        .insert({ lead_uuid: leadId, ...patch })
+        .select('*')
+        .single();
+
+      if (insertError) return sendError(res, 'Failed to create lead details', 500);
+      row = inserted;
+    }
 
     // Propagate actual_move_in_date → has_moved_in and move_in → move_in_date_set.
     void applyLeadFlagsFromDetails(leadId, parsed.data, canSetMoveInDate ?? false);
@@ -102,7 +160,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    return sendSuccess(res, data);
+    return sendSuccess(res, row);
   }
 
   return sendError(res, 'Method not allowed', 405);

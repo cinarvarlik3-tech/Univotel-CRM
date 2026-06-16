@@ -40,6 +40,7 @@ const eslintConfig = [
       'lib/tasks/**',
       'lib/my-day/**',
       'lib/analytics/**',
+      'lib/pms/**',
     ],
     rules: {
       'no-restricted-imports': [
@@ -49,11 +50,17 @@ const eslintConfig = [
             {
               name: '@/lib/supabase/service',
               message:
-                'Service role client may only be imported from lib/webhooks/, lib/leads/, lib/jobs/, lib/attribution/, lib/dni/, lib/ga4/, lib/ref/, lib/analytics/, and lib/my-day/.',
+                'Service role client may only be imported from lib/webhooks/, lib/leads/, lib/jobs/, lib/attribution/, lib/dni/, lib/ga4/, lib/ref/, lib/analytics/, lib/my-day/, and lib/pms/.',
             },
           ],
         },
       ],
+    },
+  },
+  {
+    files: ['pages/api/pms/**', 'pages/api/cron/pms-sync-reconcile.ts'],
+    rules: {
+      'no-restricted-imports': 'off',
     },
   },
 ];

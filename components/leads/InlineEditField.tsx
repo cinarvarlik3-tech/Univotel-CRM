@@ -8,7 +8,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { IconCheck, IconPencil, IconX } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/useTranslation';
-import { localeToBcp47, type Locale } from '@/lib/i18n/types';
+import { formatDateOnly } from '@/lib/i18n/format-date';
+import { type Locale } from '@/lib/i18n/types';
 import { cn } from '@/lib/utils';
 
 export interface SelectOption {
@@ -96,8 +97,7 @@ function displayValue(
   if (type === 'select') return options?.find((o) => o.value === str)?.label ?? str;
   if (type === 'textarea') return <span className="whitespace-pre-wrap">{str}</span>;
   if (type === 'date') {
-    const d = new Date(str);
-    return Number.isNaN(d.getTime()) ? str : d.toLocaleDateString(localeToBcp47(locale));
+    return formatDateOnly(str, locale);
   }
   return str;
 }

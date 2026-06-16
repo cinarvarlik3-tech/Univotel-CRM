@@ -6,7 +6,8 @@
  * Tab 2 "Performansım": KPI tiles + conversion + connect rate + loss reasons + stuck leads.
  *   Personal mirror of the manager Team Panel, self-scoped.
  */
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
+import { useRouter } from 'next/router';
 import { AppShell } from '@/components/layout/AppShell';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useCockpit } from '@/hooks/useCockpit';
@@ -21,6 +22,15 @@ import { GenelPerformansTab } from '@/components/my-day/GenelPerformansTab';
 import { LeadDetailPanel } from '@/components/leads/LeadDetailPanel';
 import { useSalespeople } from '@/hooks/useSalespeople';
 
+/** Reads selected lead UUID from router query (global quick-search uses `?selected=`). */
+function selectedLeadFromQuery(
+  query: Record<string, string | string[] | undefined>,
+): string | null {
+  const selected = query.selected;
+  if (typeof selected === 'string' && selected.length > 0) return selected;
+  return null;
+}
+
 /** Istanbul-localized date string, e.g. "12 Haziran 2026, Cuma". */
 function istanbulDateLabel(): string {
   return new Intl.DateTimeFormat('tr-TR', {
@@ -33,15 +43,28 @@ function istanbulDateLabel(): string {
 }
 
 export default function MyDayPage() {
+  const router = useRouter();
   const { data: cockpit, isLoading, error, mutate } = useCockpit();
   const { data: salespeople } = useSalespeople();
 
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
-  const openLead = useCallback((uuid: string) => setSelectedLeadId(uuid), []);
+  const selectedLeadId = router.isReady ? selectedLeadFromQuery(router.query) : null;
+  const panelOpen = selectedLeadId !== null;
+
+  const openLead = useCallback(
+    (uuid: string) => {
+      router.push({ pathname: '/my-day', query: { ...router.query, selected: uuid } }, undefined, {
+        shallow: true,
+      });
+    },
+    [router],
+  );
+
   const closeLead = useCallback(() => {
-    setSelectedLeadId(null);
+    const nextQuery = { ...router.query };
+    delete nextQuery.selected;
+    router.push({ pathname: '/my-day', query: nextQuery }, undefined, { shallow: true });
     void mutate();
-  }, [mutate]);
+  }, [mutate, router]);
 
   const isManager = cockpit?.user.isManager ?? false;
 
@@ -138,7 +161,7 @@ export default function MyDayPage() {
 
       <LeadDetailPanel
         leadId={selectedLeadId}
-        open={selectedLeadId !== null}
+        open={panelOpen}
         onClose={closeLead}
         isManager={isManager}
         salespeople={salespeople}

@@ -7,6 +7,7 @@ import { IconChevronDown, IconChevronRight } from '@tabler/icons-react';
 import { InlineEditField, type SelectOption } from '@/components/leads/InlineEditField';
 import { InlineUniversityField } from '@/components/leads/InlineUniversityField';
 import { SourceDetailsPanel } from '@/components/leads/SourceDetailsPanel';
+import { PurchasedRoomDialog } from '@/components/leads/PurchasedRoomDialog';
 import { useDebouncedSchoolShortnameSync } from '@/hooks/useDebouncedSchoolShortnameSync';
 import { useProperties } from '@/hooks/useProperties';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -100,7 +101,8 @@ export function PanelProfilTab({
   onDetailsSaved,
   onSaveFailed,
 }: PanelProfilTabProps) {
-  const { locale } = useTranslation();
+  const { t, locale } = useTranslation();
+  const [purchasedRoomOpen, setPurchasedRoomOpen] = useState(false);
   const { data: universities = [] } = useUniversities();
   const { data: properties = [] } = useProperties();
 
@@ -115,38 +117,38 @@ export function PanelProfilTab({
   const saveLeadOptimistic = useCallback(
     (patch: Partial<LeadWithDetails>, persist: () => Promise<Partial<LeadWithDetails>>) => {
       const snapshot = { ...lead };
-      void runOptimisticSave({
+      return runOptimisticSave({
         applyOptimistic: () => onLeadSaved(patch),
         revert: () => onLeadSaved(snapshot),
         persist: async () => {
           const data = await persist();
-          onLeadSaved(data);
+          onLeadSaved({ ...lead, ...patch, ...data });
           return data;
         },
         onFailure: onSaveFailed,
       });
-      return Promise.resolve();
     },
     [lead, onLeadSaved, onSaveFailed],
   );
 
   const saveDetailsOptimistic = useCallback(
     (patch: Partial<LeadDetailRow>, persist: () => Promise<LeadDetailRow>) => {
-      if (!details) return Promise.resolve();
-      const snapshot = { ...details };
-      void runOptimisticSave({
-        applyOptimistic: () => onDetailsSaved({ ...details, ...patch }),
-        revert: () => onDetailsSaved(snapshot),
+      const base = details ?? ({ lead_uuid: leadId } as LeadDetailRow);
+      const snapshot = details ? { ...details } : null;
+      return runOptimisticSave({
+        applyOptimistic: () => onDetailsSaved({ ...base, ...patch }),
+        revert: () => {
+          if (snapshot) onDetailsSaved(snapshot);
+        },
         persist: async () => {
           const data = await persist();
-          onDetailsSaved(data);
+          onDetailsSaved({ ...base, ...patch, ...data });
           return data;
         },
         onFailure: onSaveFailed,
       });
-      return Promise.resolve();
     },
-    [details, onDetailsSaved, onSaveFailed],
+    [details, leadId, onDetailsSaved, onSaveFailed],
   );
 
   const personaOptions: SelectOption[] = PERSONA_TYPES.map((p) => ({
@@ -295,6 +297,21 @@ export function PanelProfilTab({
               )
             }
           />
+          <div className="col-span-2 space-y-1">
+            <p className="text-[11px] font-medium text-text-tertiary">{t('leads.purchasedRoom')}</p>
+            <p className="text-sm">{details?.purchased_room_label ?? '—'}</p>
+            {details?.has_active_placement ? (
+              <p className="text-[11px] text-amber-700">{t('leads.purchasedRoomPlacedGuard')}</p>
+            ) : (
+              <button
+                type="button"
+                className="text-xs text-brand-blue hover:underline"
+                onClick={() => setPurchasedRoomOpen(true)}
+              >
+                {details?.purchased_room ? t('common.edit') : t('leads.purchasedRoomSet')}
+              </button>
+            )}
+          </div>
           <div className="col-span-2">
             <InlineEditField
               label="Notlar"
@@ -414,6 +431,24 @@ export function PanelProfilTab({
           )}
         </div>
       </CollapsibleSection>
+
+      <PurchasedRoomDialog
+        open={purchasedRoomOpen}
+        onOpenChange={setPurchasedRoomOpen}
+        leadName={lead.lead_name ?? lead.display_name}
+        mode="required"
+        initialPropertyId={details?.purchased_property_id}
+        initialRoomTypeId={details?.purchased_room}
+        onConfirm={async (roomTypeId) => {
+          await saveDetailsOptimistic({ purchased_room: roomTypeId }, async () => {
+            await patchDetails(leadId, { purchased_room: roomTypeId });
+            const res = await fetch(`/api/lead-details/${leadId}`);
+            const json = await res.json();
+            if (!res.ok) throw new PanelSaveError(json.error ?? 'Güncelleme başarısız', res.status);
+            return json.data as LeadDetailRow;
+          });
+        }}
+      />
     </div>
   );
 }

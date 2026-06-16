@@ -21,7 +21,7 @@ import { createServerSupabase } from '@/lib/supabase/server';
 const UpdateLeadSchema = z.object({
   funnel_status: z.enum(FUNNEL_STATUSES).optional(),
   student_stage: z.string().optional(),
-  persona_type: z.string().optional(),
+  persona_type: z.string().nullable().optional(),
   assigned_to: z.string().uuid().nullable().optional(),
   notes: z.string().optional(),
   loss_reason: z.enum(LOSS_REASONS).nullable().optional(),

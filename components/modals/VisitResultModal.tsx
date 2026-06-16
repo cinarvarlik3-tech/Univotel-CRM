@@ -12,6 +12,10 @@ import { FormSelect } from '@/components/ui/form-select';
 import { useTranslation } from '@/hooks/useTranslation';
 import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { LOSS_REASONS } from '@/lib/constants';
+import {
+  PurchasedRoomPicker,
+  type PurchasedRoomPickerValue,
+} from '@/components/leads/PurchasedRoomPicker';
 import { dateFnsLocale } from '@/components/calendar/calendar-utils';
 
 export type VisitResultOutcome = 'decision_pending' | 'downpayment' | 'dropped';
@@ -37,9 +41,10 @@ export function VisitResultModal({
 }: VisitResultModalProps) {
   const { locale, t } = useTranslation();
   const fnsLocale = dateFnsLocale(locale);
-  const [step, setStep] = useState<'pick' | 'confirm'>('pick');
+  const [step, setStep] = useState<'pick' | 'confirm' | 'room'>('pick');
   const [outcome, setOutcome] = useState<VisitResultOutcome | null>(null);
   const [lossReason, setLossReason] = useState('');
+  const [purchasedRoom, setPurchasedRoom] = useState<PurchasedRoomPickerValue | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,6 +52,7 @@ export function VisitResultModal({
     setStep('pick');
     setOutcome(null);
     setLossReason('');
+    setPurchasedRoom(null);
     setError(null);
   }
 
@@ -66,6 +72,7 @@ export function VisitResultModal({
   async function handleSave() {
     if (!outcome) return;
     if (outcome === 'dropped' && !lossReason) return;
+    if (outcome === 'downpayment' && !purchasedRoom?.roomTypeId) return;
 
     setSaving(true);
     setError(null);
@@ -77,6 +84,7 @@ export function VisitResultModal({
         outcome,
         loss_reason: outcome === 'dropped' ? lossReason : undefined,
         lead_uuid: leadUuid,
+        purchased_room: outcome === 'downpayment' ? purchasedRoom?.roomTypeId : undefined,
       }),
     });
 
@@ -133,8 +141,33 @@ export function VisitResultModal({
               <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)}>
                 {t('common.cancel')}
               </Button>
-              <Button type="button" disabled={!outcome} onClick={() => setStep('confirm')}>
+              <Button
+                type="button"
+                disabled={!outcome}
+                onClick={() => {
+                  if (outcome === 'downpayment') setStep('room');
+                  else setStep('confirm');
+                }}
+              >
                 {t('common.continue')}
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : step === 'room' ? (
+          <div className="space-y-4">
+            <p className="text-sm text-text-secondary">{t('leads.purchasedRoomHint')}</p>
+            <PurchasedRoomPicker onChange={setPurchasedRoom} />
+            {error && <p className="text-xs text-brand-red">{error}</p>}
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setStep('pick')}>
+                {t('common.back')}
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || !purchasedRoom?.roomTypeId}
+              >
+                {saving ? t('common.saving') : t('common.save')}
               </Button>
             </DialogFooter>
           </div>

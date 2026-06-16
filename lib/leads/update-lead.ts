@@ -9,6 +9,7 @@ import { pushAssigneeToChatwoot, syncAssigneeToLead } from '@/lib/leads/sync-ass
 import { isChatwootAssigneeSyncEnabled, isChatwootLabelSyncEnabled } from '@/lib/env';
 import { cancelAutoTasksForLead, createAutoTasksForStage } from '@/lib/tasks/auto-tasks';
 import { writeStageHistory, type StageHistorySource } from '@/lib/leads/write-stage-history';
+import { vacateActivePlacementForLead } from '@/lib/pms/placement-ops';
 import { createServiceClient } from '@/lib/supabase/service';
 import type { Database } from '@/types/database';
 
@@ -96,6 +97,14 @@ export async function updateLeadRecord(
     });
     await cancelAutoTasksForLead(leadUuid);
     void createAutoTasksForStage(leadUuid, newFunnelStatus, updated.assigned_to as string | null);
+
+    if (newFunnelStatus === 'lost') {
+      await vacateActivePlacementForLead({
+        leadId: leadUuid,
+        reason: 'lost',
+        vacatedBy: changedBy,
+      });
+    }
   }
 
   return { lead: updated, assignedToChanged: assignedToChanging };

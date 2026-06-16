@@ -4,6 +4,29 @@
  */
 import { z } from 'zod';
 
+/** Empty `.env` placeholders (`KEY=`) must behave like unset optional vars. */
+function emptyToUndefined(value: string | undefined): string | undefined {
+  if (value === undefined || value.trim() === '') return undefined;
+  return value;
+}
+
+/**
+ * Converts every empty-string env value to `undefined` so `.optional()` schemas
+ * accept them. A bare `KEY=` placeholder (common in `.env`/`.env.example` and in
+ * build-baked Cloudflare envs) otherwise fails `z.string().min(1).optional()`,
+ * because `.optional()` permits `undefined` but not `''` — which crashes every
+ * route that imports this module. See memory: env-empty-string-optional-crash.
+ */
+function stripEmptyStrings(
+  source: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(source)) {
+    out[key] = emptyToUndefined(value);
+  }
+  return out;
+}
+
 const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
@@ -39,12 +62,19 @@ const envSchema = z.object({
   MAKE_WEBHOOK_URL: z.string().url(),
   GOOGLE_SERVICE_ACCOUNT_JSON: z.string().min(1).optional(),
   GA4_PROPERTY_ID: z.string().min(1).optional(),
+  /** Univotel → CRM PMS sync (optional until A-sync is enabled). */
+  UNIVOTEL_SUPABASE_URL: z.string().url().optional(),
+  UNIVOTEL_SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+  UNIVOTEL_SYNC_SECRET: z.string().min(1).optional(),
 });
 
-const parsed = envSchema.parse({
-  ...process.env,
-  CHATWOOT_API_TOKEN: process.env.CHATWOOT_API_TOKEN ?? process.env.CHATWOOT_PERSONAL_ACCESS_TOKEN,
-});
+const parsed = envSchema.parse(
+  stripEmptyStrings({
+    ...process.env,
+    CHATWOOT_API_TOKEN:
+      process.env.CHATWOOT_API_TOKEN ?? process.env.CHATWOOT_PERSONAL_ACCESS_TOKEN,
+  }),
+);
 
 /**
  * Parsed and validated environment variables.
@@ -94,4 +124,11 @@ export function getManagerChatIds(): string[] {
  */
 export function isGa4Configured(): boolean {
   return Boolean(env.GOOGLE_SERVICE_ACCOUNT_JSON) && Boolean(env.GA4_PROPERTY_ID);
+}
+
+/**
+ * Returns true when univotel reconciliation cron credentials are configured.
+ */
+export function isUnivotelSyncConfigured(): boolean {
+  return Boolean(env.UNIVOTEL_SUPABASE_URL) && Boolean(env.UNIVOTEL_SUPABASE_SERVICE_ROLE_KEY);
 }

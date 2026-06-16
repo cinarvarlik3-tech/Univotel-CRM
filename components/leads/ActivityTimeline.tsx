@@ -1,8 +1,10 @@
 import useSWR from 'swr';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTranslation } from '@/hooks/useTranslation';
+import { formatDateTime } from '@/lib/i18n/format-date';
 import type { ActivityEvent, ActivityEventKind } from '@/lib/leads/build-activity-timeline';
 import { cn } from '@/lib/utils';
+import type { SalespersonOption } from '@/types/domain';
 
 async function fetcher<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -13,6 +15,7 @@ async function fetcher<T>(url: string): Promise<T> {
 
 interface ActivityTimelineProps {
   leadId: string;
+  salespeople?: SalespersonOption[];
 }
 
 const KIND_COLORS: Record<ActivityEventKind, string> = {
@@ -23,18 +26,22 @@ const KIND_COLORS: Record<ActivityEventKind, string> = {
   task_completed: 'bg-green-500',
 };
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+function resolveActorName(actorId: unknown, salespeople?: SalespersonOption[]): string | null {
+  if (typeof actorId !== 'string' || !actorId || !salespeople) return null;
+  return salespeople.find((sp) => sp.id === actorId)?.full_name ?? null;
 }
 
-function EventRow({ event, kindLabel }: { event: ActivityEvent; kindLabel: string }) {
+function EventRow({
+  event,
+  kindLabel,
+  actorName,
+  locale,
+}: {
+  event: ActivityEvent;
+  kindLabel: string;
+  actorName: string | null;
+  locale: 'tr' | 'en';
+}) {
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center">
@@ -51,14 +58,17 @@ function EventRow({ event, kindLabel }: { event: ActivityEvent; kindLabel: strin
           {kindLabel}
         </p>
         <p className="text-sm text-text-primary break-words">{event.summary}</p>
-        <p className="mt-0.5 text-[11px] text-text-tertiary">{formatDate(event.happenedAt)}</p>
+        {actorName && <p className="mt-0.5 text-xs text-text-secondary">{actorName}</p>}
+        <p className="mt-0.5 text-[11px] text-text-tertiary">
+          {formatDateTime(event.happenedAt, locale)}
+        </p>
       </div>
     </div>
   );
 }
 
-export function ActivityTimeline({ leadId }: ActivityTimelineProps) {
-  const { t } = useTranslation();
+export function ActivityTimeline({ leadId, salespeople }: ActivityTimelineProps) {
+  const { t, locale } = useTranslation();
   const { data, isLoading, error } = useSWR<ActivityEvent[]>(
     `/api/leads/${leadId}/activity`,
     fetcher,
@@ -93,7 +103,13 @@ export function ActivityTimeline({ leadId }: ActivityTimelineProps) {
   return (
     <div>
       {data.map((event) => (
-        <EventRow key={event.id} event={event} kindLabel={kindLabels[event.kind]} />
+        <EventRow
+          key={event.id}
+          event={event}
+          kindLabel={kindLabels[event.kind]}
+          actorName={resolveActorName(event.meta.actorId, salespeople)}
+          locale={locale}
+        />
       ))}
     </div>
   );
