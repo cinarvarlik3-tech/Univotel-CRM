@@ -57,6 +57,7 @@ interface SidebarProps {
   userRole: string;
   isManager: boolean;
   isSuperadminUser: boolean;
+  isPartnerOperatorUser?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }
@@ -78,6 +79,7 @@ export function Sidebar({
   userRole,
   isManager,
   isSuperadminUser,
+  isPartnerOperatorUser = false,
   collapsed = false,
   onToggleCollapse,
 }: SidebarProps) {
@@ -117,8 +119,34 @@ export function Sidebar({
     return router.pathname.startsWith(href);
   }
 
+  // Partner operator sees a trimmed allowlist only — new nav items added in future
+  // won't accidentally appear for partners because we use an allowlist, not a blocklist.
+  const partnerNavGroups: NavGroup[] = [
+    {
+      items: [{ href: '/tasks', label: t('nav.tasks'), icon: IconCheckbox }],
+    },
+    {
+      label: 'AKTİF SATIŞ',
+      items: [
+        { href: '/leads', label: t('nav.leads'), icon: IconUsers },
+        { href: '/leads/nurture', label: t('nav.nurture'), icon: IconPlant2 },
+        { href: '/visits', label: t('nav.visitCalendar'), icon: IconCalendar },
+        { href: '/leads/post-visit', label: t('nav.postVisit'), icon: IconFileCheck },
+      ],
+    },
+    {
+      label: 'KAPANIS',
+      items: [
+        { href: '/leads/downpayment', label: t('nav.downpayment'), icon: IconCurrencyLira },
+        { href: '/move-in', label: t('nav.moveInCalendar'), icon: IconCalendarEvent },
+        { href: '/leads/deal-signed', label: t('nav.dealSigned'), icon: IconContract },
+        { href: '/leads/moved-in', label: t('nav.movedIn'), icon: IconTruck },
+      ],
+    },
+  ];
+
   // Nav groups per D24 spec
-  const navGroups: NavGroup[] = [
+  const staffNavGroups: NavGroup[] = [
     {
       items: [
         { href: '/my-day', label: t('nav.myDay'), icon: IconLayoutDashboard },
@@ -168,6 +196,8 @@ export function Sidebar({
       ],
     },
   ];
+
+  const navGroups = isPartnerOperatorUser ? partnerNavGroups : staffNavGroups;
 
   return (
     <>

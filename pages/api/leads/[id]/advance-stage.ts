@@ -6,6 +6,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
+import { isPartnerOperator } from '@/lib/auth/roles';
 import { FUNNEL_STATUSES, isFunnelAdvanceAllowed } from '@/lib/constants';
 import {
   purchasedRoomAdvanceMode,
@@ -49,6 +50,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (existing.is_archived) return sendError(res, 'Lead is archived', 409);
   if (parsed.data.funnel_status === existing.funnel_status) {
     return sendError(res, 'Lead is already in that stage', 409);
+  }
+  if (isPartnerOperator(session.role) && parsed.data.funnel_status === 'lost') {
+    return sendError(res, 'PARTNER_FORBIDDEN: cannot mark lead as lost', 403);
   }
   if (
     parsed.data.funnel_status !== 'lost' &&

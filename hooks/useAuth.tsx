@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: salespersonData } = await supabase
       .from('salespeople')
-      .select('id, full_name, email, role')
+      .select('id, full_name, email, role, partner_id')
       .eq('id', authUser.id)
       .maybeSingle();
 
@@ -52,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       full_name: string;
       email: string;
       role: string;
+      partner_id: string | null;
     } | null;
 
     if (!salesperson) {
@@ -65,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           userId: authUser.id,
           email: authUser.email ?? salesperson.email,
           role,
+          partnerId: salesperson.partner_id ?? null,
           salesperson,
         });
       }

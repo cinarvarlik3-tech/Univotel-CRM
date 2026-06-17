@@ -78,8 +78,10 @@ export const tr: Messages = {
   },
   roles: {
     salesperson: 'Satış temsilcisi',
+    operator: 'Operatör',
     manager: 'Yönetici',
     superadmin: 'Süper yönetici',
+    partner_operator: 'İş Ortağı Operatörü',
   },
   auth: {
     signInTitle: 'Giriş — Univotel CRM',

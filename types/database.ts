@@ -592,6 +592,7 @@ export type Database = {
           district_preference: string | null;
           dorm_awaiting: string[];
           interested_hotel: string[];
+          interested_property_ids: string[];
           kvkk_opt_in: boolean | null;
           lead_uuid: string;
           marketing_opt_in: boolean | null;
@@ -619,6 +620,7 @@ export type Database = {
           district_preference?: string | null;
           dorm_awaiting?: string[];
           interested_hotel?: string[];
+          interested_property_ids?: string[];
           kvkk_opt_in?: boolean | null;
           lead_uuid: string;
           marketing_opt_in?: boolean | null;
@@ -646,6 +648,7 @@ export type Database = {
           district_preference?: string | null;
           dorm_awaiting?: string[];
           interested_hotel?: string[];
+          interested_property_ids?: string[];
           kvkk_opt_in?: boolean | null;
           lead_uuid?: string;
           marketing_opt_in?: boolean | null;
@@ -1421,6 +1424,27 @@ export type Database = {
           },
         ];
       };
+      partners: {
+        Row: {
+          created_at: string;
+          id: string;
+          is_active: boolean;
+          name: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          is_active?: boolean;
+          name: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          is_active?: boolean;
+          name?: string;
+        };
+        Relationships: [];
+      };
       properties: {
         Row: {
           accepts_non_students: boolean;
@@ -1431,6 +1455,7 @@ export type Database = {
           hotel_name: string;
           id: string;
           is_available: boolean;
+          partner_id: string | null;
           serviced_gender: string | null;
           serviced_schools: string[];
           status: string;
@@ -1445,6 +1470,7 @@ export type Database = {
           hotel_name: string;
           id?: string;
           is_available?: boolean;
+          partner_id?: string | null;
           serviced_gender?: string | null;
           serviced_schools?: string[];
           status?: string;
@@ -1459,12 +1485,21 @@ export type Database = {
           hotel_name?: string;
           id?: string;
           is_available?: boolean;
+          partner_id?: string | null;
           serviced_gender?: string | null;
           serviced_schools?: string[];
           status?: string;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'properties_partner_id_fkey';
+            columns: ['partner_id'];
+            isOneToOne: false;
+            referencedRelation: 'partners';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       property_room_types: {
         Row: {
@@ -1760,6 +1795,7 @@ export type Database = {
           last_login_at: string | null;
           lead_count: number;
           max_active_leads: number;
+          partner_id: string | null;
           phone: string | null;
           role: string;
           shift_end: string;
@@ -1781,6 +1817,7 @@ export type Database = {
           last_login_at?: string | null;
           lead_count?: number;
           max_active_leads?: number;
+          partner_id?: string | null;
           phone?: string | null;
           role: string;
           shift_end?: string;
@@ -1802,6 +1839,7 @@ export type Database = {
           last_login_at?: string | null;
           lead_count?: number;
           max_active_leads?: number;
+          partner_id?: string | null;
           phone?: string | null;
           role?: string;
           shift_end?: string;
@@ -1814,6 +1852,13 @@ export type Database = {
             columns: ['home_property_id'];
             isOneToOne: false;
             referencedRelation: 'properties';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'salespeople_partner_id_fkey';
+            columns: ['partner_id'];
+            isOneToOne: false;
+            referencedRelation: 'partners';
             referencedColumns: ['id'];
           },
         ];
@@ -2313,6 +2358,7 @@ export type Database = {
         };
         Returns: undefined;
       };
+      current_partner_id: { Args: never; Returns: string };
       decrement_active_lead_count: {
         Args: { agent_id: string };
         Returns: undefined;
@@ -2352,8 +2398,14 @@ export type Database = {
         Returns: undefined;
       };
       is_manager_or_superadmin: { Args: never; Returns: boolean };
+      is_partner_operator: { Args: never; Returns: boolean };
       is_pms_writer: { Args: never; Returns: boolean };
       is_superadmin: { Args: never; Returns: boolean };
+      lead_partner_owner: { Args: { p_lead_uuid: string }; Returns: string };
+      property_belongs_to_current_partner: {
+        Args: { p_property_id: string };
+        Returns: boolean;
+      };
       search_archived_leads_ids: {
         Args: { search_term: string };
         Returns: {

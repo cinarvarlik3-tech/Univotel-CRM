@@ -15,6 +15,7 @@ interface TopbarProps {
   count?: number;
   actions?: ReactNode;
   className?: string;
+  hideSearch?: boolean;
 }
 
 /**
@@ -22,7 +23,7 @@ interface TopbarProps {
  * @param props - Title, optional count badge, and action slot.
  * @returns Topbar element.
  */
-export function Topbar({ title, count, actions, className }: TopbarProps) {
+export function Topbar({ title, count, actions, className, hideSearch = false }: TopbarProps) {
   const { locale } = useTranslation();
   const router = useRouter();
 
@@ -54,9 +55,9 @@ export function Topbar({ title, count, actions, className }: TopbarProps) {
         )}
       </div>
 
-      {/* D14 / §4.6: Global quick-search — always accessible, every screen */}
+      {/* D14 / §4.6: Global quick-search — hidden for partner_operator (RLS bypass) */}
       <div className="flex flex-1 items-center justify-center px-4">
-        <GlobalQuickSearch onSelectLead={handleSelectLead} />
+        {!hideSearch && <GlobalQuickSearch onSelectLead={handleSelectLead} />}
       </div>
 
       {actions && <div className="flex items-center gap-2">{actions}</div>}

@@ -76,8 +76,10 @@ export const en = {
   },
   roles: {
     salesperson: 'Salesperson',
+    operator: 'Operator',
     manager: 'Manager',
     superadmin: 'Superadmin',
+    partner_operator: 'Partner Operator',
   },
   auth: {
     signInTitle: 'Sign in — Univotel CRM',

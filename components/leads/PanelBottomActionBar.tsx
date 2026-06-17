@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAuth } from '@/hooks/useAuth';
-import { isManagerOrAbove } from '@/lib/auth/roles';
+import { isManagerOrAbove, isPartnerOperator } from '@/lib/auth/roles';
 import { FUNNEL_STATUSES, purchasedRoomAdvanceMode } from '@/lib/constants';
 import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { cn } from '@/lib/utils';
@@ -76,10 +76,13 @@ export function PanelBottomActionBar({
 
   const isTerminal = lead.funnel_status === 'lost' || lead.funnel_status === 'sozlesme-imzalandi';
   const canManage = isManager || isManagerOrAbove(user?.role ?? '');
+  const isPartner = isPartnerOperator(user?.role);
 
   const currentStageLabel = formatEnumLabel(locale, 'funnel', lead.funnel_status);
 
-  const stageOptions = FUNNEL_STATUSES.filter((s) => s !== lead.funnel_status).map((s) => ({
+  const stageOptions = FUNNEL_STATUSES.filter(
+    (s) => s !== lead.funnel_status && !(isPartner && s === 'lost'),
+  ).map((s) => ({
     value: s,
     label: formatEnumLabel(locale, 'funnel', s),
   }));

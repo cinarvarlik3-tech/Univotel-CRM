@@ -3,7 +3,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SessionUser } from '@/lib/auth/get-session-user';
-import { isManagerOrAbove } from '@/lib/auth/roles';
+import { isManagerOrAbove, isPartnerOperator } from '@/lib/auth/roles';
 import { SORTABLE_COLUMNS } from '@/lib/constants';
 import { applyEmbeddedFilters } from '@/lib/query/apply-embedded-filters';
 import {
@@ -20,6 +20,8 @@ import type { Database } from '@/types/database';
 /** Parsed GET /api/leads query parameters. */
 export interface LeadsListParams {
   mineOnly: boolean;
+  /** True for partner_operator accounts — RLS scopes their leads; assignment filters are skipped. */
+  isPartnerOperatorSession: boolean;
   allFilters: FilterCondition[];
   leadFilters: FilterCondition[];
   detailsFilters: FilterCondition[];
@@ -71,11 +73,16 @@ export function parseLeadsListParams(
   const sortDir: 'asc' | 'desc' = query.sort_dir === 'asc' ? 'asc' : 'desc';
 
   const searchTerm = typeof query.search === 'string' ? query.search.trim() : '';
-  // allow show_all for managers, or for salespeople viewing their own leads (mine=1).
-  const showAll = query.show_all === '1' && (isManagerOrAbove(session.role) || query.mine === '1');
+  const isPartner = isPartnerOperator(session.role);
+
+  // allow show_all for managers, salespeople on their own leads, or partner_operators.
+  const showAll =
+    query.show_all === '1' && (isManagerOrAbove(session.role) || query.mine === '1' || isPartner);
 
   return {
-    mineOnly: query.mine === '1',
+    // Partner operators never filter by assignment — RLS handles their scoping entirely.
+    mineOnly: isPartner ? false : query.mine === '1',
+    isPartnerOperatorSession: isPartner,
     allFilters,
     leadFilters,
     detailsFilters,
@@ -87,7 +94,9 @@ export function parseLeadsListParams(
     dealAwaitingFilterSet: allFilters.some((f) => f.field === 'deal_awaiting'),
     assigneeId: session.userId,
     showAll,
-    unassignedOnly: query.unassigned === '1',
+    // Partner operators must never see the unassigned bucket — Hub is blocked at the route level,
+    // and this ensures the API doesn't expose it even via direct query param.
+    unassignedOnly: isPartner ? false : query.unassigned === '1',
   };
 }
 
@@ -148,11 +157,11 @@ export function applyLeadsListFilters(
   result = applyFilters(result, params.leadFilters);
   result = applyEmbeddedFilters(result, 'lead_details', params.detailsFilters);
 
-  if (params.mineOnly) {
+  if (params.mineOnly && !params.isPartnerOperatorSession) {
     result = result.eq('assigned_to', params.assigneeId);
   }
 
-  if (params.unassignedOnly) {
+  if (params.unassignedOnly && !params.isPartnerOperatorSession) {
     result = result.is('assigned_to', null);
   }
 

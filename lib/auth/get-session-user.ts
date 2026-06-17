@@ -11,11 +11,14 @@ export interface SessionUser {
   userId: string;
   email: string;
   role: UserRole;
+  /** Non-null for partner_operator accounts; identifies which partner they belong to. */
+  partnerId: string | null;
   salesperson: {
     id: string;
     full_name: string;
     email: string;
     role: string;
+    partner_id: string | null;
   };
 }
 
@@ -40,7 +43,7 @@ export async function getSessionUser(
 
   const { data: salespersonData, error: spError } = await supabase
     .from('salespeople')
-    .select('id, full_name, email, role')
+    .select('id, full_name, email, role, partner_id')
     .eq('id', session.user.id)
     .maybeSingle();
 
@@ -49,6 +52,7 @@ export async function getSessionUser(
     full_name: string;
     email: string;
     role: string;
+    partner_id: string | null;
   } | null;
 
   if (spError || !salesperson) return null;
@@ -60,6 +64,7 @@ export async function getSessionUser(
     userId: session.user.id,
     email: session.user.email ?? salesperson.email,
     role,
+    partnerId: salesperson.partner_id ?? null,
     salesperson,
   };
 }

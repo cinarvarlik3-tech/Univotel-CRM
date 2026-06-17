@@ -3,7 +3,7 @@
  */
 
 /** Valid salespeople.role values. */
-export type UserRole = 'salesperson' | 'operator' | 'manager' | 'superadmin';
+export type UserRole = 'salesperson' | 'operator' | 'manager' | 'superadmin' | 'partner_operator';
 
 /**
  * Returns true for manager and superadmin roles.
@@ -33,6 +33,11 @@ export function canAccessDniAdmin(role: string | undefined | null): boolean {
   return isSuperadmin(role);
 }
 
+/** Returns true when the role is a partner_operator (Academic House or future partners). */
+export function isPartnerOperator(role: string | undefined | null): boolean {
+  return role === 'partner_operator';
+}
+
 /**
  * Parses a database role string into UserRole when valid.
  * @param role - Raw role from salespeople table.
@@ -43,7 +48,8 @@ export function parseUserRole(role: string): UserRole | null {
     role === 'salesperson' ||
     role === 'operator' ||
     role === 'manager' ||
-    role === 'superadmin'
+    role === 'superadmin' ||
+    role === 'partner_operator'
   ) {
     return role;
   }
@@ -52,13 +58,14 @@ export function parseUserRole(role: string): UserRole | null {
 
 /**
  * Returns true when role may write PMS data (place, vacate, notes, room admin).
- * Operator, manager, and superadmin inherit PMS write (P18).
+ * Operator, manager, and superadmin inherit PMS write. partner_operator also has
+ * PMS write, scoped to their own properties by RLS.
  */
 export function canWritePms(role: string | undefined | null): boolean {
-  return role === 'operator' || isManagerOrAbove(role);
+  return role === 'operator' || isManagerOrAbove(role) || isPartnerOperator(role);
 }
 
-/** Alias for canWritePms — operator, manager, or superadmin. */
+/** Alias for canWritePms — operator, manager, superadmin, or partner_operator. */
 export function isOperatorOrAbove(role: string | undefined | null): boolean {
   return canWritePms(role);
 }
