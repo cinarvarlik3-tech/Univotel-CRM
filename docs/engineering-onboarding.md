@@ -1,6 +1,6 @@
 # Univotel CRM — Technical Onboarding Guide
 
-**Last updated:** 2026-06-11  
+**Last updated:** 2026-06-17  
 **Production:** https://panel.marketinguni.app  
 **Audience:** Engineers joining the project — first-week orientation through deep system knowledge.
 
@@ -359,13 +359,14 @@ Generate: `openssl rand -base64 32`
 
 ### Roles
 
-| Role          | Access                                                                                                                                                                 |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `salesperson` | Own + unassigned active leads; tasks; properties read; **My Day** `/my-day`; **My Leads** `/leads/mine`; stage compartment pages; deal-awaiting leads assigned to them |
-| `manager`     | All active + archived leads; campaigns; webhook-logs; old-leads; dashboard; analytics; notifications                                                                   |
-| `superadmin`  | Manager + `/admin/dni-numbers`                                                                                                                                         |
+| Role               | Access                                                                                                                                                                                        |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `salesperson`      | Own + unassigned active leads; tasks; properties read; **My Day** `/my-day`; **My Leads** `/leads/mine`; stage compartment pages; deal-awaiting leads assigned to them                        |
+| `manager`          | All active + archived leads; campaigns; webhook-logs; old-leads; dashboard; analytics; notifications                                                                                          |
+| `superadmin`       | Manager + `/admin/dni-numbers`                                                                                                                                                                |
+| `partner_operator` | Full funnel stage pages but **only leads attributed to their partner's properties** (RLS-enforced). No Hub, no archive, no My Day, no dashboard. Must have non-null `salespeople.partner_id`. |
 
-Helpers: `lib/auth/roles.ts` — `isManagerOrAbove()`, `isSuperadmin()`, `canAccessDniAdmin()`.
+Helpers: `lib/auth/roles.ts` — `isManagerOrAbove()`, `isSuperadmin()`, `canAccessDniAdmin()`, `isPartnerOperator()`.
 
 ### RLS patterns
 
@@ -379,21 +380,36 @@ manager/superadmin OR assigned_to = auth.uid() OR assigned_to IS NULL
 
 Used on: `leads`, `lead_details`, `contact_history`, `lead_messages`.
 
-**2. Manager/superadmin-only read**
+**Critical:** All staff policies that include `OR (assigned_to IS NULL)` also have `AND NOT is_partner_operator()`. Without this guard, Postgres would OR all matching policies and expose every unassigned lead to partner_operators (migration 0095 fixes this).
+
+**2. Partner-scoped access (partner_operator)**
+
+Additive SELECT policies on `leads`, `lead_details`, `contact_history`, `visits`, `tasks`, `lead_messages`, `lead_stage_history` check `lead_partner_owner() = current_partner_id()`. Partner_operators never see the unassigned lead pool; the assignment filter branches are skipped entirely in `lib/leads/leads-list-query.ts`.
+
+**3. Manager/superadmin-only read**
 
 `archived_leads`, `archived_contact_history`, `notifications`, `collected_data`, `old_leads`, `old_lead_details`, `old_lead_messages`.
 
-**3. KVKK masking via view**
+**4. KVKK masking via view**
 
 `lead_details_safe` uses `security_invoker = true` to NULL out `student_gender`/`nationality` when viewer is not manager/superadmin and not the assignee.
 
-**4. Service-role-only tables**
+**5. Service-role-only tables**
 
 `webhook_logs`, `chatwoot_sync_log`, `campaigns`, `campaign_leads` — no client policies; backend only.
 
-**5. Search RPCs enforce visibility inside function**
+**6. Search RPCs enforce visibility inside function**
 
-`search_leads_ids`, `search_archived_leads_ids`, `search_old_leads_ids` are `SECURITY DEFINER` but filter by role/assignment before returning UUIDs.
+`search_leads_ids`, `search_archived_leads_ids`, `search_old_leads_ids` are `SECURITY DEFINER` but filter by role/assignment before returning UUIDs. `search_leads_global` raises an exception for `partner_operator` callers.
+
+**7. Partner SECURITY DEFINER helpers** (all with `SET search_path = public`)
+
+| Function                                           | Returns                                                                                       |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `is_partner_operator()`                            | bool — true when `auth.uid()` maps to a `partner_operator` row                                |
+| `current_partner_id()`                             | UUID — the caller's `salespeople.partner_id`                                                  |
+| `property_belongs_to_current_partner(property_id)` | bool                                                                                          |
+| `lead_partner_owner()`                             | UUID — owning partner via: `purchased_room` > most recent `visit` > `interested_property_ids` |
 
 ### Two-layer auth model
 
@@ -414,9 +430,9 @@ Browser request
 
 | Table                  | Purpose                                                                                                                            |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **salespeople**        | Agents and managers; assignment routing, shift windows, `active_lead_count`, Chatwoot identity                                     |
+| **salespeople**        | Agents and managers; assignment routing, shift windows, `active_lead_count`, Chatwoot identity; `partner_id` FK (null for staff)   |
 | **leads**              | Central CRM record — funnel, SLA, assignment, Chatwoot sync columns, archive flags                                                 |
-| **lead_details**       | 1:1 extended profile (university, budget_tier, preferences, rec_hotel JSONB)                                                       |
+| **lead_details**       | 1:1 extended profile (university, budget_tier, preferences, rec_hotel JSONB, `interested_property_ids UUID[]`)                     |
 | **contact_history**    | Append-only interaction audit log — never updated/deleted in normal operation                                                      |
 | **tasks**              | Salesperson follow-up action items with due dates; auto-created tasks from stage transitions (`is_auto_created`, `auto_task_type`) |
 | **visits**             | Scheduled property visits (`scheduled`, `attended`, `failed`) per lead                                                             |
@@ -424,11 +440,12 @@ Browser request
 
 ### Property inventory
 
-| Table                   | Purpose                                                                |
-| ----------------------- | ---------------------------------------------------------------------- |
-| **properties**          | Hotel/dorm catalog for recommendations                                 |
-| **property_room_types** | Room type catalog per property                                         |
-| **property_rooms**      | Individual physical rooms; occupancy cascades to property availability |
+| Table                   | Purpose                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------- |
+| **partners**            | Dormitory partner organisations (e.g. Academic House); UUID PK                  |
+| **properties**          | Hotel/dorm catalog for recommendations; `partner_id` FK (null = Univotel-owned) |
+| **property_room_types** | Room type catalog per property                                                  |
+| **property_rooms**      | Individual physical rooms; occupancy cascades to property availability          |
 
 ### Archive
 
@@ -496,6 +513,14 @@ Refreshed every 5 minutes by `mv_refresh` cron:
 - `mv_agent_performance` — per-agent conversion and response time
 - `mv_funnel_distribution` — active leads by funnel stage
 - `mv_sla_breach_rate` — breach rate by lead source
+
+### Partner access migrations (0093–0095)
+
+| Migration | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0093**  | `partners` table + seeded Academic House; `partner_id` FK on `properties` and `salespeople`; extends role CHECK to include `partner_operator`; `partner_operator_requires_partner_id` CHECK constraint; `interested_property_ids UUID[]` on `lead_details` with GIN index + trigger; `lead_partner_owner()`, `is_partner_operator()`, `current_partner_id()`, `property_belongs_to_current_partner()` SECURITY DEFINER functions |
+| **0094**  | Additive RLS SELECT/write policies for partner_operators on `leads`, `lead_details`, `contact_history`, `visits`, `tasks`, `lead_messages`, `lead_stage_history`; split staff/partner SELECT on `properties`, `room_types`, `rooms`, `lead_rooms`; patches `search_leads_global` to reject partner_operators; write-constraint triggers blocking lost/archive/reassign/scope violations for partners                             |
+| **0095**  | Critical fix: adds `AND NOT is_partner_operator()` to every staff policy that has `OR (assigned_to IS NULL)`, preventing partner_operators from reading all unassigned Univotel leads                                                                                                                                                                                                                                            |
 
 ### Recent migrations (0048–0061)
 
@@ -1308,30 +1333,33 @@ LeadDetailPanel (Sheet, right side)
 
 ### UI routes summary
 
-| Route                                | Access     | Purpose                                                                |
-| ------------------------------------ | ---------- | ---------------------------------------------------------------------- |
-| `/my-day`                            | All        | Personal salesperson cockpit (counters, tasks, attention, performance) |
-| `/leads`                             | All        | Primary inbox — list/pipeline toggle, filters, slide-over detail       |
-| `/leads/mine`                        | All        | Assigned-to-me scope                                                   |
-| `/leads/hub`                         | All        | Lead hub / unclaimed pool                                              |
-| `/leads/expecting-call`              | All        | Leads awaiting callback                                                |
-| `/leads/nurture`                     | All        | Nurture-stage compartment                                              |
-| `/leads/post-visit`                  | All        | Post-visit nurture compartment                                         |
-| `/leads/24h-restricted`              | All        | Chatwoot 24h window restricted leads                                   |
-| `/leads/downpayment`                 | All        | Downpayment-stage compartment                                          |
-| `/leads/deal-signed`                 | All        | Signed-deal compartment                                                |
-| `/leads/moved-in`                    | All        | Moved-in leads                                                         |
-| `/visits`                            | All        | Cross-property visit calendar                                          |
-| `/move-in`                           | All        | Move-in date calendar                                                  |
-| `/deal-awaiting`                     | All        | Parked leads                                                           |
-| `/leads/new`                         | All        | Manual lead creation                                                   |
-| `/leads/archived`                    | Manager    | Archived leads                                                         |
-| `/old-leads`                         | Manager    | Historical import (read-only)                                          |
-| `/campaigns`                         | Manager    | WhatsApp campaigns                                                     |
-| `/dashboard`                         | Manager    | Analytics — **Overview** + **Team panel** tabs                         |
-| `/webhook-logs`                      | Manager    | Failed webhook audit + replay                                          |
-| `/admin/dni-numbers`                 | Superadmin | DNI CRUD                                                               |
-| `/tasks`, `/properties`, `/settings` | All        | Tasks, inventory, preferences                                          |
+| Route                                | Access              | Purpose                                                                |
+| ------------------------------------ | ------------------- | ---------------------------------------------------------------------- |
+| `/my-day`                            | Staff only          | Personal salesperson cockpit (counters, tasks, attention, performance) |
+| `/leads`                             | All                 | Primary inbox — list/pipeline toggle, filters, slide-over detail       |
+| `/leads/mine`                        | Staff only          | Assigned-to-me scope                                                   |
+| `/leads/hub`                         | Staff only          | Lead hub / unclaimed pool (partners redirected to `/leads`)            |
+| `/leads/expecting-call`              | Staff only          | Leads awaiting callback                                                |
+| `/leads/nurture`                     | All                 | Nurture-stage compartment                                              |
+| `/leads/post-visit`                  | All                 | Post-visit nurture compartment                                         |
+| `/leads/24h-restricted`              | Staff only          | Chatwoot 24h window restricted leads                                   |
+| `/leads/downpayment`                 | All                 | Downpayment-stage compartment                                          |
+| `/leads/deal-signed`                 | All                 | Signed-deal compartment                                                |
+| `/leads/moved-in`                    | All                 | Moved-in leads                                                         |
+| `/visits`                            | All                 | Cross-property visit calendar                                          |
+| `/move-in`                           | All                 | Move-in date calendar                                                  |
+| `/deal-awaiting`                     | Staff only          | Parked leads                                                           |
+| `/leads/new`                         | Staff only          | Manual lead creation                                                   |
+| `/leads/archived`                    | Manager             | Archived leads                                                         |
+| `/old-leads`                         | Manager             | Historical import (read-only)                                          |
+| `/campaigns`                         | Manager             | WhatsApp campaigns                                                     |
+| `/dashboard`                         | Manager             | Analytics — **Overview** + **Team panel** tabs                         |
+| `/webhook-logs`                      | Manager             | Failed webhook audit + replay                                          |
+| `/admin/dni-numbers`                 | Superadmin          | DNI CRUD                                                               |
+| `/tasks`, `/properties`, `/settings` | All                 | Tasks, inventory, preferences                                          |
+| `/pms`                               | All (incl. partner) | Property management system                                             |
+
+**"All" includes `partner_operator`**. Partners are scoped to their own properties' leads at the DB layer (RLS); no UI filtering. `AppShell` enforces an allowlist — any route outside it redirects partners to `/leads`.
 
 Deep link: `/leads/[id]` → redirects to `/leads?selected={id}`
 

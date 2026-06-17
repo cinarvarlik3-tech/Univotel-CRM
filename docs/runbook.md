@@ -1,6 +1,6 @@
 # Univotel CRM — Production Runbook
 
-Last updated: 2026-06-11. This document describes **what the running system does now** and **how to fix it when something breaks**. For design history, see implementation docs; this is operational reference only.
+Last updated: 2026-06-17. This document describes **what the running system does now** and **how to fix it when something breaks**. For design history, see implementation docs; this is operational reference only.
 
 ---
 
@@ -30,13 +30,14 @@ Univotel CRM ingests leads from Chatwoot (WhatsApp/Instagram), NetGSM (phone cal
 
 **Roles:**
 
-| Role          | Access                                                                                                                                                                                                            |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `salesperson` | Assigned + unassigned active leads (incl. **Conversation** tab — live Chatwoot sync per open lead); own tasks; read-only properties; **My Day** `/my-day`; **My Leads** at `/leads/mine`; stage compartment pages |
-| `manager`     | All active leads, archived leads, dashboard, campaigns, webhook logs, notifications; **My Leads** for personally assigned subset; **Old leads** at `/old-leads` (read-only historical imports)                    |
-| `superadmin`  | Everything `manager` has + **DNI numbers admin** (`/admin/dni-numbers`); same manager-level data access via RLS                                                                                                   |
+| Role               | Access                                                                                                                                                                                                                                                                |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `salesperson`      | Assigned + unassigned active leads (incl. **Conversation** tab — live Chatwoot sync per open lead); own tasks; read-only properties; **My Day** `/my-day`; **My Leads** at `/leads/mine`; stage compartment pages                                                     |
+| `manager`          | All active leads, archived leads, dashboard, campaigns, webhook logs, notifications; **My Leads** for personally assigned subset; **Old leads** at `/old-leads` (read-only historical imports)                                                                        |
+| `superadmin`       | Everything `manager` has + **DNI numbers admin** (`/admin/dni-numbers`); same manager-level data access via RLS                                                                                                                                                       |
+| `partner_operator` | Full funnel stage pages (nurture → moved-in) scoped to their dormitory partner's properties' leads — enforced by RLS only, never by UI filtering. Cannot access Hub, archive, My Day, dashboard, or deal-awaiting. Must have `salespeople.partner_id` set (DB CHECK). |
 
-`/leads/my` is an alias that redirects to `/leads/mine`. Salespeople cannot access archived routes or `/old-leads` (API 403, UI redirect).
+`/leads/my` is an alias that redirects to `/leads/mine`. Salespeople cannot access archived routes or `/old-leads` (API 403, UI redirect). Partner operators hitting a blocked route are redirected to `/leads`.
 
 ---
 
@@ -134,18 +135,52 @@ pnpm gen:types           # regenerates types/database.ts from remote schema
 
 Migrations are in `supabase/migrations/` numbered `0001`–`0073`. Apply in order.
 
-| Range         | Phase                                                                                                                                |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `0026`–`0032` | Phase 3 — archive fields, nightly archive, analytics MVs, 80-day cutoff                                                              |
-| `0033`–`0037` | Phase 4 — superadmin role, `ref_sessions`, `dni_numbers`, `collected_data`, GA4 enrichment cron                                      |
-| `0038`–`0039` | Old leads — `old_leads`, `old_lead_details`, unique `chatwoot_conversation_id` for idempotent import                                 |
-| `0040`        | Old lead messages — `old_lead_messages` (historical dump import; read-only)                                                          |
-| `0041`        | Active lead messages — `lead_messages` (on-demand Chatwoot API sync + real-time webhook sync)                                        |
-| `0042`–`0046` | Property inventory, hotel recommendation fields on `lead_details`                                                                    |
-| `0047`        | `search_old_leads_ids` RPC (fuzzy search on old leads)                                                                               |
-| `0048`–`0061` | Universities, deal_awaiting, SLA business hours, lead message notify cron, budget_tier, Chatwoot sync                                |
-| `0062`–`0073` | Major Update — funnel consolidation (`lost`), visits, boolean flags, auto-tasks, 24h restriction, `claimed_at`, `lead_stage_history` |
-| `0049`        | contact_history types — adds `call`, `message_start`, `chatwoot` source; updates `unarchive_single_lead`                             |
+| Range         | Phase                                                                                                                                                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `0026`–`0032` | Phase 3 — archive fields, nightly archive, analytics MVs, 80-day cutoff                                                                                                                                                        |
+| `0033`–`0037` | Phase 4 — superadmin role, `ref_sessions`, `dni_numbers`, `collected_data`, GA4 enrichment cron                                                                                                                                |
+| `0038`–`0039` | Old leads — `old_leads`, `old_lead_details`, unique `chatwoot_conversation_id` for idempotent import                                                                                                                           |
+| `0040`        | Old lead messages — `old_lead_messages` (historical dump import; read-only)                                                                                                                                                    |
+| `0041`        | Active lead messages — `lead_messages` (on-demand Chatwoot API sync + real-time webhook sync)                                                                                                                                  |
+| `0042`–`0046` | Property inventory, hotel recommendation fields on `lead_details`                                                                                                                                                              |
+| `0047`        | `search_old_leads_ids` RPC (fuzzy search on old leads)                                                                                                                                                                         |
+| `0048`–`0061` | Universities, deal_awaiting, SLA business hours, lead message notify cron, budget_tier, Chatwoot sync                                                                                                                          |
+| `0062`–`0073` | Major Update — funnel consolidation (`lost`), visits, boolean flags, auto-tasks, 24h restriction, `claimed_at`, `lead_stage_history`                                                                                           |
+| `0049`        | contact_history types — adds `call`, `message_start`, `chatwoot` source; updates `unarchive_single_lead`                                                                                                                       |
+| `0093`–`0095` | Partner access — `partners` table, `partner_id` FK on properties/salespeople, `partner_operator` role + CHECK constraint, `interested_property_ids UUID[]` on lead_details, partner RLS policies, RLS unassigned-lead leak fix |
+
+**Partner access post-migration checks (after `0093`–`0095`):**
+
+```sql
+-- Partners table and seed
+SELECT id, name FROM partners ORDER BY name;
+
+-- partner_id columns exist
+SELECT column_name, table_name FROM information_schema.columns
+WHERE column_name = 'partner_id'
+  AND table_name IN ('properties', 'salespeople');
+
+-- interested_property_ids on lead_details
+SELECT column_name, data_type FROM information_schema.columns
+WHERE table_name = 'lead_details' AND column_name = 'interested_property_ids';
+
+-- SECURITY DEFINER helpers exist
+SELECT proname FROM pg_proc
+WHERE proname IN ('is_partner_operator','current_partner_id',
+                  'property_belongs_to_current_partner','lead_partner_owner');
+
+-- RLS policies include partner policies
+SELECT tablename, policyname FROM pg_policies
+WHERE policyname LIKE 'partner_%'
+ORDER BY tablename, policyname;
+
+-- No staff policy still exposes unassigned leads to partners
+-- (all staff SELECT policies on leads should have NOT is_partner_operator())
+SELECT policyname, qual FROM pg_policies
+WHERE tablename = 'leads' AND policyname = 'leads_select_assigned';
+```
+
+Then run `pnpm gen:types` to refresh `types/database.ts`.
 
 **Phase 4 post-migration checks:**
 
@@ -498,6 +533,53 @@ LIMIT 5;
 ---
 
 ## 5. Common Problems & Fixes
+
+### Partner operator sees all unassigned leads (data breach)
+
+**Cause:** Migration `0095` not applied. Postgres ORs all matching RLS policies — staff policies with `OR (assigned_to IS NULL)` inadvertently matched partner_operators and exposed every unassigned lead.
+
+**Check:**
+
+```sql
+-- Confirm 0095 was applied (policy should include NOT is_partner_operator())
+SELECT policyname, qual FROM pg_policies
+WHERE tablename = 'leads' AND policyname = 'leads_select_assigned';
+-- qual should contain 'NOT is_partner_operator()'
+
+-- List applied migrations
+SELECT name FROM supabase_migrations.schema_migrations ORDER BY name DESC LIMIT 5;
+```
+
+**Fix:** Apply migration `0095` via `pnpm db:migrate`. Confirm `NOT is_partner_operator()` appears in the recreated policies.
+
+---
+
+### Partner operator sees zero leads on stage pages
+
+**Cause:** `leads-list-query.ts` was applying `assigned_to = userId` for all non-manager sessions. Partner leads are never assigned to the partner account — RLS is the sole scope mechanism.
+
+**Check:** Confirm `lib/leads/leads-list-query.ts` has `mineOnly: isPartner ? false : query.mine === '1'` and the `applyLeadsListFilters` blocks are guarded with `&& !params.isPartnerOperatorSession`.
+
+**Fix:** Deploy latest app (commit `6b5d7d7` or later includes this fix).
+
+---
+
+### Partner operator cannot be created — constraint violation
+
+**Cause:** `INSERT INTO salespeople` with `role = 'partner_operator'` but `partner_id` left `NULL`. The `partner_operator_requires_partner_id` CHECK constraint (migration `0093`) enforces non-null.
+
+**Fix:**
+
+```sql
+-- Find partner UUID first
+SELECT id, name FROM partners;
+
+-- Then insert with partner_id set
+INSERT INTO salespeople (id, full_name, email, role, partner_id, ...)
+VALUES ('<auth-uuid>', 'Name', 'email@domain.com', 'partner_operator', '<partner-uuid>', ...);
+```
+
+---
 
 ### Lead not created; webhook_logs shows `success`
 
@@ -1593,35 +1675,38 @@ Roll back Worker (Section 3). If DB migration caused issue, check Supabase migra
 
 ## 10. Manager UI Routes
 
-| Route                   | Purpose                                                                 | Access                    |
-| ----------------------- | ----------------------------------------------------------------------- | ------------------------- |
-| `/my-day`               | Personal salesperson cockpit (counters, tasks, attention, performance)  | all roles                 |
-| `/dashboard`            | Analytics — **Overview** + **Team panel** tabs (see below)              | manager, superadmin       |
-| `/leads`                | Active lead list                                                        | all roles (scoped by RLS) |
-| `/leads/hub`            | Lead hub / unclaimed pool                                               | all roles                 |
-| `/leads/expecting-call` | Expecting callback compartment                                          | all roles                 |
-| `/leads/nurture`        | Nurture-stage compartment                                               | all roles                 |
-| `/leads/post-visit`     | Post-visit nurture compartment                                          | all roles                 |
-| `/leads/24h-restricted` | Chatwoot 24h window restricted leads                                    | all roles                 |
-| `/leads/downpayment`    | Downpayment-stage compartment                                           | all roles                 |
-| `/leads/deal-signed`    | Signed-deal compartment                                                 | all roles                 |
-| `/leads/moved-in`       | Moved-in leads                                                          | all roles                 |
-| `/visits`               | Cross-property visit calendar (Month/Week/Day/List, drag-to-reschedule) | all roles                 |
-| `/move-in`              | Move-in date calendar (Month/Week/Day/List, drag-to-reschedule)         | all roles                 |
-| `/leads/mine`           | Leads assigned to current user                                          | all roles                 |
-| `/leads/my`             | Redirect alias → `/leads/mine`                                          | all roles                 |
-| `/leads/archived`       | Archived leads                                                          | manager, superadmin       |
-| `/leads/new`            | Manual lead entry                                                       | authenticated             |
-| `/leads/{uuid}`         | Redirect → `/leads?selected={uuid}` (slide-over panel)                  | scoped by RLS             |
-| `/tasks`                | Task list                                                               | scoped by RLS             |
-| `/campaigns`            | WhatsApp campaigns                                                      | manager, superadmin       |
-| `/notifications`        | Manager alert inbox                                                     | manager, superadmin       |
-| `/webhook-logs`         | Webhook audit + replay                                                  | manager, superadmin       |
-| `/admin/dni-numbers`    | DNI virtual number admin                                                | **superadmin only**       |
-| `/old-leads`            | Historical Chatwoot imports (read-only)                                 | manager, superadmin       |
-| `/team`                 | Salespeople list                                                        | manager, superadmin       |
-| `/properties`           | Property inventory                                                      | authenticated             |
-| `/settings`             | Theme, **language (TR/EN)**, sign out                                   | authenticated             |
+| Route                   | Purpose                                                                 | Access                                    |
+| ----------------------- | ----------------------------------------------------------------------- | ----------------------------------------- |
+| `/my-day`               | Personal salesperson cockpit (counters, tasks, attention, performance)  | staff only (not partner_operator)         |
+| `/dashboard`            | Analytics — **Overview** + **Team panel** tabs (see below)              | manager, superadmin                       |
+| `/leads`                | Active lead list                                                        | all roles (scoped by RLS)                 |
+| `/leads/hub`            | Lead hub / unclaimed pool                                               | staff only (partners → redirect `/leads`) |
+| `/leads/expecting-call` | Expecting callback compartment                                          | staff only                                |
+| `/leads/nurture`        | Nurture-stage compartment                                               | all roles (scoped by RLS)                 |
+| `/leads/post-visit`     | Post-visit nurture compartment                                          | all roles (scoped by RLS)                 |
+| `/leads/24h-restricted` | Chatwoot 24h window restricted leads                                    | staff only                                |
+| `/leads/downpayment`    | Downpayment-stage compartment                                           | all roles (scoped by RLS)                 |
+| `/leads/deal-signed`    | Signed-deal compartment                                                 | all roles (scoped by RLS)                 |
+| `/leads/moved-in`       | Moved-in leads                                                          | all roles (scoped by RLS)                 |
+| `/visits`               | Cross-property visit calendar (Month/Week/Day/List, drag-to-reschedule) | all roles (scoped by RLS)                 |
+| `/move-in`              | Move-in date calendar (Month/Week/Day/List, drag-to-reschedule)         | all roles (scoped by RLS)                 |
+| `/leads/mine`           | Leads assigned to current user                                          | staff only                                |
+| `/leads/my`             | Redirect alias → `/leads/mine`                                          | staff only                                |
+| `/leads/archived`       | Archived leads                                                          | manager, superadmin                       |
+| `/leads/new`            | Manual lead entry                                                       | staff only                                |
+| `/leads/{uuid}`         | Redirect → `/leads?selected={uuid}` (slide-over panel)                  | scoped by RLS                             |
+| `/tasks`                | Task list                                                               | all roles (scoped by RLS)                 |
+| `/campaigns`            | WhatsApp campaigns                                                      | manager, superadmin                       |
+| `/notifications`        | Manager alert inbox                                                     | manager, superadmin                       |
+| `/webhook-logs`         | Webhook audit + replay                                                  | manager, superadmin                       |
+| `/admin/dni-numbers`    | DNI virtual number admin                                                | **superadmin only**                       |
+| `/old-leads`            | Historical Chatwoot imports (read-only)                                 | manager, superadmin                       |
+| `/team`                 | Salespeople list                                                        | manager, superadmin                       |
+| `/properties`           | Property inventory                                                      | authenticated                             |
+| `/pms`                  | Property management system                                              | all roles (incl. partner_operator)        |
+| `/settings`             | Theme, **language (TR/EN)**, sign out                                   | authenticated                             |
+
+**"all roles (scoped by RLS)"** means partner_operators see the page but only their own partner's leads. The `AppShell` route guard enforces blocked routes redirect to `/leads`; enforcement is at the DB layer (RLS), not the UI.
 
 ### Calendar views (`/visits` & `/move-in`)
 

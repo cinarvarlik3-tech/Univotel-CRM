@@ -1,6 +1,6 @@
 # Univotel CRM — Engineering Handoff
 
-**Last updated:** 2026-06-11  
+**Last updated:** 2026-06-17  
 **Production:** https://panel.marketinguni.app  
 **Audience:** Engineers taking over development, on-call, or deployment.
 
@@ -99,19 +99,20 @@ After any migration: `pnpm gen:types`.
 
 ## 4. Database — migration snapshot
 
-| Range     | Purpose                                                                                                                                                        |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0001–0018 | Core CRM: salespeople, properties, leads, tasks, campaigns, webhook_logs                                                                                       |
-| 0019–0032 | Analytics, archive, pg_cron, notifications                                                                                                                     |
-| 0033–0037 | Superadmin, ref_sessions, dni_numbers, collected_data, GA4 cron                                                                                                |
-| 0038–0040 | old_leads, old_lead_details, old_lead_messages                                                                                                                 |
-| 0041      | lead_messages (live Chatwoot cache)                                                                                                                            |
-| 0042–0044 | Property availability, room types, physical rooms                                                                                                              |
-| 0045–0046 | lead_details rec fields (campus, room_category, rec_hotel jsonb); drop redundant gender column                                                                 |
-| 0047      | `search_old_leads_ids` RPC (fuzzy search on old leads)                                                                                                         |
-| 0048–0060 | Lead messaging, universities, deal_awaiting, funnel stages, loss_reason trigger, Chatwoot sync                                                                 |
-| 0061      | `budget_tier` replaces `budget_min`; derived `budget_max`; Chatwoot `butce` sync                                                                               |
-| 0062–0073 | Major Update — funnel consolidation (`lost`), visits, boolean flags, auto-tasks, 24h restriction cron, `claimed_at`, `lead_stage_history`, message attribution |
+| Range     | Purpose                                                                                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0001–0018 | Core CRM: salespeople, properties, leads, tasks, campaigns, webhook_logs                                                                                                                    |
+| 0019–0032 | Analytics, archive, pg_cron, notifications                                                                                                                                                  |
+| 0033–0037 | Superadmin, ref_sessions, dni_numbers, collected_data, GA4 cron                                                                                                                             |
+| 0038–0040 | old_leads, old_lead_details, old_lead_messages                                                                                                                                              |
+| 0041      | lead_messages (live Chatwoot cache)                                                                                                                                                         |
+| 0042–0044 | Property availability, room types, physical rooms                                                                                                                                           |
+| 0045–0046 | lead_details rec fields (campus, room_category, rec_hotel jsonb); drop redundant gender column                                                                                              |
+| 0047      | `search_old_leads_ids` RPC (fuzzy search on old leads)                                                                                                                                      |
+| 0048–0060 | Lead messaging, universities, deal_awaiting, funnel stages, loss_reason trigger, Chatwoot sync                                                                                              |
+| 0061      | `budget_tier` replaces `budget_min`; derived `budget_max`; Chatwoot `butce` sync                                                                                                            |
+| 0062–0073 | Major Update — funnel consolidation (`lost`), visits, boolean flags, auto-tasks, 24h restriction cron, `claimed_at`, `lead_stage_history`, message attribution                              |
+| 0093–0095 | Partner access — `partners` table; `partner_id` FK on properties/salespeople; `partner_operator` role; `interested_property_ids` UUID[]; partner RLS policies; fix unassigned-lead RLS leak |
 
 **Lead lifecycle states:** Active (`is_deleted=false`, `is_archived=false`) → Archived → soft-deleted.
 
@@ -119,13 +120,23 @@ After any migration: `pnpm gen:types`.
 
 ## 5. Roles and access
 
-| Role          | Access                                                                                                                           |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `salesperson` | Own + unassigned active leads; tasks; properties read; **My Day** `/my-day`; **My Leads** `/leads/mine`; stage compartment pages |
-| `manager`     | All active + archived; campaigns; webhook-logs; old-leads; dashboard (Overview + Team panel); analytics                          |
-| `superadmin`  | Manager + `/admin/dni-numbers`                                                                                                   |
+| Role               | Access                                                                                                                                                                                                                                              |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `salesperson`      | Own + unassigned active leads; tasks; properties read; **My Day** `/my-day`; **My Leads** `/leads/mine`; stage compartment pages                                                                                                                    |
+| `manager`          | All active + archived; campaigns; webhook-logs; old-leads; dashboard (Overview + Team panel); analytics                                                                                                                                             |
+| `superadmin`       | Manager + `/admin/dni-numbers`                                                                                                                                                                                                                      |
+| `partner_operator` | Full funnel stage pages (nurture → moved-in) scoped **exclusively to their partner's properties' leads** via RLS. No Hub, archive, My Day, dashboard, or deal-awaiting. Must have `salespeople.partner_id` set — DB CHECK constraint enforces this. |
 
 RLS enforces row access; API routes also check session role. Auth user UUID **must** match `salespeople.id`.
+
+### Partner access architecture
+
+- **`partners` table** — UUID PK, one row per dormitory partner. Currently: Academic House.
+- **`properties.partner_id`** — FK to `partners`; null means Univotel-owned.
+- **`salespeople.partner_id`** — FK to `partners`; non-null required for `partner_operator` role (CHECK constraint).
+- **`lead_details.interested_property_ids UUID[]`** — maintained by trigger from `interested_hotel TEXT[]`; used by `lead_partner_owner()` to compute attribution.
+- **`lead_partner_owner()`** — SECURITY DEFINER function resolving which partner owns a lead: `purchased_room` property > most recent `visit` property > `interested_property_ids`. Later-stage signals always override earlier ones.
+- **Route guard** — `AppShell` enforces an allowlist; blocked routes redirect to `/leads`. `search_leads_global` RPC raises an exception for partners. Assignment filters (`mineOnly`, `unassignedOnly`) are skipped for partner sessions — RLS is the sole scoping mechanism.
 
 ---
 
