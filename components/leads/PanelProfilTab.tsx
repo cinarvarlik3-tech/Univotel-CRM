@@ -8,6 +8,7 @@ import { InlineEditField, type SelectOption } from '@/components/leads/InlineEdi
 import { InlineUniversityField } from '@/components/leads/InlineUniversityField';
 import { SourceDetailsPanel } from '@/components/leads/SourceDetailsPanel';
 import { PurchasedRoomDialog } from '@/components/leads/PurchasedRoomDialog';
+import { LossRecoveryFinanceDialog } from '@/components/leads/LossRecoveryFinanceDialog';
 import { useDebouncedSchoolShortnameSync } from '@/hooks/useDebouncedSchoolShortnameSync';
 import { useProperties } from '@/hooks/useProperties';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -24,6 +25,10 @@ import {
   UNI_YEARS,
 } from '@/lib/constants';
 import { PanelSaveError, runOptimisticSave } from '@/lib/ui/optimistic-panel-save';
+import {
+  getLossRecoveryFinancialTarget,
+  type FinancialFunnelStatus,
+} from '@/lib/leads/apply-loss-reason-update';
 import type { LeadDetailRow, LeadWithDetails } from '@/types/domain';
 
 interface PanelProfilTabProps {
@@ -103,6 +108,8 @@ export function PanelProfilTab({
 }: PanelProfilTabProps) {
   const { t, locale } = useTranslation();
   const [purchasedRoomOpen, setPurchasedRoomOpen] = useState(false);
+  const [lossRecoveryOpen, setLossRecoveryOpen] = useState(false);
+  const [lossRecoveryTarget, setLossRecoveryTarget] = useState<FinancialFunnelStatus | null>(null);
   const { data: universities = [] } = useUniversities();
   const { data: properties = [] } = useProperties();
 
@@ -401,11 +408,25 @@ export function PanelProfilTab({
           value={lead.loss_reason ?? ''}
           type="select"
           options={lossReasonOptions}
-          onSave={(v) =>
-            saveLeadOptimistic({ loss_reason: (v as string) || null }, () =>
-              patchLead(leadId, { loss_reason: v || null }),
-            )
-          }
+          onSave={(v) => {
+            const nextLoss = (v as string) || null;
+            const recoveryTarget = getLossRecoveryFinancialTarget(
+              {
+                funnel_status: lead.funnel_status,
+                funnel_status_before_lost: lead.funnel_status_before_lost,
+                loss_reason: lead.loss_reason,
+              },
+              { loss_reason: nextLoss },
+            );
+            if (recoveryTarget) {
+              setLossRecoveryTarget(recoveryTarget);
+              setLossRecoveryOpen(true);
+              return Promise.resolve();
+            }
+            return saveLeadOptimistic({ loss_reason: nextLoss }, () =>
+              patchLead(leadId, { loss_reason: nextLoss }),
+            );
+          }}
         />
       </CollapsibleSection>
 
@@ -439,7 +460,8 @@ export function PanelProfilTab({
         mode="required"
         initialPropertyId={details?.purchased_property_id}
         initialRoomTypeId={details?.purchased_room}
-        onConfirm={async (roomTypeId) => {
+        showFinanceTerms={false}
+        onConfirm={async ({ roomTypeId }) => {
           await saveDetailsOptimistic({ purchased_room: roomTypeId }, async () => {
             await patchDetails(leadId, { purchased_room: roomTypeId });
             const res = await fetch(`/api/lead-details/${leadId}`);
@@ -449,6 +471,21 @@ export function PanelProfilTab({
           });
         }}
       />
+
+      {lossRecoveryTarget && (
+        <LossRecoveryFinanceDialog
+          open={lossRecoveryOpen}
+          onOpenChange={setLossRecoveryOpen}
+          leadId={leadId}
+          targetStatus={lossRecoveryTarget}
+          initialPropertyId={details?.purchased_property_id}
+          initialRoomTypeId={details?.purchased_room}
+          onSuccess={(data) => {
+            if (data) onLeadSaved({ ...lead, ...(data as Partial<LeadWithDetails>) });
+            setLossRecoveryTarget(null);
+          }}
+        />
+      )}
     </div>
   );
 }

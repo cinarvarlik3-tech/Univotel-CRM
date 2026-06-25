@@ -8,7 +8,16 @@ import type { Json } from '@/types/database';
 export type WebhookSource = 'chatwoot' | 'netgsm' | 'whatsapp_calls';
 
 /** webhook_logs.status values. */
-export type WebhookLogStatus = 'received' | 'processing' | 'success' | 'failed' | 'skipped';
+export type WebhookLogStatus =
+  | 'received'
+  | 'processing'
+  | 'success'
+  | 'failed'
+  | 'skipped'
+  | 'ignored'
+  | 'dropped'
+  | 'partial'
+  | 'rejected';
 
 /** Result of claiming a webhook in webhook_logs. */
 export type ClaimWebhookResult =
@@ -55,12 +64,14 @@ export async function claimWebhookLog(params: {
  * Updates webhook_logs status after processing completes.
  * @param logId - webhook_logs.id.
  * @param status - Final status.
- * @param errorMessage - Optional error text when failed.
+ * @param detail - Optional human-readable detail (stored in error_message).
+ * @param reasonCode - Optional machine-readable sub-reason.
  */
 export async function finalizeWebhookLog(
   logId: string,
   status: Exclude<WebhookLogStatus, 'received' | 'processing'>,
-  errorMessage?: string | null,
+  detail?: string | null,
+  reasonCode?: string | null,
 ): Promise<void> {
   const client = createServiceClient();
 
@@ -68,10 +79,44 @@ export async function finalizeWebhookLog(
     .from('webhook_logs')
     .update({
       status,
-      error_message: errorMessage ?? null,
+      error_message: detail ?? null,
+      reason_code: reasonCode ?? null,
       processed_at: new Date().toISOString(),
     })
     .eq('id', logId);
+}
+
+/**
+ * Inserts an already-finalized webhook_logs row for transport-level outcomes that
+ * bypass the claim/process flow (e.g. signature failures). Deduped by idempotency
+ * key so repeated identical probes don't flood the table.
+ * @param params - Log fields including final status.
+ */
+export async function recordTerminalWebhookLog(params: {
+  idempotencyKey: string;
+  source: WebhookSource;
+  eventType: string;
+  payload: unknown;
+  status: Exclude<WebhookLogStatus, 'received' | 'processing'>;
+  reasonCode: string;
+  detail?: string | null;
+}): Promise<void> {
+  const client = createServiceClient();
+  const { error } = await client.from('webhook_logs').insert({
+    idempotency_key: params.idempotencyKey,
+    source: params.source,
+    event_type: params.eventType,
+    status: params.status,
+    reason_code: params.reasonCode,
+    error_message: params.detail ?? null,
+    payload: params.payload as Json,
+    processed_at: new Date().toISOString(),
+  });
+
+  // 23505 = duplicate idempotency key — identical probe already logged, ignore.
+  if (error && error.code !== '23505') {
+    console.error('[webhook] terminal log insert failed:', error.message);
+  }
 }
 
 /**

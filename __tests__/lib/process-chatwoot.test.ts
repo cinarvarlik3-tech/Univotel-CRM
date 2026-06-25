@@ -288,11 +288,13 @@ describe('processChatwoot', () => {
     );
   });
 
-  it('alerts on unknown event shape', async () => {
-    await processChatwoot({ event: 'contact_created', id: 1 });
+  it('returns a rejected outcome on unknown/invalid event shape', async () => {
+    const outcome = await processChatwoot({ event: 'contact_created', id: 1 });
 
     expect(createLeadFromWebhook).not.toHaveBeenCalled();
-    expect(sendTelegramToManagers).toHaveBeenCalled();
+    // Alerting is centralized in runWithWebhookLog; the processor just reports the outcome.
+    expect(outcome.status).toBe('rejected');
+    expect(outcome.reasonCode).toBe('schema_invalid');
   });
 
   it('moves lead to lost and saves prior stage when kayip_nedeni is set', async () => {

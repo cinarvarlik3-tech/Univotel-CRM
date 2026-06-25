@@ -14,16 +14,25 @@ interface TopbarProps {
   title: string;
   count?: number;
   actions?: ReactNode;
+  /** Rendered below the title row (e.g. page tab navigation). */
+  subheader?: ReactNode;
   className?: string;
   hideSearch?: boolean;
 }
 
 /**
- * Renders the 52px page header bar with title, global quick-search, and actions.
- * @param props - Title, optional count badge, and action slot.
+ * Renders the page header bar with title, global quick-search, actions, and optional subheader.
+ * @param props - Title, optional count badge, action slot, and subheader.
  * @returns Topbar element.
  */
-export function Topbar({ title, count, actions, className, hideSearch = false }: TopbarProps) {
+export function Topbar({
+  title,
+  count,
+  actions,
+  subheader,
+  className,
+  hideSearch = false,
+}: TopbarProps) {
   const { locale } = useTranslation();
   const router = useRouter();
 
@@ -42,25 +51,30 @@ export function Topbar({ title, count, actions, className, hideSearch = false }:
   return (
     <header
       className={cn(
-        'flex h-[52px] shrink-0 items-center justify-between border-b border-border-default bg-surface-card px-5',
+        'flex shrink-0 flex-col border-b border-border-default bg-surface-card px-5',
+        subheader ? 'pb-2.5' : 'h-[52px] justify-center',
         className,
       )}
     >
-      <div className="flex items-center gap-2.5">
-        <h1 className="font-heading text-[15px] font-bold">{title}</h1>
-        {count !== undefined && (
-          <Badge className="rounded-full bg-brand-blue px-2 py-0.5 text-[11px] font-medium text-primary-foreground">
-            {formatNumber(count, locale)}
-          </Badge>
-        )}
+      <div className={cn('flex items-center justify-between', subheader ? 'h-[52px]' : 'h-full')}>
+        <div className="flex items-center gap-2.5">
+          <h1 className="font-heading text-[15px] font-bold">{title}</h1>
+          {count !== undefined && (
+            <Badge className="rounded-full bg-brand-blue px-2 py-0.5 text-[11px] font-medium text-primary-foreground">
+              {formatNumber(count, locale)}
+            </Badge>
+          )}
+        </div>
+
+        {/* D14 / §4.6: Global quick-search — hidden for partner_operator (RLS bypass) */}
+        <div className="flex flex-1 items-center justify-center px-4">
+          {!hideSearch && <GlobalQuickSearch onSelectLead={handleSelectLead} />}
+        </div>
+
+        {actions && <div className="flex items-center gap-2">{actions}</div>}
       </div>
 
-      {/* D14 / §4.6: Global quick-search — hidden for partner_operator (RLS bypass) */}
-      <div className="flex flex-1 items-center justify-center px-4">
-        {!hideSearch && <GlobalQuickSearch onSelectLead={handleSelectLead} />}
-      </div>
-
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {subheader && <div className="flex items-center">{subheader}</div>}
     </header>
   );
 }

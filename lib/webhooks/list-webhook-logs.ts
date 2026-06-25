@@ -6,6 +6,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 /** Parameters for listing webhook logs. */
 export interface ListWebhookLogsParams {
   source?: string;
+  /** Single status or comma-separated list (e.g. 'failed,partial,rejected,dropped'). */
   status?: string;
   limit: number;
   cursor?: string;
@@ -19,6 +20,7 @@ export interface ListWebhookLogsResult {
     source: string;
     event_type: string;
     status: string;
+    reason_code: string | null;
     error_message: string | null;
     retry_count: number;
     processed_at: string | null;
@@ -40,13 +42,19 @@ export async function listWebhookLogs(
   let query = client
     .from('webhook_logs')
     .select(
-      'id, idempotency_key, source, event_type, status, error_message, retry_count, processed_at, created_at',
+      'id, idempotency_key, source, event_type, status, reason_code, error_message, retry_count, processed_at, created_at',
     )
     .order('created_at', { ascending: false })
     .limit(params.limit + 1);
 
   if (params.source) query = query.eq('source', params.source);
-  if (params.status) query = query.eq('status', params.status);
+  if (params.status) {
+    const statuses = params.status
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    query = statuses.length > 1 ? query.in('status', statuses) : query.eq('status', statuses[0]);
+  }
   if (params.cursor) query = query.lt('created_at', params.cursor);
 
   const { data, error } = await query;

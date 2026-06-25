@@ -31,6 +31,12 @@ const UpdateVisitSchema = z.union([
     loss_reason: z.enum(LOSS_REASONS).optional(),
     lead_uuid: z.string().uuid(),
     purchased_room: z.string().uuid().optional(),
+    move_in_month: z
+      .string()
+      .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+      .optional(),
+    deal_duration: z.number().int().min(1).max(12).optional(),
+    discount: z.number().min(0).optional(),
   }),
 ]);
 
@@ -69,6 +75,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (parsed.data.outcome === 'downpayment' && !parsed.data.purchased_room) {
       return sendError(res, 'Kapora için oda tipi seçilmelidir', 400);
     }
+    if (parsed.data.outcome === 'downpayment' && !parsed.data.move_in_month) {
+      return sendError(res, 'Taşınma ayı (YYYY-MM) gereklidir', 400);
+    }
 
     const { data: leadFull, error: leadErr } = await supabase
       .from('leads')
@@ -90,6 +99,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         outcome: parsed.data.outcome,
         lossReason: parsed.data.loss_reason,
         purchasedRoom: parsed.data.purchased_room,
+        moveInMonth: parsed.data.move_in_month,
+        dealDuration: parsed.data.deal_duration,
+        discount: parsed.data.discount,
         resolvedBy: session.userId,
         leadFunnelStatus: leadFull.funnel_status,
         leadAssignedTo: leadFull.assigned_to,

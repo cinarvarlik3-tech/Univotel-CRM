@@ -10,8 +10,9 @@ interface KpiCardProps {
   label: string;
   value: string | number;
   sub?: string;
-  variant?: 'blue' | 'red' | 'amber' | 'neutral';
+  variant?: 'blue' | 'red' | 'amber' | 'green' | 'neutral';
   valueClassName?: string;
+  labelClassName?: string;
   className?: string;
   href?: string;
   navigable?: boolean;
@@ -28,11 +29,13 @@ export function KpiCard({
   sub,
   variant = 'neutral',
   valueClassName,
+  labelClassName,
   className,
   href,
   navigable = false,
 }: KpiCardProps) {
-  const isColored = variant === 'blue' || variant === 'red' || variant === 'amber';
+  const isColored =
+    variant === 'blue' || variant === 'red' || variant === 'amber' || variant === 'green';
 
   const card = (
     <div
@@ -41,6 +44,7 @@ export function KpiCard({
         variant === 'blue' && 'border-brand-blue bg-brand-blue',
         variant === 'red' && 'border-brand-red bg-brand-red',
         variant === 'amber' && 'border-[var(--badge-warning-text)] bg-[var(--badge-warning-bg)]',
+        variant === 'green' && 'border-emerald-600 bg-emerald-600',
         variant === 'neutral' && 'border-border-default bg-surface-card',
         href && 'transition-opacity hover:opacity-90',
         className,
@@ -51,7 +55,8 @@ export function KpiCard({
           className={cn(
             'absolute top-3.5 right-3.5 size-4',
             variant === 'amber' && 'text-[var(--badge-warning-text)]',
-            variant !== 'amber' && isColored && 'text-current opacity-70',
+            variant !== 'amber' && variant !== 'green' && isColored && 'text-current opacity-70',
+            variant === 'green' && 'text-white/70',
             variant === 'neutral' && 'text-text-tertiary',
           )}
           aria-hidden
@@ -63,7 +68,9 @@ export function KpiCard({
           variant === 'blue' && 'text-white/75',
           variant === 'red' && 'text-white/75',
           variant === 'amber' && 'text-[var(--badge-warning-text)]/80',
+          variant === 'green' && 'text-white/75',
           variant === 'neutral' && 'text-text-secondary',
+          labelClassName,
         )}
       >
         {label}
@@ -74,7 +81,9 @@ export function KpiCard({
           variant === 'blue' && 'text-white',
           variant === 'red' && 'text-white',
           variant === 'amber' && 'text-[var(--badge-warning-text)]',
-          variant === 'neutral' && (valueClassName ?? 'text-text-primary'),
+          variant === 'green' && 'text-white',
+          variant === 'neutral' && 'text-text-primary',
+          valueClassName,
         )}
       >
         {value}
@@ -86,6 +95,7 @@ export function KpiCard({
             variant === 'blue' && 'text-white/60',
             variant === 'red' && 'text-white/60',
             variant === 'amber' && 'text-[var(--badge-warning-text)]/70',
+            variant === 'green' && 'text-white/60',
             variant === 'neutral' && 'text-text-tertiary',
           )}
         >

@@ -1,12 +1,12 @@
 # Univotel CRM — Production Runbook
 
-Last updated: 2026-06-17. This document describes **what the running system does now** and **how to fix it when something breaks**. For design history, see implementation docs; this is operational reference only.
+Last updated: 2026-06-19. This document describes **what the running system does now** and **how to fix it when something breaks**. For design history, see implementation docs; this is operational reference only.
 
 ---
 
 ## 1. System Overview
 
-Univotel CRM ingests leads from Chatwoot (WhatsApp/Instagram), NetGSM (phone calls), and Meta WhatsApp calls, stores them in Supabase Postgres, assigns them to salespeople, tracks SLA and tasks, sends Telegram alerts to managers and agents, runs WhatsApp campaigns, and archives terminal leads after **80 days**. **Phase 4** adds first-click attribution: REF codes and UTM from marketing sites, Dynamic Number Insertion (DNI) for call source tracking, a `collected_data` table written in parallel with `leads.source_details`, and async GA4 Data API session enrichment. **Old leads (historical import):** one-time bulk import from a Chatwoot SQL dump (`readable_database.sql`) into read-only `old_leads` / `old_lead_details` (migrations `0038`–`0039`), plus one-time message import into `old_lead_messages` (`0040`) — browsable at `/old-leads` with a read-only **Conversation** tab (manager/superadmin only). **Active lead chat (live):** Messages are continuously synced into `lead_messages` via the Chatwoot `message_created` webhook. Opening **Conversation** on an active lead slide-over additionally calls the Chatwoot Application API to backfill history and re-syncs every **15s** while the tab stays open (requires `CHATWOOT_API_TOKEN` + `CHATWOOT_ACCOUNT_ID`). Old leads are not wired to live webhooks or the active SLA/archive pipeline. The UI and API run on Cloudflare Workers (OpenNext). Scheduled jobs run in **Supabase pg_cron** (HTTP callbacks to the CRM for most jobs; archive/reconcile remain SQL-only).
+Univotel CRM ingests leads from Chatwoot (WhatsApp/Instagram), NetGSM (phone calls), and Meta WhatsApp calls, stores them in Supabase Postgres, assigns them to salespeople, tracks SLA and tasks, sends Telegram alerts to managers and agents, runs WhatsApp campaigns, and archives terminal leads after **80 days**. **Manager analytics** (`/dashboard`): four tabs — **Everyday**, **Marketing**, **Loss Analysis**, and **Team panel** — backed by live-query APIs (2026-06 overhaul; legacy materialized views no longer power the UI). **Phase 4** adds first-click attribution: REF codes and UTM from marketing sites, Dynamic Number Insertion (DNI) for call source tracking, a `collected_data` table written in parallel with `leads.source_details`, and async GA4 Data API session enrichment. **Old leads (historical import):** one-time bulk import from a Chatwoot SQL dump (`readable_database.sql`) into read-only `old_leads` / `old_lead_details` (migrations `0038`–`0039`), plus one-time message import into `old_lead_messages` (`0040`) — browsable at `/old-leads` with a read-only **Conversation** tab (manager/superadmin only). **Active lead chat (live):** Messages are continuously synced into `lead_messages` via the Chatwoot `message_created` webhook. Opening **Conversation** on an active lead slide-over additionally calls the Chatwoot Application API to backfill history and re-syncs every **15s** while the tab stays open (requires `CHATWOOT_API_TOKEN` + `CHATWOOT_ACCOUNT_ID`). Old leads are not wired to live webhooks or the active SLA/archive pipeline. **PMS (Property Management System):** room inventory, placements (`lead_rooms`), and operator/manager/partner_operator write paths (migrations `0083`–`0091`) at `/pms`. **FMS (Finance Management System):** manager/superadmin-only contracted-revenue layer for won customers — reads `active_finance` / `fms_revenue_breakdown()` only; dashboard at `/fms` with partner/property filters, kapora toggle, KPI triple-box, pie chart, and customer list; drill-down per partner/property; seasonal price admin at `/fms/prices` (`room_type_prices`). Salespeople and operators **create** finance rows via CRM funnel (`advance-stage` at `kapora-alindi`) but **cannot** open `/fms/*` (AppShell redirects to `/leads`). The UI and API run on Cloudflare Workers (OpenNext). Scheduled jobs run in **Supabase pg_cron** (HTTP callbacks to the CRM for most jobs; archive/reconcile remain SQL-only).
 
 | Service                            | What it does                                                                 | If it goes down                                                                 |
 | ---------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -30,12 +30,13 @@ Univotel CRM ingests leads from Chatwoot (WhatsApp/Instagram), NetGSM (phone cal
 
 **Roles:**
 
-| Role               | Access                                                                                                                                                                                                                                                                |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `salesperson`      | Assigned + unassigned active leads (incl. **Conversation** tab — live Chatwoot sync per open lead); own tasks; read-only properties; **My Day** `/my-day`; **My Leads** at `/leads/mine`; stage compartment pages                                                     |
-| `manager`          | All active leads, archived leads, dashboard, campaigns, webhook logs, notifications; **My Leads** for personally assigned subset; **Old leads** at `/old-leads` (read-only historical imports)                                                                        |
-| `superadmin`       | Everything `manager` has + **DNI numbers admin** (`/admin/dni-numbers`); same manager-level data access via RLS                                                                                                                                                       |
-| `partner_operator` | Full funnel stage pages (nurture → moved-in) scoped to their dormitory partner's properties' leads — enforced by RLS only, never by UI filtering. Cannot access Hub, archive, My Day, dashboard, or deal-awaiting. Must have `salespeople.partner_id` set (DB CHECK). |
+| Role               | Access                                                                                                                                                                                                                                                                                                         |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `salesperson`      | Assigned + unassigned active leads (incl. **Conversation** tab — live Chatwoot sync per open lead); own tasks; read-only properties; **My Day** `/my-day`; **My Leads** at `/leads/mine`; stage compartment pages; kapora/sözleşme funnel writes (finance row via API)                                         |
+| `operator`         | Same funnel/PMS write powers as salesperson for stage advances and placements; **no** FMS app, dashboard, Hub, archive, My Day, or deal-awaiting                                                                                                                                                               |
+| `manager`          | All active leads, archived leads, dashboard, campaigns, webhook logs, notifications, **FMS** `/fms/*`; **My Leads** for personally assigned subset; **Old leads** at `/old-leads` (read-only historical imports)                                                                                               |
+| `superadmin`       | Everything `manager` has + **DNI numbers admin** (`/admin/dni-numbers`); same manager-level data access via RLS                                                                                                                                                                                                |
+| `partner_operator` | Full funnel stage pages (nurture → moved-in) scoped to their dormitory partner's properties' leads — enforced by RLS only, never by UI filtering. Cannot access Hub, archive, My Day, dashboard, FMS, or deal-awaiting. Must have `salespeople.partner_id` set (DB CHECK). PMS write scoped to own properties. |
 
 `/leads/my` is an alias that redirects to `/leads/mine`. Salespeople cannot access archived routes or `/old-leads` (API 403, UI redirect). Partner operators hitting a blocked route are redirected to `/leads`.
 
@@ -133,21 +134,28 @@ pnpm db:migrate          # runs: supabase db push
 pnpm gen:types           # regenerates types/database.ts from remote schema
 ```
 
-Migrations are in `supabase/migrations/` numbered `0001`–`0073`. Apply in order.
+Migrations are in `supabase/migrations/` numbered `0001`–`0098`. Apply in order.
 
-| Range         | Phase                                                                                                                                                                                                                          |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `0026`–`0032` | Phase 3 — archive fields, nightly archive, analytics MVs, 80-day cutoff                                                                                                                                                        |
-| `0033`–`0037` | Phase 4 — superadmin role, `ref_sessions`, `dni_numbers`, `collected_data`, GA4 enrichment cron                                                                                                                                |
-| `0038`–`0039` | Old leads — `old_leads`, `old_lead_details`, unique `chatwoot_conversation_id` for idempotent import                                                                                                                           |
-| `0040`        | Old lead messages — `old_lead_messages` (historical dump import; read-only)                                                                                                                                                    |
-| `0041`        | Active lead messages — `lead_messages` (on-demand Chatwoot API sync + real-time webhook sync)                                                                                                                                  |
-| `0042`–`0046` | Property inventory, hotel recommendation fields on `lead_details`                                                                                                                                                              |
-| `0047`        | `search_old_leads_ids` RPC (fuzzy search on old leads)                                                                                                                                                                         |
-| `0048`–`0061` | Universities, deal_awaiting, SLA business hours, lead message notify cron, budget_tier, Chatwoot sync                                                                                                                          |
-| `0062`–`0073` | Major Update — funnel consolidation (`lost`), visits, boolean flags, auto-tasks, 24h restriction, `claimed_at`, `lead_stage_history`                                                                                           |
-| `0049`        | contact_history types — adds `call`, `message_start`, `chatwoot` source; updates `unarchive_single_lead`                                                                                                                       |
-| `0093`–`0095` | Partner access — `partners` table, `partner_id` FK on properties/salespeople, `partner_operator` role + CHECK constraint, `interested_property_ids UUID[]` on lead_details, partner RLS policies, RLS unassigned-lead leak fix |
+| Range         | Phase                                                                                                                                                                                                                               |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0026`–`0032` | Phase 3 — archive fields, nightly archive, analytics MVs, 80-day cutoff                                                                                                                                                             |
+| `0033`–`0037` | Phase 4 — superadmin role, `ref_sessions`, `dni_numbers`, `collected_data`, GA4 enrichment cron                                                                                                                                     |
+| `0038`–`0039` | Old leads — `old_leads`, `old_lead_details`, unique `chatwoot_conversation_id` for idempotent import                                                                                                                                |
+| `0040`        | Old lead messages — `old_lead_messages` (historical dump import; read-only)                                                                                                                                                         |
+| `0041`        | Active lead messages — `lead_messages` (on-demand Chatwoot API sync + real-time webhook sync)                                                                                                                                       |
+| `0042`–`0046` | Property inventory, hotel recommendation fields on `lead_details`                                                                                                                                                                   |
+| `0047`        | `search_old_leads_ids` RPC (fuzzy search on old leads)                                                                                                                                                                              |
+| `0048`–`0061` | Universities, deal_awaiting, SLA business hours, lead message notify cron, budget_tier, Chatwoot sync                                                                                                                               |
+| `0062`–`0073` | Major Update — funnel consolidation (`lost`), visits, boolean flags, auto-tasks, 24h restriction, `claimed_at`, `lead_stage_history`                                                                                                |
+| `0074`–`0077` | Display names on leads, lead pins, recent searches, global quick-search RPC                                                                                                                                                         |
+| `0078`–`0079` | Team panel aggregation RPCs, salesperson `home_property_id` for My Day visits                                                                                                                                                       |
+| `0080`–`0082` | Search inactive flag on global search, `lead_messages` attribution backfill, properties re-keyed to univotel hotel UUIDs                                                                                                            |
+| `0083`–`0091` | **PMS** — `room_types`, `rooms`, `lead_rooms` placements, placement triggers, reconcile cron, seed data                                                                                                                             |
+| `0090`        | `operator` role + PMS RLS write policies                                                                                                                                                                                            |
+| `0092`        | `tasks.is_cancelled`                                                                                                                                                                                                                |
+| `0093`–`0095` | Partner access — `partners` table, `partner_id` FK on properties/salespeople, `partner_operator` role + CHECK constraint, `interested_property_ids UUID[]` on lead_details, partner RLS policies, RLS unassigned-lead leak fix      |
+| `0096`–`0098` | **FMS** — `lead_finance` ledger, `active_finance` view, `fms_revenue_breakdown()`, finance RPCs + audit; seasonal `room_type_prices` + auto-vacate on lost/drop-below-kapora; `fms_property_roomtype_breakdown()` for dashboard pie |
+| `0049`        | contact_history types — adds `call`, `message_start`, `chatwoot` source; updates `unarchive_single_lead`                                                                                                                            |
 
 **Partner access post-migration checks (after `0093`–`0095`):**
 
@@ -178,6 +186,46 @@ ORDER BY tablename, policyname;
 -- (all staff SELECT policies on leads should have NOT is_partner_operator())
 SELECT policyname, qual FROM pg_policies
 WHERE tablename = 'leads' AND policyname = 'leads_select_assigned';
+```
+
+Then run `pnpm gen:types` to refresh `types/database.ts`.
+
+**FMS post-migration checks (after `0096`–`0098`):**
+
+```sql
+-- Core finance objects
+SELECT to_regclass('public.lead_finance'),
+       to_regclass('public.active_finance'),
+       to_regclass('public.finance_audit'),
+       to_regclass('public.room_type_prices');
+
+-- active_finance is security_invoker (RLS applies through the view)
+SELECT c.relname, c.reloptions FROM pg_class c WHERE c.relname = 'active_finance';
+
+-- Canonical RPCs exist and are service_role-only
+SELECT proname FROM pg_proc
+WHERE proname IN (
+  'fms_revenue_breakdown',
+  'fms_create_finance_row',
+  'fms_record_finance_change',
+  'fms_price_for_month',
+  'fms_property_roomtype_breakdown'
+);
+
+-- Sample contracted revenue (default excludes kapora-alindi)
+SELECT * FROM fms_revenue_breakdown(false) LIMIT 5;
+
+-- Kapora-inclusive toggle path
+SELECT SUM(property_revenue) FROM fms_revenue_breakdown(true);
+```
+
+Design reference: `docs/FMS-spec.md` + `docs/FMS-spec-delta-0097.md`. Revenue math must stay in `lib/finance/revenue.ts` only.
+
+**QA test seed (optional, SQL Editor — not a migration):**
+
+```bash
+# scripts/fms-academia-test-seed.sql   — 12 placeholder won customers (Academia partner)
+# scripts/fms-academia-test-teardown.sql — removes only fixed test UUIDs
 ```
 
 Then run `pnpm gen:types` to refresh `types/database.ts`.
@@ -995,6 +1043,50 @@ Then re-run `pnpm import:old-leads:write`. Always dry-run first with `pnpm impor
 
 **Fix:** Expected for incomplete Chatwoot contacts. No CRM action unless dump export is stale — re-export `readable_database.sql` from Chatwoot Postgres.
 
+### FMS dashboard empty or all zeros
+
+**Cause:** No active `lead_finance` rows, or all leads at `kapora-alindi` while **Kaporaları göster** toggle is off (default = contracted revenue only).
+
+**Check:**
+
+```sql
+SELECT COUNT(*) FROM active_finance;
+SELECT l.funnel_status, COUNT(*) FROM active_finance af
+JOIN leads l ON l.uuid = af.lead_id GROUP BY 1;
+SELECT * FROM fms_revenue_breakdown(false);
+```
+
+**Fix:** Advance test leads to `sozlesme-imzalandi`, or toggle kapora on the FMS header. For QA, run `scripts/fms-academia-test-seed.sql` in SQL Editor.
+
+### Kapora advance blocked — price / gate validation
+
+**Cause:** `room_type_prices` has no period covering the lead's `move_in_month` for the purchased room (migration `0097` seasonal pricing). `default_price` alone is not sufficient.
+
+**Check:**
+
+```sql
+SELECT rt.name, rtp.*
+FROM room_types rt
+LEFT JOIN room_type_prices rtp ON rtp.room_type_id = rt.id
+WHERE rt.id = '<purchased_room_uuid>';
+
+SELECT fms_price_for_month('<purchased_room_uuid>'::uuid, '2025-09-01'::date);
+```
+
+**Fix:** Managers seed prices at **FMS → Prices** (`/fms/prices/{propertyId}`) or insert `room_type_prices` rows covering the move-in month. See `docs/FMS-spec-delta-0097.md` §B.
+
+### FMS property pie chart 500 / empty room-type slices
+
+**Cause:** Migration `0098` not applied (`fms_property_roomtype_breakdown` missing).
+
+**Check:**
+
+```sql
+SELECT proname FROM pg_proc WHERE proname = 'fms_property_roomtype_breakdown';
+```
+
+**Fix:** `pnpm db:migrate` then `pnpm gen:types`.
+
 ---
 
 ## 6. Database — Reference Queries
@@ -1182,27 +1274,63 @@ ORDER BY msg_count DESC
 LIMIT 10;
 ```
 
+### FMS revenue reconciliation
+
+```sql
+-- Row-level math (must match active_finance view)
+SELECT lead_id,
+       monthly_payment, discount, deal_duration,
+       effective_monthly,
+       lead_revenue,
+       (monthly_payment - discount) AS check_effective,
+       (monthly_payment - discount) * deal_duration AS check_revenue
+FROM active_finance
+WHERE effective_monthly IS DISTINCT FROM (monthly_payment - discount)
+   OR lead_revenue IS DISTINCT FROM (monthly_payment - discount) * deal_duration;
+-- expect 0 rows
+
+-- Contracted vs kapora-inclusive grand totals
+SELECT SUM(property_revenue) AS contracted FROM fms_revenue_breakdown(false);
+SELECT SUM(property_revenue) AS with_kapora FROM fms_revenue_breakdown(true);
+
+-- Per-partner rollup + commission check (flat %)
+SELECT rb.partner_name,
+       SUM(rb.property_revenue) AS partner_revenue,
+       p.commission_percentage,
+       SUM(rb.property_revenue) * (p.commission_percentage / 100) AS expected_our_cut
+FROM fms_revenue_breakdown(false) rb
+LEFT JOIN partners p ON p.id = rb.partner_id
+GROUP BY rb.partner_name, p.commission_percentage;
+
+-- Unattributed bucket (null partner_id on property)
+SELECT * FROM fms_revenue_breakdown(false) WHERE partner_id IS NULL;
+
+-- Vacated rows must not appear in revenue
+SELECT COUNT(*) FROM lead_finance WHERE vacated_at IS NOT NULL;
+SELECT COUNT(*) FROM active_finance;
+```
+
 ---
 
 ## 7. Cron Jobs
 
 All times **UTC**. Turkey (TRT) = UTC+3 → 03:00 UTC = 06:00 TRT.
 
-| Job name                      | Schedule (UTC) | Type                                   | What it does                                                                    |
-| ----------------------------- | -------------- | -------------------------------------- | ------------------------------------------------------------------------------- |
-| `sla_update`                  | `*/5 * * * *`  | SQL                                    | Updates `leads.sla_status` (`on_time` / `breached`; business hours only)        |
-| `task_overdue_check`          | `*/5 * * * *`  | SQL                                    | Sets `tasks.is_late = true` where overdue                                       |
-| `mv_refresh`                  | `*/5 * * * *`  | SQL                                    | Refreshes 4 materialized views (analytics Overview tab)                         |
-| `sla-alerts`                  | `*/5 * * * *`  | HTTP → `/api/cron/sla-alerts`          | Telegram SLA breach alerts to managers                                          |
-| `task-overdue`                | `*/5 * * * *`  | HTTP → `/api/cron/task-overdue`        | Telegram task alerts to salespeople + manager escalation                        |
-| `campaign-resume`             | `*/5 * * * *`  | HTTP → `/api/cron/campaign-resume`     | Resumes paused campaigns under daily quota                                      |
-| `ga4-enrichment`              | `*/5 * * * *`  | HTTP → `/api/cron/ga4-enrichment`      | GA4 Data API retries for `collected_data` (attempts 2–4)                        |
-| `lead-message-notify`         | `* * * * *`    | HTTP → `/api/cron/lead-message-notify` | Telegram inbound message alerts to salespeople                                  |
-| `restriction-24h`             | `*/15 * * * *` | HTTP → `/api/cron/restriction-24h`     | Sets `is_24h_restricted` when last inbound message > 24h old                    |
-| `pms-sync-reconcile`          | `0 4 * * *`    | HTTP → `/api/cron/pms-sync-reconcile`  | Nightly full-scan univotel hotels/room*types → CRM (requires `UNIVOTEL*\*` env) |
-| `campaign_daily_reset`        | `0 0 * * *`    | SQL                                    | Resets `daily_send_count`, unpauses campaigns at midnight UTC                   |
-| `nightly-archive`             | `0 3 * * *`    | SQL                                    | Archives up to **100** eligible terminal leads                                  |
-| `active_lead_count_reconcile` | `15 3 * * *`   | SQL                                    | Recounts `salespeople.active_lead_count`                                        |
+| Job name                      | Schedule (UTC) | Type                                   | What it does                                                                                                        |
+| ----------------------------- | -------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `sla_update`                  | `*/5 * * * *`  | SQL                                    | Updates `leads.sla_status` (`on_time` / `breached`; business hours only)                                            |
+| `task_overdue_check`          | `*/5 * * * *`  | SQL                                    | Sets `tasks.is_late = true` where overdue                                                                           |
+| `mv_refresh`                  | `*/5 * * * *`  | SQL                                    | Refreshes 4 legacy materialized views (`mv_*`) — no longer used by `/dashboard` UI after 2026-06 analytics overhaul |
+| `sla-alerts`                  | `*/5 * * * *`  | HTTP → `/api/cron/sla-alerts`          | Telegram SLA breach alerts to managers                                                                              |
+| `task-overdue`                | `*/5 * * * *`  | HTTP → `/api/cron/task-overdue`        | Telegram task alerts to salespeople + manager escalation                                                            |
+| `campaign-resume`             | `*/5 * * * *`  | HTTP → `/api/cron/campaign-resume`     | Resumes paused campaigns under daily quota                                                                          |
+| `ga4-enrichment`              | `*/5 * * * *`  | HTTP → `/api/cron/ga4-enrichment`      | GA4 Data API retries for `collected_data` (attempts 2–4)                                                            |
+| `lead-message-notify`         | `* * * * *`    | HTTP → `/api/cron/lead-message-notify` | Telegram inbound message alerts to salespeople                                                                      |
+| `restriction-24h`             | `*/15 * * * *` | HTTP → `/api/cron/restriction-24h`     | Sets `is_24h_restricted` when last inbound message > 24h old                                                        |
+| `pms-sync-reconcile`          | `0 4 * * *`    | HTTP → `/api/cron/pms-sync-reconcile`  | Nightly full-scan univotel hotels/room*types → CRM (requires `UNIVOTEL*\*` env)                                     |
+| `campaign_daily_reset`        | `0 0 * * *`    | SQL                                    | Resets `daily_send_count`, unpauses campaigns at midnight UTC                                                       |
+| `nightly-archive`             | `0 3 * * *`    | SQL                                    | Archives up to **100** eligible terminal leads                                                                      |
+| `active_lead_count_reconcile` | `15 3 * * *`   | SQL                                    | Recounts `salespeople.active_lead_count`                                                                            |
 
 **Check last runs:**
 
@@ -1526,6 +1654,46 @@ No `deal_awaiting`, `notes`, `budget_tier`, `school_shortname`, or `sla_status`.
 
 **Adding a filter field:** Update `lib/constants.ts` (`LEAD_LIST_FILTER_FIELDS` / `OLD_*`), `lib/leads/filter-field-registry.ts`, `lib/query/filter-field-config.ts` (ilike/array metadata), and `__tests__/lib/build-leads-query-string.test.ts`.
 
+### FMS (Finance Management System)
+
+Manager/superadmin only. All revenue figures come from **`lib/finance/revenue.ts`** — no page re-derives math. Read path: view `active_finance` or RPC `fms_revenue_breakdown(include_kapora)`.
+
+| Quantity          | Formula                                          | Where computed                                                |
+| ----------------- | ------------------------------------------------ | ------------------------------------------------------------- |
+| Effective monthly | `monthly_payment − discount`                     | `active_finance.effective_monthly` (view)                     |
+| Lead revenue      | `effective_monthly × deal_duration`              | `active_finance.lead_revenue` (view)                          |
+| Property revenue  | `SUM(lead_revenue)` by property                  | `fms_revenue_breakdown()`                                     |
+| Partner revenue   | `SUM(property_revenue)` by partner               | `rollupBreakdownRows()` in `lib/finance/revenue.ts`           |
+| Our cut           | `partnerRevenue × (commission_percentage / 100)` | `calculatePartnerCommission()` in `lib/finance/commission.ts` |
+| Partner profit    | `revenue − our_cut`                              | derived in `rollupBreakdownRows()`                            |
+| Grand totals      | sum across partners + unattributed bucket        | `getFmsTotals()`                                              |
+
+**Kapora toggle ("Kaporaları göster"):**
+
+| `includeKapora`   | Meaning                                                      |
+| ----------------- | ------------------------------------------------------------ |
+| `false` (default) | **Contracted** — excludes leads currently at `kapora-alindi` |
+| `true`            | Includes kapora-stage deposits                               |
+
+Vacated finance rows (lost / dropped below kapora) never appear in either mode. Toggle threads through `FmsFilterContext` → all `useFms*` hooks → API `?includeKapora=true`.
+
+**Write path (CRM funnel, not FMS UI):**
+
+1. Kapora gate (`lib/finance/kapora-gate.ts`) validates `purchased_room`, `move_in_month`, priced month, `deal_duration`, `discount`.
+2. `fms_create_finance_row` RPC creates row **before** funnel write; compensating vacate if funnel write fails (`lib/finance/kapora-flow.ts`).
+3. Sözleşme / room changes use atomic `fms_record_finance_change` RPC (`lib/finance/record-change.ts`).
+4. DB trigger `fn_vacate_finance_on_exit` vacates on **lost** or drop below `kapora-alindi` (archive does **not** vacate).
+
+**Dashboard selection scopes** (`GET /api/fms/dashboard`):
+
+| Filter   | Triple box / list       | Pie chart                                            |
+| -------- | ----------------------- | ---------------------------------------------------- |
+| None     | Grand totals            | Property slices (all partners)                       |
+| Partner  | Partner bucket          | That partner's properties                            |
+| Property | Single property revenue | Room-type slices (`fms_property_roomtype_breakdown`) |
+
+Code: `components/finance/*`, `hooks/useFms.ts`, `pages/fms/index.tsx`, `pages/api/fms/dashboard.ts`.
+
 ### Funnel View (active lead slide-over tab)
 
 The **Funnel View** tab (`components/leads/FunnelView.tsx`) fetches `GET /api/leads/{id}/funnel-view` and renders three sections:
@@ -1675,38 +1843,60 @@ Roll back Worker (Section 3). If DB migration caused issue, check Supabase migra
 
 ## 10. Manager UI Routes
 
-| Route                   | Purpose                                                                 | Access                                    |
-| ----------------------- | ----------------------------------------------------------------------- | ----------------------------------------- |
-| `/my-day`               | Personal salesperson cockpit (counters, tasks, attention, performance)  | staff only (not partner_operator)         |
-| `/dashboard`            | Analytics — **Overview** + **Team panel** tabs (see below)              | manager, superadmin                       |
-| `/leads`                | Active lead list                                                        | all roles (scoped by RLS)                 |
-| `/leads/hub`            | Lead hub / unclaimed pool                                               | staff only (partners → redirect `/leads`) |
-| `/leads/expecting-call` | Expecting callback compartment                                          | staff only                                |
-| `/leads/nurture`        | Nurture-stage compartment                                               | all roles (scoped by RLS)                 |
-| `/leads/post-visit`     | Post-visit nurture compartment                                          | all roles (scoped by RLS)                 |
-| `/leads/24h-restricted` | Chatwoot 24h window restricted leads                                    | staff only                                |
-| `/leads/downpayment`    | Downpayment-stage compartment                                           | all roles (scoped by RLS)                 |
-| `/leads/deal-signed`    | Signed-deal compartment                                                 | all roles (scoped by RLS)                 |
-| `/leads/moved-in`       | Moved-in leads                                                          | all roles (scoped by RLS)                 |
-| `/visits`               | Cross-property visit calendar (Month/Week/Day/List, drag-to-reschedule) | all roles (scoped by RLS)                 |
-| `/move-in`              | Move-in date calendar (Month/Week/Day/List, drag-to-reschedule)         | all roles (scoped by RLS)                 |
-| `/leads/mine`           | Leads assigned to current user                                          | staff only                                |
-| `/leads/my`             | Redirect alias → `/leads/mine`                                          | staff only                                |
-| `/leads/archived`       | Archived leads                                                          | manager, superadmin                       |
-| `/leads/new`            | Manual lead entry                                                       | staff only                                |
-| `/leads/{uuid}`         | Redirect → `/leads?selected={uuid}` (slide-over panel)                  | scoped by RLS                             |
-| `/tasks`                | Task list                                                               | all roles (scoped by RLS)                 |
-| `/campaigns`            | WhatsApp campaigns                                                      | manager, superadmin                       |
-| `/notifications`        | Manager alert inbox                                                     | manager, superadmin                       |
-| `/webhook-logs`         | Webhook audit + replay                                                  | manager, superadmin                       |
-| `/admin/dni-numbers`    | DNI virtual number admin                                                | **superadmin only**                       |
-| `/old-leads`            | Historical Chatwoot imports (read-only)                                 | manager, superadmin                       |
-| `/team`                 | Salespeople list                                                        | manager, superadmin                       |
-| `/properties`           | Property inventory                                                      | authenticated                             |
-| `/pms`                  | Property management system                                              | all roles (incl. partner_operator)        |
-| `/settings`             | Theme, **language (TR/EN)**, sign out                                   | authenticated                             |
+| Route                            | Purpose                                                                                        | Access                                     |
+| -------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `/my-day`                        | Personal salesperson cockpit (counters, tasks, attention, performance)                         | staff only (not partner_operator)          |
+| `/dashboard`                     | Analytics — **Everyday** / **Marketing** / **Loss Analysis** / **Team panel** tabs (see below) | manager, superadmin                        |
+| `/leads`                         | Active lead list                                                                               | all roles (scoped by RLS)                  |
+| `/leads/hub`                     | Lead hub / unclaimed pool                                                                      | staff only (partners → redirect `/leads`)  |
+| `/leads/expecting-call`          | Expecting callback compartment                                                                 | staff only                                 |
+| `/leads/nurture`                 | Nurture-stage compartment                                                                      | all roles (scoped by RLS)                  |
+| `/leads/post-visit`              | Post-visit nurture compartment                                                                 | all roles (scoped by RLS)                  |
+| `/leads/24h-restricted`          | Chatwoot 24h window restricted leads                                                           | staff only                                 |
+| `/leads/downpayment`             | Downpayment compartment (`kapora-alindi`)                                                      | all roles (scoped by RLS)                  |
+| `/leads/deal-signed`             | Signed-deal compartment (`sozlesme-imzalandi`)                                                 | all roles (scoped by RLS)                  |
+| `/leads/moved-in`                | Moved-in leads                                                                                 | all roles (scoped by RLS)                  |
+| `/visits`                        | Cross-property visit calendar (Month/Week/Day/List, drag-to-reschedule)                        | all roles (scoped by RLS)                  |
+| `/move-in`                       | Move-in date calendar (Month/Week/Day/List, drag-to-reschedule)                                | all roles (scoped by RLS)                  |
+| `/leads/mine`                    | Leads assigned to current user                                                                 | staff only                                 |
+| `/leads/my`                      | Redirect alias → `/leads/mine`                                                                 | staff only                                 |
+| `/leads/archived`                | Archived leads                                                                                 | manager, superadmin                        |
+| `/leads/new`                     | Manual lead entry                                                                              | staff only                                 |
+| `/leads/{uuid}`                  | Redirect → `/leads?selected={uuid}` (slide-over panel)                                         | scoped by RLS                              |
+| `/tasks`                         | Task list                                                                                      | all roles (scoped by RLS)                  |
+| `/campaigns`                     | WhatsApp campaigns                                                                             | manager, superadmin                        |
+| `/notifications`                 | Manager alert inbox                                                                            | manager, superadmin                        |
+| `/webhook-logs`                  | Webhook audit + replay                                                                         | manager, superadmin                        |
+| `/admin/dni-numbers`             | DNI virtual number admin                                                                       | **superadmin only**                        |
+| `/old-leads`                     | Historical Chatwoot imports (read-only)                                                        | manager, superadmin                        |
+| `/team`                          | Salespeople list                                                                               | manager, superadmin                        |
+| `/properties`                    | Property inventory                                                                             | authenticated                              |
+| `/pms`                           | Property management system (rooms, placements, notes)                                          | operator+, partner_operator (RLS-scoped)   |
+| `/fms`                           | FMS dashboard — filters, KPIs, pie chart, customer list                                        | manager, superadmin                        |
+| `/fms/prices`                    | Seasonal room price admin (property list)                                                      | manager, superadmin                        |
+| `/fms/prices/{propertyId}`       | Edit `room_type_prices` for one property                                                       | manager, superadmin                        |
+| `/fms/{partnerId}`               | Partner revenue summary + property list                                                        | manager, superadmin                        |
+| `/fms/{partnerId}/{propertyId}`  | Per-customer contracted revenue for one property                                               | manager, superadmin                        |
+| `/fms/unattributed`              | Revenue for properties with `partner_id IS NULL`                                               | manager, superadmin (nav when revenue > 0) |
+| `/fms/unattributed/{propertyId}` | Unattributed property customer drill-down                                                      | manager, superadmin                        |
+| `/settings`                      | Theme, **language (TR/EN)**, sign out                                                          | authenticated                              |
 
-**"all roles (scoped by RLS)"** means partner_operators see the page but only their own partner's leads. The `AppShell` route guard enforces blocked routes redirect to `/leads`; enforcement is at the DB layer (RLS), not the UI.
+**"all roles (scoped by RLS)"** means partner_operators see the page but only their own partner's leads. The `AppShell` route guard enforces blocked routes redirect to `/leads`; enforcement is at the DB layer (RLS), not the UI. **`/fms/*`** is manager/superadmin only — other roles hitting `/fms` are redirected to `/leads`. Inside FMS, the CRM sidebar is replaced by FMS nav (`FmsShell` + `buildFmsNavGroups`); **Back to CRM** returns to the main app.
+
+### FMS dashboard (`/fms`)
+
+| Aspect        | Detail                                                                                                                  |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Access        | manager / superadmin (`AppShell` + API 403)                                                                             |
+| Shell         | `FmsShell` — blue topbar, FMS sidebar (Overview, Prices, per-partner tree, Unattributed when > 0)                       |
+| Filters       | Partner/property search comboboxes (`FmsSearchBar`); selection in `FmsSelectionContext` (must render inside `FmsShell`) |
+| Kapora toggle | Header button — default contracted; `includeKapora` threads to all FMS data hooks                                       |
+| Widgets       | `FmsTripleBox` (client revenue / Univotel revenue / client profit), `FmsPieChart`, `FmsCustomerList`                    |
+| Data          | Single API `GET /api/fms/dashboard?partnerId=&propertyId=&includeKapora=` via `useFmsDashboard`                         |
+| Lead panel    | Customer **View info** opens `LeadDetailPanel` (`?selected={uuid}` shallow route)                                       |
+| Loading       | SWR `keepPreviousData` — widgets stay mounted; values update in place on filter change                                  |
+
+Drill-down partner/property pages use legacy summary components (`PartnerSummaryCard`, `PropertyRevenueList`, `PropertyCustomerTable`) and per-entity APIs (`useFmsPartner`, `useFmsPropertyCustomers`).
 
 ### Calendar views (`/visits` & `/move-in`)
 
@@ -1736,14 +1926,47 @@ Both calendars render through one reusable component, `components/calendar/Calen
 
 ### Dashboard tabs (manager analytics)
 
-`/dashboard` has two tabs:
+`/dashboard` has **four tabs** on one route (local React state — no per-tab URLs). Default: **Everyday**.
 
-| Tab            | Data source                                                                                  | Notes                                               |
-| -------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| **Overview**   | Materialized views (`mv_*`), refreshed every 5 min by `mv_refresh` cron                      | `GET /api/analytics`                                |
-| **Team panel** | Live tables — `leads.claimed_at`, `contact_history`, `visits`, `lead_stage_history`, `tasks` | `GET /api/analytics/manager-panel` (no MV, no cron) |
+| Tab               | Data source | API                                | Notes                                                                          |
+| ----------------- | ----------- | ---------------------------------- | ------------------------------------------------------------------------------ |
+| **Everyday**      | Live tables | `GET /api/analytics/everyday`      | Top KPIs, funnel, activity, visits; lazy-loaded when tab selected              |
+| **Marketing**     | Live tables | `GET /api/analytics/marketing`     | Source cards + pies; Meta/Google UI unwired (0); ad-spend placeholder          |
+| **Loss Analysis** | Live tables | `GET /api/analytics/loss-analysis` | Four charts incl. loss-over-time rate/count toggle                             |
+| **Team panel**    | Live tables | `GET /api/analytics/manager-panel` | **Unchanged** — own range control; not affected by analytics container filters |
 
-**Team panel behavior:**
+**Container controls** (three analytics tabs only — not Team panel):
+
+| Control            | Detail                                                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Global date filter | `Today \| This Week \| This Month \| All Time \| Custom` — default **All Time** (= pass-through to section/widget filters) |
+| Reset              | Restores global to All Time                                                                                                |
+| Calculation notes  | Toggle `analytics.*` explanation subtext; persisted in `localStorage` key `univotel-analytics-calc-notes` (default on)     |
+
+**Filter precedence:** global (when not All Time) → section → widget (Activity/Visits line charts). **Snapshot-exempt:** Unclaimed Leads card; Leads-by-Funnel-Stage pie (always current state, marked visually).
+
+**Everyday tab — key metric rules:**
+
+| Metric             | Source                                                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------------------------- |
+| Total leads        | `COUNT(leads)` where `is_deleted=false`, `created_at` in range                                                |
+| Conversion / deals | Ever-reached stage from `lead_stage_history` (linked Kapora / Sözleşme / Moved-in selector; default Sözleşme) |
+| Unclaimed          | `assigned_to IS NULL`, active — **no date filter**                                                            |
+| Avg response       | Mean(first `contact_history` row − `leads.created_at`) for leads in range                                     |
+| Messages           | `lead_messages.direction`                                                                                     |
+| Calls              | `contact_history` types `call`, `whatsapp_call`, `call_success`, `call_fail`                                  |
+| Visits             | `visits.scheduled_date`; property via `visits.property_id`                                                    |
+
+**Marketing — source buckets:** NetGSM Call (`lead_source='netgsm_call'`), WhatsApp DM, Instagram DM, Other wired now. Meta Ads / Google Ads cards show **0** until paid-source resolver. **Do not use DNI table** — single shared phone number.
+
+**Loss Analysis — loss over time:**
+
+- **Rate mode:** cohort loss rate by lead **creation** date; trailing buckets marked maturing; always-visible caveat (not hidden by calc-notes toggle)
+- **Count mode:** count of transitions to `lost` by **loss date** (`lead_stage_history`)
+
+**Legacy MV API:** `GET /api/analytics` still serves `mv_*` views refreshed by `mv_refresh` cron — **not used by dashboard UI**. Use for archive-summary / legacy only.
+
+**Team panel behavior (unchanged):**
 
 | Setting       | Value                                                                                                                           |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
@@ -1754,7 +1977,17 @@ Both calendars render through one reusable component, `components/calendar/Calen
 | Credit rules  | Same as My Day performance: stage transitions credit `changed_by`, visits credit `created_by`, contacts credit `salesperson_id` |
 | Conversion    | `deals signed / claimed` per salesperson (claims = `claimed_at` in range)                                                       |
 | Query safety  | Bulk fetches paged at 1000 rows, hard cap 10 pages per table per request                                                        |
-| Code          | `lib/analytics/manager-panel.ts` (service role), `components/analytics/ManagerPanel.tsx`, `hooks/useManagerPanel.ts`            |
+| Code          | `lib/analytics/manager-panel.ts`, `components/analytics/ManagerPanel.tsx`, `hooks/useManagerPanel.ts`                           |
+
+**Analytics tab code (2026-06 overhaul):**
+
+| Layer | Path                                                            |
+| ----- | --------------------------------------------------------------- |
+| Page  | `pages/dashboard/index.tsx`                                     |
+| Shell | `components/analytics/overview/AnalyticsTabsShell.tsx`          |
+| Tabs  | `EverydayTab.tsx`, `MarketingTab.tsx`, `LossAnalysisTab.tsx`    |
+| Data  | `lib/analytics/everyday.ts`, `marketing.ts`, `loss-analysis.ts` |
+| Hooks | `hooks/useAnalyticsTabs.ts`                                     |
 
 If the Team panel shows zeros for older periods: `lead_stage_history` and `claimed_at` only exist since migrations `0070`–`0073` — backfill (`0073`) covers current statuses only, so per-stage credit before that deploy is incomplete (expected, not a bug).
 
@@ -1774,7 +2007,7 @@ Opening a lead from My Day sets `?selected=` slide-over via local state (same `L
 
 - **Default:** Turkish (`tr`) on first visit when no preference is stored.
 - **Toggle:** **Settings** → **Language** → Türkçe or English. English remains fully supported.
-- **Persistence:** Browser `localStorage` key `univotel-locale` (same pattern as `univotel-theme` for dark mode).
+- **Persistence:** Browser `localStorage` keys `univotel-locale` (language) and `univotel-analytics-calc-notes` (dashboard calculation notes; default on). Same pattern as `univotel-theme` for dark mode.
 - **Scope:** Menus, labels, buttons, table headers, empty states, and enum display labels. **Not translated:** lead names, notes, chat message bodies, universities, hotel names, webhook payloads, Telegram/cron alert text.
 - **Code:** `lib/i18n/messages/{en,tr}.ts`, `components/layout/LocaleProvider.tsx`, `hooks/useTranslation.ts`. New UI strings need keys in **both** catalogs.
 
@@ -1782,25 +2015,39 @@ Attribution detail API (for lead detail panels): `GET /api/leads/{uuid}/attribut
 
 Old lead detail API: `GET /api/old-leads/{uuid}` → full `old_leads` row + `old_lead_details` (manager/superadmin). Read-only — no PATCH/POST routes.
 
-**Active lead slide-over** (`/leads` with `?selected=`): tabs **Overview**, **Profile** (incl. hotel **Öneri Al** + recommendation cards), **Conversation** (live Chatwoot sync), **Funnel View** (pipeline strip, stats row, merged activity timeline), **History** (CRM audit log), **Activity** (merged event feed), **Actions** (managers). Quick-action bar: log contact, create task, stage advance. **Old lead slide-over:** **Details**, **Conversation** (dump import).
+**Active lead slide-over** (`/leads` with `?selected=`): tabs **Overview**, **Profile** (incl. hotel **Öneri Al** + recommendation cards; **PurchasedRoomDialog** collects `purchased_room`, `move_in_month`, `deal_duration`, `discount` at kapora/sözleşme), **Conversation** (live Chatwoot sync), **Funnel View** (pipeline strip, stats row, merged activity timeline), **History** (CRM audit log), **Activity** (merged event feed), **Actions** (managers). Quick-action bar: log contact, create task, stage advance. **Old lead slide-over:** **Details**, **Conversation** (dump import).
 
-| API                                  | Method | Purpose                                                                    |
-| ------------------------------------ | ------ | -------------------------------------------------------------------------- |
-| `GET /api/analytics`                 | GET    | Manager Overview tab (materialized views)                                  |
-| `GET /api/analytics/manager-panel`   | GET    | Manager Team panel — team metrics + daily trends (`range`, `salesperson`)  |
-| `GET /api/my-day`                    | GET    | Personal cockpit counters, tasks, attention queue                          |
-| `GET /api/my-day/performance`        | GET    | Self-scoped performance metrics (`range=this_week\|this_month`)            |
-| `GET /api/leads/{id}/messages`       | GET    | Paginated read from `lead_messages` (load older)                           |
-| `POST /api/leads/{id}/messages/sync` | POST   | Fetch from Chatwoot API + upsert cache; called when Conversation tab opens |
-| `POST /api/leads/{id}/request-rec`   | POST   | Proxy hotel recommendation request to Make.com (`MAKE_WEBHOOK_URL`)        |
-| `PATCH /api/leads/{id}/rec-hotel`    | PATCH  | Make.com callback — upserts `lead_details.rec_hotel` via `save-rec-hotel`  |
-| `GET /api/leads/{id}/funnel-view`    | GET    | Pipeline data, stats, and merged activity timeline for Funnel View tab     |
-| `GET /api/leads/{id}/activity`       | GET    | Merged activity timeline for Activity tab                                  |
-| `POST /api/leads/{id}/log-contact`   | POST   | Log manual contact (also auto-completes nurture tasks)                     |
-| `POST /api/leads/{id}/advance-stage` | POST   | Quick stage advance from contextual actions                                |
-| `POST /api/leads/{id}/claim`         | POST   | Claim unassigned lead (sets `claimed_at`)                                  |
-| `GET /api/old-leads/{uuid}/messages` | GET    | Paginated read from `old_lead_messages`                                    |
-| `GET /api/old-leads/{uuid}`          | GET    | Old lead detail (manager/superadmin)                                       |
+| API                                     | Method | Purpose                                                                                  |
+| --------------------------------------- | ------ | ---------------------------------------------------------------------------------------- |
+| `GET /api/analytics/everyday`           | GET    | Everyday tab — top KPIs, funnel, activity, visits                                        |
+| `GET /api/analytics/marketing`          | GET    | Marketing tab — source attribution cards + pies                                          |
+| `GET /api/analytics/loss-analysis`      | GET    | Loss Analysis tab — four loss charts                                                     |
+| `GET /api/analytics/manager-panel`      | GET    | Team panel — team metrics + daily trends (`range`, `salesperson`)                        |
+| `GET /api/analytics`                    | GET    | Legacy MV overview (not used by dashboard UI)                                            |
+| `GET /api/analytics/team-metrics`       | GET    | Team panel RPC metrics table (`get_team_panel_metrics`)                                  |
+| `GET /api/my-day`                       | GET    | Personal cockpit counters, tasks, attention queue                                        |
+| `GET /api/my-day/performance`           | GET    | Self-scoped performance metrics (`range=this_week\|this_month`)                          |
+| `GET /api/leads/{id}/messages`          | GET    | Paginated read from `lead_messages` (load older)                                         |
+| `POST /api/leads/{id}/messages/sync`    | POST   | Fetch from Chatwoot API + upsert cache; called when Conversation tab opens               |
+| `POST /api/leads/{id}/request-rec`      | POST   | Proxy hotel recommendation request to Make.com (`MAKE_WEBHOOK_URL`)                      |
+| `PATCH /api/leads/{id}/rec-hotel`       | PATCH  | Make.com callback — upserts `lead_details.rec_hotel` via `save-rec-hotel`                |
+| `GET /api/leads/{id}/funnel-view`       | GET    | Pipeline data, stats, and merged activity timeline for Funnel View tab                   |
+| `GET /api/leads/{id}/activity`          | GET    | Merged activity timeline for Activity tab                                                |
+| `POST /api/leads/{id}/log-contact`      | POST   | Log manual contact (also auto-completes nurture tasks)                                   |
+| `POST /api/leads/{id}/advance-stage`    | POST   | Quick stage advance from contextual actions                                              |
+| `POST /api/leads/{id}/claim`            | POST   | Claim unassigned lead (sets `claimed_at`)                                                |
+| `GET /api/old-leads/{uuid}/messages`    | GET    | Paginated read from `old_lead_messages`                                                  |
+| `GET /api/old-leads/{uuid}`             | GET    | Old lead detail (manager/superadmin)                                                     |
+| `GET /api/fms/dashboard`                | GET    | FMS dashboard metrics + pie + customer list (`partnerId`, `propertyId`, `includeKapora`) |
+| `GET /api/fms/lookups`                  | GET    | Partner/property lists for FMS search bar (`partnerId` filter optional)                  |
+| `GET /api/fms/totals`                   | GET    | Grand totals + per-partner rollups (`includeKapora`)                                     |
+| `GET /api/fms/{partnerId}`              | GET    | Single partner summary (`includeKapora`)                                                 |
+| `GET /api/fms/unattributed`             | GET    | Unattributed partner bucket (`includeKapora`)                                            |
+| `GET /api/fms/properties/{propertyId}`  | GET    | Per-customer rows + property revenue (`includeKapora`)                                   |
+| `GET /api/fms/room-type-prices`         | GET    | List seasonal prices for property (`propertyId`)                                         |
+| `POST /api/fms/room-type-prices`        | POST   | Create `room_type_prices` period                                                         |
+| `PATCH /api/fms/room-type-prices/{id}`  | PATCH  | Update price period                                                                      |
+| `DELETE /api/fms/room-type-prices/{id}` | DELETE | Delete price period                                                                      |
 
 Live sync poll interval while Conversation tab is open: **15s** (`LEAD_CHAT_SYNC_POLL_MS` in `lib/constants.ts`).
 
@@ -1814,6 +2061,7 @@ pnpm dev
 
 # Tests + production build check before deploy
 pnpm test
+pnpm test -- --run __tests__/lib/finance/   # FMS revenue rollup, kapora gate/flow, slice commission
 pnpm build          # runs ESLint; must pass before cf:deploy
 
 # Cloudflare production deploy (runs opennext build + wrangler deploy)
@@ -1835,6 +2083,10 @@ pnpm import:old-leads:write        # insert (requires empty old_leads table)
 # Old lead messages import (dump → old_lead_messages; requires old_leads + 0040)
 pnpm import:old-lead-messages      # dry-run
 pnpm import:old-lead-messages:write
+
+# FMS QA seed (manual SQL Editor — not npm scripts)
+# scripts/fms-academia-test-seed.sql
+# scripts/fms-academia-test-teardown.sql
 
 # List Wrangler secrets (names only)
 pnpm exec wrangler secret list

@@ -16,6 +16,11 @@ import {
   PurchasedRoomPicker,
   type PurchasedRoomPickerValue,
 } from '@/components/leads/PurchasedRoomPicker';
+import {
+  defaultFinanceTerms,
+  FinanceTermsFields,
+  type FinanceTermsValue,
+} from '@/components/finance/FinanceTermsFields';
 import { dateFnsLocale } from '@/components/calendar/calendar-utils';
 
 export type VisitResultOutcome = 'decision_pending' | 'downpayment' | 'dropped';
@@ -45,6 +50,7 @@ export function VisitResultModal({
   const [outcome, setOutcome] = useState<VisitResultOutcome | null>(null);
   const [lossReason, setLossReason] = useState('');
   const [purchasedRoom, setPurchasedRoom] = useState<PurchasedRoomPickerValue | null>(null);
+  const [financeTerms, setFinanceTerms] = useState<FinanceTermsValue>(defaultFinanceTerms());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +59,7 @@ export function VisitResultModal({
     setOutcome(null);
     setLossReason('');
     setPurchasedRoom(null);
+    setFinanceTerms(defaultFinanceTerms());
     setError(null);
   }
 
@@ -85,6 +92,9 @@ export function VisitResultModal({
         loss_reason: outcome === 'dropped' ? lossReason : undefined,
         lead_uuid: leadUuid,
         purchased_room: outcome === 'downpayment' ? purchasedRoom?.roomTypeId : undefined,
+        deal_duration: outcome === 'downpayment' ? financeTerms.dealDuration : undefined,
+        discount: outcome === 'downpayment' ? financeTerms.discount : undefined,
+        move_in_month: outcome === 'downpayment' ? financeTerms.moveInMonth : undefined,
       }),
     });
 
@@ -157,6 +167,11 @@ export function VisitResultModal({
           <div className="space-y-4">
             <p className="text-sm text-text-secondary">{t('leads.purchasedRoomHint')}</p>
             <PurchasedRoomPicker onChange={setPurchasedRoom} />
+            <FinanceTermsFields
+              value={financeTerms}
+              onChange={setFinanceTerms}
+              roomTypeId={purchasedRoom?.roomTypeId ?? null}
+            />
             {error && <p className="text-xs text-brand-red">{error}</p>}
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setStep('pick')}>

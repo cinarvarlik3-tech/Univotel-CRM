@@ -3,7 +3,8 @@
  * Filter panel mirrors side-panel sections: Genel, Profil, Detay, Sistem.
  */
 import { IconArrowDown, IconArrowUp, IconFilter } from '@tabler/icons-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createBrowserSupabase } from '@/lib/supabase/client';
 import { FilterFieldControl } from '@/components/leads/filter/FilterFieldControl';
 import { ListFilterSection } from '@/components/leads/list-filter-controls';
 import { Button } from '@/components/ui/button';
@@ -188,9 +189,49 @@ export function LeadListToolbar({
   idPrefix,
 }: LeadListToolbarProps) {
   const [showFilters, setShowFilters] = useState(false);
+  const [suggestions, setSuggestions] = useState<
+    {
+      uuid: string;
+      lead_name: string | null;
+      display_name: string | null;
+      lead_phone: string | null;
+    }[]
+  >([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const { data: properties } = useProperties();
   const { t } = useTranslation();
   const searchId = idPrefix ? `${idPrefix}_search` : 'lead_search';
+
+  const fetchSuggestions = useCallback(async (q: string) => {
+    if (q.trim().length < 2) {
+      setSuggestions([]);
+      return;
+    }
+    const supabase = createBrowserSupabase();
+    const { data } = await supabase.rpc('search_leads_global', { q: q.trim(), result_limit: 8 });
+    setSuggestions((data as typeof suggestions) ?? []);
+  }, []);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => fetchSuggestions(state.search), 200);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [state.search, fetchSuggestions]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const propertyNames = useMemo(() => (properties ?? []).map((p) => p.hotel_name), [properties]);
 
@@ -214,15 +255,54 @@ export function LeadListToolbar({
   return (
     <div className="mb-4 space-y-3">
       <div className="flex flex-wrap items-end gap-3">
-        <FormField label={t('filters.search')} htmlFor={searchId} className="min-w-[200px] flex-1">
-          <Input
-            id={searchId}
-            value={state.search}
-            onChange={(e) => onChange({ ...state, search: e.target.value })}
-            onKeyDown={(e) => e.key === 'Enter' && onApply()}
-            placeholder={t('filters.searchNameOrPhoneShort')}
-          />
-        </FormField>
+        <div ref={searchContainerRef} className="relative min-w-[200px] flex-1">
+          <FormField label={t('filters.search')} htmlFor={searchId}>
+            <Input
+              id={searchId}
+              value={state.search}
+              onChange={(e) => {
+                onChange({ ...state, search: e.target.value });
+                setShowSuggestions(true);
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setShowSuggestions(false);
+                  onApply();
+                }
+                if (e.key === 'Escape') setShowSuggestions(false);
+              }}
+              placeholder={t('filters.searchNameOrPhoneShort')}
+            />
+          </FormField>
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-lg border border-border-default bg-surface-card shadow-lg">
+              {suggestions.map((r) => {
+                const name = r.display_name ?? r.lead_name ?? r.lead_phone ?? '—';
+                return (
+                  <button
+                    key={r.uuid}
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-surface-secondary"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      onChange({ ...state, search: name });
+                      setShowSuggestions(false);
+                      onApply();
+                    }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium">{name}</div>
+                      {r.lead_phone && (
+                        <div className="truncate text-xs text-text-secondary">{r.lead_phone}</div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <Button type="button" variant="secondary" onClick={() => setShowFilters((v) => !v)}>
           <IconFilter size={16} />

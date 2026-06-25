@@ -10,11 +10,14 @@ import {
   type SelectOption,
 } from '@/components/leads/InlineEditField';
 import { LeadRecommendationPanel } from '@/components/leads/LeadRecommendationPanel';
+import { LossRecoveryFinanceDialog } from '@/components/leads/LossRecoveryFinanceDialog';
 import { SourceDetailsPanel } from '@/components/leads/SourceDetailsPanel';
 import { useTranslation } from '@/hooks/useTranslation';
 import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { formatDateTime, formatYesNo } from '@/lib/i18n/format-date';
 import { FUNNEL_STATUSES, LOSS_REASONS, ROOM_CATEGORY_VALUES } from '@/lib/constants';
+import { getLossRecoveryFinancialTarget } from '@/lib/leads/apply-loss-reason-update';
+import type { FinancialFunnelStatus } from '@/lib/leads/apply-loss-reason-update';
 import { parseRecHotel } from '@/lib/leads/parse-rec-hotel';
 import type { LeadDetailRow, LeadWithDetails } from '@/types/domain';
 
@@ -92,6 +95,8 @@ export function DetayTab({
   onReload,
 }: DetayTabProps) {
   const { locale, t } = useTranslation();
+  const [lossRecoveryOpen, setLossRecoveryOpen] = useState(false);
+  const [lossRecoveryTarget, setLossRecoveryTarget] = useState<FinancialFunnelStatus | null>(null);
   const assignee = lead.salespeople?.full_name ?? lead.assignee_name ?? t('common.unassigned');
 
   const funnelOptions: SelectOption[] = FUNNEL_STATUSES.map((s) => ({
@@ -129,7 +134,21 @@ export function DetayTab({
             options={lossOptions}
             nullable
             onSave={async (v) => {
-              onLeadSaved(await patchLead(leadId, { loss_reason: v || null }));
+              const nextLoss = (v as string) || null;
+              const recoveryTarget = getLossRecoveryFinancialTarget(
+                {
+                  funnel_status: lead.funnel_status,
+                  funnel_status_before_lost: lead.funnel_status_before_lost,
+                  loss_reason: lead.loss_reason,
+                },
+                { loss_reason: nextLoss },
+              );
+              if (recoveryTarget) {
+                setLossRecoveryTarget(recoveryTarget);
+                setLossRecoveryOpen(true);
+                return;
+              }
+              onLeadSaved(await patchLead(leadId, { loss_reason: nextLoss }));
             }}
           />
           <ReadOnlyField
@@ -251,6 +270,22 @@ export function DetayTab({
       <CollapsibleSection title={t('leads.sourceAttribution')}>
         <SourceDetailsPanel sourceDetails={lead.source_details} embedded />
       </CollapsibleSection>
+
+      {lossRecoveryTarget && (
+        <LossRecoveryFinanceDialog
+          open={lossRecoveryOpen}
+          onOpenChange={setLossRecoveryOpen}
+          leadId={leadId}
+          targetStatus={lossRecoveryTarget}
+          initialPropertyId={details?.purchased_property_id}
+          initialRoomTypeId={details?.purchased_room}
+          onSuccess={(data) => {
+            if (data) onLeadSaved(data as Partial<LeadWithDetails>);
+            onReload();
+            setLossRecoveryTarget(null);
+          }}
+        />
+      )}
     </div>
   );
 }

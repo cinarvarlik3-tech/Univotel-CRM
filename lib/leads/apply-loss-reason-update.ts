@@ -3,10 +3,31 @@
  */
 import { DEFAULT_FUNNEL_STATUS, LOST_FUNNEL_STATUS } from '@/lib/constants';
 
+export const FINANCIAL_FUNNEL_STATUSES = ['kapora-alindi', 'sozlesme-imzalandi'] as const;
+export type FinancialFunnelStatus = (typeof FINANCIAL_FUNNEL_STATUSES)[number];
+
 export interface LeadLossContext {
   funnel_status: string;
   funnel_status_before_lost?: string | null;
   loss_reason?: string | null;
+}
+
+export function isFinancialFunnelStatus(status: string): status is FinancialFunnelStatus {
+  return (FINANCIAL_FUNNEL_STATUSES as readonly string[]).includes(status);
+}
+
+/**
+ * When clearing loss_reason on a lost lead, returns the financial stage being
+ * restored (if any). Recovery into a financial stage requires fresh finance inputs.
+ */
+export function getLossRecoveryFinancialTarget(
+  existing: LeadLossContext,
+  updates: { loss_reason?: string | null },
+): FinancialFunnelStatus | null {
+  if (!('loss_reason' in updates) || updates.loss_reason !== null) return null;
+  if (existing.funnel_status !== LOST_FUNNEL_STATUS) return null;
+  const target = existing.funnel_status_before_lost ?? DEFAULT_FUNNEL_STATUS;
+  return isFinancialFunnelStatus(target) ? target : null;
 }
 
 /**

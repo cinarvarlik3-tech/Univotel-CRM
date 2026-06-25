@@ -582,6 +582,39 @@ export type Database = {
         };
         Relationships: [];
       };
+      finance_audit: {
+        Row: {
+          actor_id: string | null;
+          created_at: string;
+          entity: string;
+          entity_id: string;
+          field: string;
+          id: string;
+          new_value: string | null;
+          old_value: string | null;
+        };
+        Insert: {
+          actor_id?: string | null;
+          created_at?: string;
+          entity: string;
+          entity_id: string;
+          field: string;
+          id?: string;
+          new_value?: string | null;
+          old_value?: string | null;
+        };
+        Update: {
+          actor_id?: string | null;
+          created_at?: string;
+          entity?: string;
+          entity_id?: string;
+          field?: string;
+          id?: string;
+          new_value?: string | null;
+          old_value?: string | null;
+        };
+        Relationships: [];
+      };
       lead_details: {
         Row: {
           actual_move_in_date: string | null;
@@ -684,6 +717,64 @@ export type Database = {
           },
           {
             foreignKeyName: 'lead_details_purchased_room_fkey';
+            columns: ['purchased_room'];
+            isOneToOne: false;
+            referencedRelation: 'room_types';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      lead_finance: {
+        Row: {
+          created_at: string;
+          deal_duration: number;
+          discount: number;
+          id: string;
+          lead_id: string;
+          monthly_payment: number;
+          move_in_month: string | null;
+          purchased_room: string;
+          vacated_at: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          deal_duration?: number;
+          discount?: number;
+          id?: string;
+          lead_id: string;
+          monthly_payment: number;
+          move_in_month?: string | null;
+          purchased_room: string;
+          vacated_at?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          deal_duration?: number;
+          discount?: number;
+          id?: string;
+          lead_id?: string;
+          monthly_payment?: number;
+          move_in_month?: string | null;
+          purchased_room?: string;
+          vacated_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'lead_finance_lead_id_fkey';
+            columns: ['lead_id'];
+            isOneToOne: false;
+            referencedRelation: 'active_leads';
+            referencedColumns: ['uuid'];
+          },
+          {
+            foreignKeyName: 'lead_finance_lead_id_fkey';
+            columns: ['lead_id'];
+            isOneToOne: false;
+            referencedRelation: 'leads';
+            referencedColumns: ['uuid'];
+          },
+          {
+            foreignKeyName: 'lead_finance_purchased_room_fkey';
             columns: ['purchased_room'];
             isOneToOne: false;
             referencedRelation: 'room_types';
@@ -1426,18 +1517,21 @@ export type Database = {
       };
       partners: {
         Row: {
+          commission_percentage: number | null;
           created_at: string;
           id: string;
           is_active: boolean;
           name: string;
         };
         Insert: {
+          commission_percentage?: number | null;
           created_at?: string;
           id?: string;
           is_active?: boolean;
           name: string;
         };
         Update: {
+          commission_percentage?: number | null;
           created_at?: string;
           id?: string;
           is_active?: boolean;
@@ -1693,10 +1787,49 @@ export type Database = {
         };
         Relationships: [];
       };
+      room_type_prices: {
+        Row: {
+          created_at: string;
+          id: string;
+          label: string | null;
+          price: number;
+          room_type_id: string;
+          valid_from_month: string;
+          valid_until_month: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          label?: string | null;
+          price: number;
+          room_type_id: string;
+          valid_from_month: string;
+          valid_until_month?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          label?: string | null;
+          price?: number;
+          room_type_id?: string;
+          valid_from_month?: string;
+          valid_until_month?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'room_type_prices_room_type_id_fkey';
+            columns: ['room_type_id'];
+            isOneToOne: false;
+            referencedRelation: 'room_types';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       room_types: {
         Row: {
           capacity: number;
           created_at: string;
+          default_price: number | null;
           hotel_id: string;
           id: string;
           is_active: boolean;
@@ -1706,6 +1839,7 @@ export type Database = {
         Insert: {
           capacity: number;
           created_at?: string;
+          default_price?: number | null;
           hotel_id: string;
           id: string;
           is_active?: boolean;
@@ -1715,6 +1849,7 @@ export type Database = {
         Update: {
           capacity?: number;
           created_at?: string;
+          default_price?: number | null;
           hotel_id?: string;
           id?: string;
           is_active?: boolean;
@@ -2063,6 +2198,7 @@ export type Database = {
           idempotency_key: string;
           payload: Json;
           processed_at: string | null;
+          reason_code: string | null;
           retry_count: number;
           source: string;
           status: string;
@@ -2075,6 +2211,7 @@ export type Database = {
           idempotency_key: string;
           payload: Json;
           processed_at?: string | null;
+          reason_code?: string | null;
           retry_count?: number;
           source: string;
           status?: string;
@@ -2087,6 +2224,7 @@ export type Database = {
           idempotency_key?: string;
           payload?: Json;
           processed_at?: string | null;
+          reason_code?: string | null;
           retry_count?: number;
           source?: string;
           status?: string;
@@ -2095,6 +2233,67 @@ export type Database = {
       };
     };
     Views: {
+      active_finance: {
+        Row: {
+          created_at: string | null;
+          deal_duration: number | null;
+          discount: number | null;
+          effective_monthly: number | null;
+          id: string | null;
+          lead_id: string | null;
+          lead_revenue: number | null;
+          monthly_payment: number | null;
+          move_in_month: string | null;
+          purchased_room: string | null;
+        };
+        Insert: {
+          created_at?: string | null;
+          deal_duration?: number | null;
+          discount?: number | null;
+          effective_monthly?: never;
+          id?: string | null;
+          lead_id?: string | null;
+          lead_revenue?: never;
+          monthly_payment?: number | null;
+          move_in_month?: string | null;
+          purchased_room?: string | null;
+        };
+        Update: {
+          created_at?: string | null;
+          deal_duration?: number | null;
+          discount?: number | null;
+          effective_monthly?: never;
+          id?: string | null;
+          lead_id?: string | null;
+          lead_revenue?: never;
+          monthly_payment?: number | null;
+          move_in_month?: string | null;
+          purchased_room?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'lead_finance_lead_id_fkey';
+            columns: ['lead_id'];
+            isOneToOne: false;
+            referencedRelation: 'active_leads';
+            referencedColumns: ['uuid'];
+          },
+          {
+            foreignKeyName: 'lead_finance_lead_id_fkey';
+            columns: ['lead_id'];
+            isOneToOne: false;
+            referencedRelation: 'leads';
+            referencedColumns: ['uuid'];
+          },
+          {
+            foreignKeyName: 'lead_finance_purchased_room_fkey';
+            columns: ['purchased_room'];
+            isOneToOne: false;
+            referencedRelation: 'room_types';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       active_leads: {
         Row: {
           archived_at: string | null;
@@ -2363,6 +2562,53 @@ export type Database = {
         Args: { agent_id: string };
         Returns: undefined;
       };
+      fms_create_finance_row: {
+        Args: {
+          p_actor_id: string;
+          p_deal_duration: number;
+          p_discount: number;
+          p_lead_id: string;
+          p_move_in_month: string;
+          p_purchased_room: string;
+        };
+        Returns: string;
+      };
+      fms_price_for_month: {
+        Args: { p_move_in_month: string; p_room_type_id: string };
+        Returns: number;
+      };
+      fms_record_finance_change: {
+        Args: {
+          p_actor_id: string;
+          p_deal_duration: number;
+          p_discount: number;
+          p_lead_id: string;
+          p_move_in_month: string;
+          p_purchased_room: string;
+        };
+        Returns: string;
+      };
+      fms_revenue_breakdown: {
+        Args: { p_include_kapora?: boolean };
+        Returns: {
+          customer_count: number;
+          partner_id: string;
+          partner_name: string;
+          property_id: string;
+          property_name: string;
+          property_revenue: number;
+        }[];
+      };
+      fms_property_roomtype_breakdown: {
+        Args: { p_property_id: string; p_include_kapora?: boolean };
+        Returns: {
+          room_type_id: string;
+          room_type_name: string;
+          customer_count: number;
+          room_type_revenue: number;
+        }[];
+      };
+      fn_finance_actor: { Args: never; Returns: string };
       get_cron_setting: { Args: { p_key: string }; Returns: string };
       get_loss_reason_breakdown: {
         Args: { date_from: string; date_to: string; p_agent_id?: string };

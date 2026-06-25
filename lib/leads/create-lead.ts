@@ -116,7 +116,7 @@ async function executeCreateLead(input: CreateLeadInput): Promise<CreateLeadResu
     raw_phone: rawIdentifier ?? input.sourceDetails.raw_phone ?? null,
   };
 
-  const existing = await findExistingLead(leadPhone, identifierKind);
+  const existing = await findExistingLead(leadPhone, identifierKind, input.interactionSource);
   if (existing) {
     await recordDuplicateSubmission(existing.uuid, input.interactionSource, {
       ...input.metadata,
@@ -161,7 +161,12 @@ async function executeCreateLead(input: CreateLeadInput): Promise<CreateLeadResu
 
   const { error: historyError } = await client.from('contact_history').insert({
     lead_uuid: lead.uuid,
-    interaction_type: input.leadSource.includes('call') ? 'whatsapp_call' : 'message_received',
+    interaction_type:
+      input.leadSource === 'netgsm_call'
+        ? 'call'
+        : input.leadSource === 'whatsapp_call'
+          ? 'whatsapp_call'
+          : 'message_received',
     interaction_source: input.interactionSource,
     funnel_status_at_time: 'yeni',
     notes: 'İlk temas — lead oluşturuldu.',

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/hooks/useTranslation';
 import { formatTimeOnly } from '@/lib/i18n/format-date';
+import type { Locale } from '@/lib/i18n/types';
 import { accentChipClasses } from './calendar-utils';
 import type { CalendarEvent } from './types';
 
@@ -28,16 +29,16 @@ interface VisitEventCardProps {
  */
 export function VisitEventCard({
   event,
-  locale: _locale,
+  locale,
   fill = false,
   onClick,
   onDragStart,
   onDragEnd,
   renderEventActions,
 }: VisitEventCardProps) {
-  const { t, locale: appLocale } = useTranslation();
+  const { t } = useTranslation();
   const draggable = Boolean(event.draggable && onDragStart);
-  const timeLabel = event.allDay ? null : formatTimeOnly(event.start, appLocale);
+  const timeLabel = event.allDay ? null : formatTimeOnly(event.start, locale as Locale);
   const phone = event.cardDetails?.phone;
   const room = event.cardDetails?.roomPreference;
   const propertyName = event.cardDetails?.propertyName;

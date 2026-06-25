@@ -13,7 +13,12 @@ async function fetcher<T>(url: string): Promise<T> {
   return json.data;
 }
 
-export type GenelRange = 'this_week' | 'this_month' | 'all_time' | { from: string; to: string };
+export type GenelRange =
+  | 'today'
+  | 'this_week'
+  | 'this_month'
+  | 'all_time'
+  | { from: string; to: string };
 
 function buildUrl(range: GenelRange): string {
   if (typeof range === 'object') {
@@ -24,5 +29,8 @@ function buildUrl(range: GenelRange): string {
 
 export function useGenelPerformance(range: GenelRange = 'all_time') {
   const url = typeof range === 'object' && (!range.from || !range.to) ? null : buildUrl(range);
-  return useSWR<PerformancePayload>(url, fetcher);
+  // keepPreviousData: when the range changes, keep showing the current data (so the
+  // section layout stays mounted) and only swap the numbers once the new data lands —
+  // instead of unmounting everything into the full-page skeleton on first fetch of a key.
+  return useSWR<PerformancePayload>(url, fetcher, { keepPreviousData: true });
 }

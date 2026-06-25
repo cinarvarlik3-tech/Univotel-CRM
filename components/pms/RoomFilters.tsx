@@ -38,7 +38,7 @@ export function RoomFilters({
   );
 
   return (
-    <div className="flex flex-wrap items-end gap-4 rounded-xl border border-border bg-surface-card p-4">
+    <div className="flex flex-wrap items-end gap-4 rounded-xl border border-brand-blue bg-gradient-to-r from-brand-blue to-brand-blue-hover p-4 shadow-sm [&_label]:text-white/85">
       <div className="min-w-[180px]">
         <FormSelect
           id="pms-property-filter"
@@ -80,6 +80,7 @@ export function RoomFilters({
           id="pms-empty-only"
           checked={filters.emptyOnly}
           onCheckedChange={(checked) => onChange({ ...filters, emptyOnly: checked === true })}
+          className="border-white/60 bg-white/10 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-brand-blue"
         />
         <Label htmlFor="pms-empty-only" className="text-sm">
           {t('pms.emptyOnly')}

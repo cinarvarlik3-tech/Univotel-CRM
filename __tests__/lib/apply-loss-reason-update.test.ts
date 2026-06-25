@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { applyLossReasonUpdate } from '@/lib/leads/apply-loss-reason-update';
+import {
+  applyLossReasonUpdate,
+  getLossRecoveryFinancialTarget,
+} from '@/lib/leads/apply-loss-reason-update';
 
 describe('applyLossReasonUpdate', () => {
   const base = {
@@ -78,5 +81,46 @@ describe('applyLossReasonUpdate', () => {
         { loss_reason: 'price' },
       ),
     ).toEqual({});
+  });
+});
+
+describe('getLossRecoveryFinancialTarget', () => {
+  it('returns kapora when clearing loss from a lead saved at kapora', () => {
+    expect(
+      getLossRecoveryFinancialTarget(
+        {
+          funnel_status: 'lost',
+          funnel_status_before_lost: 'kapora-alindi',
+          loss_reason: 'price',
+        },
+        { loss_reason: null },
+      ),
+    ).toBe('kapora-alindi');
+  });
+
+  it('returns sozlesme when clearing loss from a lead saved at sozlesme', () => {
+    expect(
+      getLossRecoveryFinancialTarget(
+        {
+          funnel_status: 'lost',
+          funnel_status_before_lost: 'sozlesme-imzalandi',
+          loss_reason: 'price',
+        },
+        { loss_reason: null },
+      ),
+    ).toBe('sozlesme-imzalandi');
+  });
+
+  it('returns null when recovery target is not a financial stage', () => {
+    expect(
+      getLossRecoveryFinancialTarget(
+        {
+          funnel_status: 'lost',
+          funnel_status_before_lost: 'ziyaret-etti',
+          loss_reason: 'price',
+        },
+        { loss_reason: null },
+      ),
+    ).toBeNull();
   });
 });

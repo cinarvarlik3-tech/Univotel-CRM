@@ -39,18 +39,7 @@ import { formatRoleLabel } from '@/lib/i18n/enum-labels';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { UnivotelLogoWhite } from '@/components/layout/UnivotelLogo';
-
-interface NavItem {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string; size?: number }>;
-}
-
-interface NavGroup {
-  label?: string;
-  items: NavItem[];
-  managerOnly?: boolean;
-}
+import type { NavGroup } from '@/components/layout/nav-types';
 
 interface SidebarProps {
   userName: string;
@@ -60,6 +49,8 @@ interface SidebarProps {
   isPartnerOperatorUser?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  navOverride?: NavGroup[];
+  shellVariant?: 'crm' | 'fms';
 }
 
 function getInitials(name: string): string {
@@ -82,6 +73,8 @@ export function Sidebar({
   isPartnerOperatorUser = false,
   collapsed = false,
   onToggleCollapse,
+  navOverride,
+  shellVariant = 'crm',
 }: SidebarProps) {
   const router = useRouter();
   const { t, locale } = useTranslation();
@@ -106,6 +99,9 @@ export function Sidebar({
     if (href === '/deal-awaiting') return router.pathname.startsWith('/deal-awaiting');
     if (href === '/visits') return router.pathname === '/visits';
     if (href === '/pms') return router.pathname.startsWith('/pms');
+    if (href === '/fms') return router.pathname === '/fms';
+    if (href === '/fms/unattributed') return router.pathname.startsWith('/fms/unattributed');
+    if (href.startsWith('/fms/')) return router.pathname.startsWith(href);
     if (href === '/move-in') return router.pathname === '/move-in';
     if (EXACT_LEADS_SUBPAGES.has(href)) return router.pathname === href;
     if (href === '/leads') {
@@ -197,7 +193,8 @@ export function Sidebar({
     },
   ];
 
-  const navGroups = isPartnerOperatorUser ? partnerNavGroups : staffNavGroups;
+  const navGroups = navOverride ?? (isPartnerOperatorUser ? partnerNavGroups : staffNavGroups);
+  const inFmsShell = shellVariant === 'fms';
 
   return (
     <>
@@ -262,21 +259,44 @@ export function Sidebar({
                   const active = isActive(item.href);
                   const Icon = item.icon;
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        'flex h-9 items-center rounded-lg text-[13px] font-medium transition-colors',
-                        isOpen ? 'gap-2.5 px-2' : 'justify-center px-0',
-                        active
-                          ? 'bg-[var(--sidebar-icon-active-bg)] text-[var(--sidebar-text)]'
-                          : 'text-[var(--sidebar-icon-idle)] hover:bg-[var(--sidebar-icon-hover-bg)] hover:text-[var(--sidebar-text)]',
-                      )}
-                      title={!isOpen ? item.label : undefined}
-                    >
-                      <Icon size={18} className="shrink-0" />
-                      {isOpen && <span className="truncate">{item.label}</span>}
-                    </Link>
+                    <div key={item.href}>
+                      <Link
+                        href={item.href}
+                        className={cn(
+                          'flex h-9 items-center rounded-lg text-[13px] font-medium transition-colors',
+                          isOpen ? 'gap-2.5 px-2' : 'justify-center px-0',
+                          active
+                            ? 'bg-[var(--sidebar-icon-active-bg)] text-[var(--sidebar-text)]'
+                            : 'text-[var(--sidebar-icon-idle)] hover:bg-[var(--sidebar-icon-hover-bg)] hover:text-[var(--sidebar-text)]',
+                        )}
+                        title={!isOpen ? item.label : undefined}
+                      >
+                        <Icon size={18} className="shrink-0" />
+                        {isOpen && <span className="truncate">{item.label}</span>}
+                      </Link>
+                      {isOpen &&
+                        item.subItems?.map((sub) => {
+                          const subActive = isActive(sub.href);
+                          const SubIcon = sub.icon;
+                          return (
+                            <Link
+                              key={sub.href}
+                              href={sub.href}
+                              className={cn(
+                                'ml-4 flex h-8 items-center rounded-lg pl-2 text-[12px] font-medium transition-colors',
+                                isOpen ? 'gap-2 pr-2' : 'justify-center px-0',
+                                subActive
+                                  ? 'bg-[var(--sidebar-icon-active-bg)] text-[var(--sidebar-text)]'
+                                  : 'text-[var(--sidebar-icon-idle)] hover:bg-[var(--sidebar-icon-hover-bg)] hover:text-[var(--sidebar-text)]',
+                              )}
+                              title={!isOpen ? sub.label : undefined}
+                            >
+                              <SubIcon size={14} className="shrink-0 opacity-70" />
+                              {isOpen && <span className="truncate">{sub.label}</span>}
+                            </Link>
+                          );
+                        })}
+                    </div>
                   );
                 })}
               </div>
@@ -286,20 +306,53 @@ export function Sidebar({
         {/* Bottom: settings + user info */}
         <div className={cn('mt-auto pb-3', isOpen ? 'px-2' : 'px-1.5')}>
           <Separator className="mb-2 bg-[var(--sidebar-icon-hover-bg)]" />
-          <Link
-            href="/pms"
-            className={cn(
-              'flex h-9 items-center rounded-lg text-[13px] font-medium transition-colors',
-              isOpen ? 'gap-2.5 px-2' : 'justify-center px-0',
-              isActive('/pms')
-                ? 'bg-[var(--sidebar-icon-active-bg)] text-[var(--sidebar-text)]'
-                : 'text-[var(--sidebar-icon-idle)] hover:bg-[var(--sidebar-icon-hover-bg)] hover:text-[var(--sidebar-text)]',
-            )}
-            title={!isOpen ? t('nav.pms') : undefined}
-          >
-            <IconBed size={18} className="shrink-0" />
-            {isOpen && <span className="truncate">{t('nav.pms')}</span>}
-          </Link>
+          {inFmsShell ? (
+            <Link
+              href="/dashboard"
+              className={cn(
+                'flex h-9 items-center rounded-lg text-[13px] font-medium transition-colors',
+                isOpen ? 'gap-2.5 px-2' : 'justify-center px-0',
+                'text-[var(--sidebar-icon-idle)] hover:bg-[var(--sidebar-icon-hover-bg)] hover:text-[var(--sidebar-text)]',
+              )}
+              title={!isOpen ? t('fms.backToCrm') : undefined}
+            >
+              <IconLayoutDashboard size={18} className="shrink-0" />
+              {isOpen && <span className="truncate">{t('fms.backToCrm')}</span>}
+            </Link>
+          ) : (
+            <>
+              {isManager && (
+                <Link
+                  href="/fms"
+                  className={cn(
+                    'flex h-9 items-center rounded-lg text-[13px] font-medium transition-colors',
+                    isOpen ? 'gap-2.5 px-2' : 'justify-center px-0',
+                    isActive('/fms')
+                      ? 'bg-[var(--sidebar-icon-active-bg)] text-[var(--sidebar-text)]'
+                      : 'text-[var(--sidebar-icon-idle)] hover:bg-[var(--sidebar-icon-hover-bg)] hover:text-[var(--sidebar-text)]',
+                  )}
+                  title={!isOpen ? t('nav.fms') : undefined}
+                >
+                  <IconCurrencyLira size={18} className="shrink-0" />
+                  {isOpen && <span className="truncate">{t('nav.fms')}</span>}
+                </Link>
+              )}
+              <Link
+                href="/pms"
+                className={cn(
+                  'flex h-9 items-center rounded-lg text-[13px] font-medium transition-colors',
+                  isOpen ? 'gap-2.5 px-2' : 'justify-center px-0',
+                  isActive('/pms')
+                    ? 'bg-[var(--sidebar-icon-active-bg)] text-[var(--sidebar-text)]'
+                    : 'text-[var(--sidebar-icon-idle)] hover:bg-[var(--sidebar-icon-hover-bg)] hover:text-[var(--sidebar-text)]',
+                )}
+                title={!isOpen ? t('nav.pms') : undefined}
+              >
+                <IconBed size={18} className="shrink-0" />
+                {isOpen && <span className="truncate">{t('nav.pms')}</span>}
+              </Link>
+            </>
+          )}
           <Link
             href="/settings"
             className={cn(

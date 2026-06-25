@@ -25,7 +25,7 @@ const ChatwootAssigneeSchema = z
 
 const ChatwootMetaSchema = z
   .object({
-    sender: ChatwootPhoneHolderSchema.optional(),
+    sender: ChatwootPhoneHolderSchema.nullable().optional(),
     assignee: ChatwootAssigneeSchema,
     assignee_type: z.string().nullable().optional(),
   })
@@ -45,11 +45,11 @@ const ChatwootConversationSchema = z
 /** Shared fields on conversation_created and message_created payloads. */
 const ChatwootInboundMessageSchema = z.object({
   id: z.number(),
-  channel: z.string().optional(),
+  channel: z.string().nullable().optional(),
   meta: ChatwootMetaSchema,
-  contact: ChatwootPhoneHolderSchema.optional(),
-  sender: ChatwootPhoneHolderSchema.optional(),
-  message_type: z.string().optional(),
+  contact: ChatwootPhoneHolderSchema.nullable().optional(),
+  sender: ChatwootPhoneHolderSchema.nullable().optional(),
+  message_type: z.string().nullable().optional(),
   message: z
     .object({
       id: z.number().optional(),
@@ -85,11 +85,11 @@ export const ChatwootConversationUpdatedSchema = z.object({
   event: z.literal('conversation_updated'),
   id: z.number(),
   meta: ChatwootMetaSchema,
-  contact: ChatwootPhoneHolderSchema.optional(),
-  sender: ChatwootPhoneHolderSchema.optional(),
+  contact: ChatwootPhoneHolderSchema.nullable().optional(),
+  sender: ChatwootPhoneHolderSchema.nullable().optional(),
   conversation: ChatwootConversationSchema,
   changed_attributes: z.array(z.record(z.unknown())).default([]),
-  channel: z.string().optional(),
+  channel: z.string().nullable().optional(),
   inbox_id: z.number().optional(),
 });
 

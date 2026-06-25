@@ -5,6 +5,7 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import type { ReactNode } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
+import type { NavGroup } from '@/components/layout/nav-types';
 import { Topbar } from '@/components/layout/Topbar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
@@ -27,13 +28,19 @@ const PARTNER_BLOCKED = new Set([
 ]);
 
 // Pathname prefixes that partner_operators may visit; everything else shows the not-allowed view.
-const PARTNER_ALLOWED_PREFIXES = ['/leads', '/visits', '/move-in', '/tasks', '/settings', '/pms'];
+const PARTNER_ALLOWED_PREFIXES = ['/leads', '/visits', '/move-in', '/settings', '/pms'];
 
 interface AppShellProps {
   children: ReactNode;
   title?: string;
   count?: number;
   actions?: ReactNode;
+  /** Optional row below the title (e.g. in-page tab navigation). */
+  subheader?: ReactNode;
+  /** When set, replaces CRM nav groups (FMS feature shell). */
+  navOverride?: NavGroup[];
+  /** `fms` adjusts bottom sidebar links (back to CRM instead of FMS entry). */
+  shellVariant?: 'crm' | 'fms';
 }
 
 /**
@@ -41,7 +48,15 @@ interface AppShellProps {
  * @param props - Child page content and optional topbar props.
  * @returns Layout with sidebar navigation or loading/null state.
  */
-export function AppShell({ children, title, count, actions }: AppShellProps) {
+export function AppShell({
+  children,
+  title,
+  count,
+  actions,
+  subheader,
+  navOverride,
+  shellVariant = 'crm',
+}: AppShellProps) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const { t } = useTranslation();
@@ -63,6 +78,11 @@ export function AppShell({ children, title, count, actions }: AppShellProps) {
 
   if (!user) {
     if (typeof window !== 'undefined') router.replace('/login');
+    return null;
+  }
+
+  if (router.pathname.startsWith('/fms') && !isManagerOrAbove(user.role)) {
+    if (typeof window !== 'undefined') router.replace('/leads');
     return null;
   }
 
@@ -114,6 +134,8 @@ export function AppShell({ children, title, count, actions }: AppShellProps) {
         isPartnerOperatorUser={isPartnerOperator(user.role)}
         collapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebar}
+        navOverride={navOverride}
+        shellVariant={shellVariant}
       />
 
       {/* D24: 220px default (always-open), 60px when user opts to collapse */}
@@ -128,7 +150,13 @@ export function AppShell({ children, title, count, actions }: AppShellProps) {
             title={pageTitle}
             count={count}
             actions={actions}
-            hideSearch={isPartnerOperator(user.role)}
+            subheader={subheader}
+            hideSearch={isPartnerOperator(user.role) || shellVariant === 'fms'}
+            className={
+              shellVariant === 'fms'
+                ? 'border-b border-black/10 border-l border-white/25 bg-[#3A4A63] text-white [&_h1]:text-white'
+                : undefined
+            }
           />
           {/* D26: hard max-width cap — stops edge-to-edge stretch on ultrawide monitors */}
           <main className="flex-1 px-5 py-[18px]">

@@ -1,5 +1,5 @@
 /**
- * Performance aggregation queries for GET /api/my-day/performance.
+ * Performance aggregation queries for GET /api/my-day/genel-performans (the Performansım tab).
  * All metrics self-scoped to the requesting salesperson.
  *
  * Conversion credit rule (from plan §6):

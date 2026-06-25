@@ -52,8 +52,18 @@ import { resolveInboundAssignee } from '@/lib/webhooks/extract-assignee';
 import { createServiceClient } from '@/lib/supabase/service';
 import { sendTelegramToManagers } from '@/lib/telegram';
 import {
+  dropped,
+  ignored,
+  ok,
+  partial,
+  rejected,
+  type WebhookOutcome,
+} from '@/lib/webhooks/webhook-outcome';
+import {
   ChatwootPayloadSchema,
+  ChatwootConversationCreatedSchema,
   ChatwootConversationUpdatedSchema,
+  ChatwootMessageCreatedSchema,
   type ChatwootConversationCreated,
   type ChatwootConversationUpdated,
   type ChatwootMessageCreated,
@@ -67,7 +77,7 @@ type LeadsUpdate = Database['public']['Tables']['leads']['Update'];
 type InboundChatwootPayload = ChatwootConversationCreated | ChatwootMessageCreated;
 
 type ChatwootPhonePayload = {
-  channel?: string;
+  channel?: string | null;
   meta?: ChatwootConversationCreated['meta'];
   contact?: ChatwootConversationCreated['contact'];
   sender?: ChatwootConversationCreated['sender'];
@@ -119,7 +129,7 @@ function sleep(ms: number): Promise<void> {
  * @param operation - Async function to execute.
  * @param context - Description for error alerts.
  */
-async function withRetry(operation: () => Promise<void>, context: string): Promise<void> {
+async function withRetry<T>(operation: () => Promise<T>, context: string): Promise<T | undefined> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
@@ -128,8 +138,7 @@ async function withRetry(operation: () => Promise<void>, context: string): Promi
     }
 
     try {
-      await operation();
-      return;
+      return await operation();
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       console.error(`[chatwoot] ${context} attempt ${attempt + 1} failed:`, lastError.message);
@@ -139,6 +148,7 @@ async function withRetry(operation: () => Promise<void>, context: string): Promi
   await sendTelegramToManagers(
     `[CRM] Chatwoot ${context} failed after ${RETRY_DELAYS_MS.length} attempts.\nError: ${lastError?.message}`,
   );
+  return undefined;
 }
 
 /**
@@ -188,7 +198,7 @@ async function reactivateLostLead(leadUuid: string, messageFrom: string | null):
  * Processes a Chatwoot webhook payload.
  * @param body - Raw webhook body (unknown until validated).
  */
-export async function processChatwoot(body: unknown): Promise<void> {
+export async function processChatwoot(body: unknown): Promise<WebhookOutcome> {
   const parsed = ChatwootPayloadSchema.safeParse(body);
 
   if (!parsed.success) {
@@ -204,22 +214,53 @@ export async function processChatwoot(body: unknown): Promise<void> {
       const loose = ChatwootConversationUpdatedSchema.safeParse(body);
       if (loose.success) {
         await withRetry(() => handleLeadUpdate(loose.data), 'conversation update');
-        return;
+        return ok('loose_parsed', 'conversation_updated recovered via loose schema');
+      }
+    }
+
+    if (rawEvent === 'conversation_created') {
+      const loose = ChatwootConversationCreatedSchema.safeParse(body);
+      if (loose.success) {
+        await handleLeadCreate(loose.data);
+        if (loose.data.message?.id) {
+          await withRetry(
+            () => handleMessageCreated(loose.data as unknown as ChatwootMessageCreated),
+            'message sync',
+          );
+        }
+        return ok(
+          'loose_parsed',
+          `conversation_created recovered via loose schema conversation=${loose.data.id}`,
+        );
+      }
+    }
+
+    if (rawEvent === 'message_created') {
+      const loose = ChatwootMessageCreatedSchema.safeParse(body);
+      if (loose.success) {
+        if (loose.data.message_type !== 'outgoing') {
+          const conversationId = loose.data.conversation?.id ?? loose.data.id;
+          const existingLead = await findLeadByChatwootConversation(conversationId);
+          if (!existingLead) {
+            await handleLeadCreate(loose.data);
+          } else if (existingLead.funnel_status === 'lost') {
+            await reactivateLostLead(existingLead.uuid, existingLead.message_from);
+          }
+        }
+        const outcome = await withRetry(() => handleMessageCreated(loose.data), 'message sync');
+        return outcome ?? partial('message_sync_failed', 'message sync failed after retries');
       }
     }
 
     console.error('[chatwoot] invalid payload:', parsed.error.flatten());
-    await sendTelegramToManagers(
-      `[CRM] Chatwoot webhook validation failed.\n${parsed.error.message}`,
-    );
-    return;
+    return rejected('schema_invalid', parsed.error.message);
   }
 
   const payload = parsed.data;
 
   if (payload.event === 'conversation_updated') {
     await withRetry(() => handleLeadUpdate(payload), 'conversation update');
-    return;
+    return ok('conversation_updated', `conversation=${payload.id}`);
   }
 
   if (payload.event === 'conversation_created') {
@@ -232,7 +273,7 @@ export async function processChatwoot(body: unknown): Promise<void> {
         'message sync',
       );
     }
-    return;
+    return ok('conversation_created', `conversation=${payload.id}`);
   }
 
   if (payload.event === 'message_created') {
@@ -248,8 +289,11 @@ export async function processChatwoot(body: unknown): Promise<void> {
       }
     }
     // Hem incoming hem outgoing lead_messages'a yazılır
-    await withRetry(() => handleMessageCreated(payload), 'message sync');
+    const outcome = await withRetry(() => handleMessageCreated(payload), 'message sync');
+    return outcome ?? partial('message_sync_failed', 'message sync failed after retries');
   }
+
+  return ignored('unhandled_event', 'unrecognized chatwoot event');
 }
 
 /**
@@ -316,7 +360,7 @@ function extractChatwootInstagramHandle(payload: ChatwootPhonePayload): string |
  * Returns true when the Chatwoot channel is Instagram.
  * @param channel - Chatwoot channel string from payload.
  */
-function isInstagramChannel(channel: string | undefined): boolean {
+function isInstagramChannel(channel: string | null | undefined): boolean {
   return (channel ?? '').toLowerCase().includes('instagram');
 }
 
@@ -1274,13 +1318,13 @@ const CONVERSATION_GAP_HOURS = 2;
  * Lead bulunamazsa sessizce geçer.
  * @param payload - Parsed ChatwootMessageCreated payload.
  */
-async function handleMessageCreated(payload: ChatwootMessageCreated): Promise<void> {
+async function handleMessageCreated(payload: ChatwootMessageCreated): Promise<WebhookOutcome> {
   const conversationId = payload.conversation?.id ?? payload.id;
   const messageId = payload.message?.id;
 
   if (!messageId) {
     console.warn(`[chatwoot] message_created without message.id conversation=${conversationId}`);
-    return;
+    return dropped('missing_message_id', `conversation=${conversationId}`);
   }
 
   const lead = await findLeadByChatwootConversation(conversationId);
@@ -1288,7 +1332,7 @@ async function handleMessageCreated(payload: ChatwootMessageCreated): Promise<vo
     console.info(
       `[chatwoot] no lead for message_created conversation=${conversationId} — skipping message sync`,
     );
-    return;
+    return dropped('no_linked_lead', `conversation=${conversationId} message=${messageId}`);
   }
 
   const content = payload.message?.content ?? null;
@@ -1312,7 +1356,7 @@ async function handleMessageCreated(payload: ChatwootMessageCreated): Promise<vo
   // Campaign/bot sends have a different sender type and must NOT count toward personal metrics.
   const senderAgentId = senderType === 'user' && senderId != null ? String(senderId) : null;
 
-  await syncMessageToLeadMessages({
+  const written = await syncMessageToLeadMessages({
     leadUuid: lead.uuid,
     conversationId,
     messageId,
@@ -1348,6 +1392,10 @@ async function handleMessageCreated(payload: ChatwootMessageCreated): Promise<vo
     senderType,
     senderName,
   });
+
+  return written
+    ? ok('message_synced', `${direction ?? messageType} message lead=${lead.uuid}`)
+    : partial('message_write_failed', `lead_messages upsert failed message=${messageId}`);
 }
 
 /**
@@ -1367,7 +1415,7 @@ async function syncMessageToLeadMessages(params: {
   messageTimestamp: string;
   direction: 'incoming' | 'outgoing' | null;
   senderAgentId: string | null;
-}): Promise<void> {
+}): Promise<boolean> {
   const client = createServiceClient();
   const { error } = await client.from('lead_messages').upsert(
     {
@@ -1393,13 +1441,15 @@ async function syncMessageToLeadMessages(params: {
       `[chatwoot] lead_messages upsert failed conversation=${params.conversationId} message=${params.messageId}:`,
       error.message,
     );
-  } else {
-    console.info(
-      `[chatwoot] lead_messages synced lead=${params.leadUuid} message=${params.messageId}`,
-    );
-    // Any message (incoming or outgoing) counts as contact made — complete nurture reminder tasks.
-    void completeContactTasks(params.leadUuid);
+    return false;
   }
+
+  console.info(
+    `[chatwoot] lead_messages synced lead=${params.leadUuid} message=${params.messageId}`,
+  );
+  // Any message (incoming or outgoing) counts as contact made — complete nurture reminder tasks.
+  void completeContactTasks(params.leadUuid);
+  return true;
 }
 
 /**

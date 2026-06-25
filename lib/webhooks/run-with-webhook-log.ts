@@ -1,5 +1,12 @@
 /**
- * Wraps webhook processors with webhook_logs idempotency and status updates.
+ * Wraps webhook processors with webhook_logs idempotency and structured outcomes.
+ *
+ * The processor returns a WebhookOutcome describing what actually happened
+ * (success / ignored / dropped / partial / rejected); a thrown error is recorded
+ * as 'failed'. Real problems (failed / partial / rejected) raise a Telegram alert;
+ * benign outcomes (success / ignored / dropped) are logged silently for the
+ * dashboard. This replaces the old "no throw ⇒ success" behaviour that hid every
+ * silent skip and swallowed write.
  */
 import { sendTelegramAlert } from '@/lib/telegram';
 import {
@@ -7,21 +14,27 @@ import {
   finalizeWebhookLog,
   type WebhookSource,
 } from '@/lib/webhooks/webhook-log';
+import { ignored, type WebhookOutcome } from '@/lib/webhooks/webhook-outcome';
+
+/** Outcomes that page a manager immediately. dropped is visible in the UI but not alerted (digest territory). */
+const ALERT_STATUSES = new Set(['failed', 'partial', 'rejected']);
 
 /**
- * Runs processor after claiming idempotency row; updates log status on completion.
- * @param params - Source metadata and async processor.
+ * Runs processor after claiming idempotency row; records the structured outcome.
+ * @param params - Source metadata and async processor returning a WebhookOutcome.
  */
 export async function runWithWebhookLog(params: {
   source: WebhookSource;
   idempotencyKey: string | null;
   eventType: string;
   payload: unknown;
-  process: () => Promise<void>;
-  /** When true, skip processor but mark success (e.g. non-CDR NetGSM events). */
+  process: () => Promise<WebhookOutcome>;
+  /** When true, skip processor and record an 'ignored' outcome (e.g. non-CDR NetGSM events). */
   skipProcessing?: boolean;
 }): Promise<void> {
   if (!params.idempotencyKey) {
+    // Phase 4 synthesises a fallback key upstream, so this is a last-resort path
+    // with no audit row. Still run the processor; alert on hard failure.
     console.error(`[webhook:${params.source}] missing idempotency key, event=${params.eventType}`);
     try {
       await params.process();
@@ -55,16 +68,25 @@ export async function runWithWebhookLog(params: {
   const logId = claim.logId;
 
   if (params.skipProcessing) {
-    await finalizeWebhookLog(logId, 'skipped');
+    const outcome = ignored('skipped_by_rule', 'Event type not processed by design');
+    await finalizeWebhookLog(logId, outcome.status, outcome.detail, outcome.reasonCode);
     return;
   }
 
   try {
-    await params.process();
-    await finalizeWebhookLog(logId, 'success');
+    const outcome = await params.process();
+    await finalizeWebhookLog(logId, outcome.status, outcome.detail, outcome.reasonCode);
+
+    if (ALERT_STATUSES.has(outcome.status)) {
+      await sendTelegramAlert(
+        `[CRM] Webhook ${outcome.status} (${params.source} / ${params.eventType})\n` +
+          `Reason: ${outcome.reasonCode}\nLog: ${logId}` +
+          (outcome.detail ? `\nDetail: ${outcome.detail}` : ''),
+      );
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await finalizeWebhookLog(logId, 'failed', message);
+    await finalizeWebhookLog(logId, 'failed', message, 'unhandled_error');
     await sendTelegramAlert(
       `[CRM] Webhook failed (${params.source} / ${params.eventType})\nLog: ${logId}\nError: ${message}`,
     );

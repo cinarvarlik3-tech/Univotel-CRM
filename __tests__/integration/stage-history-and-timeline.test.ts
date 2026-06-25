@@ -82,11 +82,13 @@ describe('stage history chokepoint — claim to signed', () => {
       currentStatus = nextStatus;
     }
 
-    // Verify lead_stage_history contains exactly the 4 transitions.
+    // Verify lead_stage_history contains exactly the 4 application-written transitions.
+    // The DB safety-net trigger may also insert source='system' rows for the same moves.
     const { data: historyRows, error } = await client
       .from('lead_stage_history')
       .select('from_status, to_status, changed_by, source')
       .eq('lead_uuid', TEST_LEAD_UUID)
+      .eq('source', 'manual')
       .order('changed_at', { ascending: true });
 
     expect(error).toBeNull();
@@ -124,9 +126,11 @@ describe('buildActivityTimeline — stage changes appear as events', () => {
   it('returns stage_change events matching all four transitions, newest first', async () => {
     const timeline = await buildActivityTimeline(TEST_LEAD_UUID);
 
-    const stageEvents = timeline.filter((e) => e.kind === 'stage_change');
+    const stageEvents = timeline.filter(
+      (e) => e.kind === 'stage_change' && e.meta.source === 'manual',
+    );
 
-    expect(stageEvents.length).toBeGreaterThanOrEqual(4);
+    expect(stageEvents).toHaveLength(4);
 
     // Newest first — sozlesme-imzalandi is at index 0.
     expect(stageEvents[0].meta.toStatus).toBe('sozlesme-imzalandi');
@@ -144,7 +148,9 @@ describe('buildActivityTimeline — stage changes appear as events', () => {
 
   it('all stage_change events reference the correct changedBy user', async () => {
     const timeline = await buildActivityTimeline(TEST_LEAD_UUID);
-    const stageEvents = timeline.filter((e) => e.kind === 'stage_change');
+    const stageEvents = timeline.filter(
+      (e) => e.kind === 'stage_change' && e.meta.source === 'manual',
+    );
 
     for (const event of stageEvents) {
       expect(event.meta.changedBy).toBe(TEST_USER_ID);

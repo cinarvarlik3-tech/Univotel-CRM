@@ -7,18 +7,21 @@ import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
 import { isPartnerOperator } from '@/lib/auth/roles';
-import { FUNNEL_STATUSES, isFunnelAdvanceAllowed } from '@/lib/constants';
-import {
-  purchasedRoomAdvanceMode,
-  resolvePurchasedRoomForAdvance,
-  setPurchasedRoom,
-} from '@/lib/pms/purchased-room';
+import { FUNNEL_STATUSES, isFunnelAdvanceAllowed, purchasedRoomAdvanceMode } from '@/lib/constants';
+import { advanceToKapora, confirmSozlesme } from '@/lib/finance/kapora-flow';
+import { resolvePurchasedRoomForAdvance, setPurchasedRoom } from '@/lib/pms/purchased-room';
 import { updateLeadRecord } from '@/lib/leads/update-lead';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 const AdvanceStageSchema = z.object({
   funnel_status: z.enum(FUNNEL_STATUSES),
   purchased_room: z.string().uuid().optional(),
+  move_in_month: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+    .optional(),
+  deal_duration: z.number().int().min(1).max(12).optional(),
+  discount: z.number().min(0).optional(),
 });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -63,6 +66,79 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const roomMode = purchasedRoomAdvanceMode(existing.funnel_status, parsed.data.funnel_status);
+    const targetStatus = parsed.data.funnel_status;
+
+    if (targetStatus === 'sozlesme-imzalandi' && existing.funnel_status !== 'kapora-alindi') {
+      return sendError(
+        res,
+        'Sözleşme aşamasına geçiş için önce kapora alınmalı ve /api/leads/[id]/advance-stage kullanılmalıdır',
+        400,
+      );
+    }
+
+    if (targetStatus === 'kapora-alindi') {
+      let purchasedRoom = parsed.data.purchased_room;
+      if (!purchasedRoom) {
+        purchasedRoom =
+          (await resolvePurchasedRoomForAdvance({
+            leadId: id,
+            fromStatus: existing.funnel_status,
+            toStatus: targetStatus,
+            purchasedRoom: parsed.data.purchased_room,
+          })) ?? undefined;
+      }
+      if (!purchasedRoom) {
+        return sendError(res, 'Kapora için oda tipi seçilmelidir', 400);
+      }
+      if (!parsed.data.move_in_month) {
+        return sendError(res, 'Taşınma ayı (YYYY-MM) gereklidir', 400);
+      }
+
+      const result = await advanceToKapora({
+        leadId: id,
+        purchasedRoom,
+        moveInMonth: parsed.data.move_in_month,
+        dealDuration: parsed.data.deal_duration,
+        discount: parsed.data.discount,
+        actorId: session.userId,
+        existing,
+      });
+      return sendSuccess(res, result.lead);
+    }
+
+    if (
+      roomMode === 'confirm' &&
+      targetStatus === 'sozlesme-imzalandi' &&
+      existing.funnel_status === 'kapora-alindi'
+    ) {
+      let purchasedRoom = parsed.data.purchased_room;
+      if (!purchasedRoom) {
+        purchasedRoom =
+          (await resolvePurchasedRoomForAdvance({
+            leadId: id,
+            fromStatus: existing.funnel_status,
+            toStatus: targetStatus,
+            purchasedRoom: parsed.data.purchased_room,
+          })) ?? undefined;
+      }
+      if (!purchasedRoom) {
+        return sendError(res, 'Sözleşme için oda tipi onaylanmalıdır', 400);
+      }
+      if (!parsed.data.move_in_month) {
+        return sendError(res, 'Taşınma ayı (YYYY-MM) gereklidir', 400);
+      }
+
+      const result = await confirmSozlesme({
+        leadId: id,
+        purchasedRoom,
+        moveInMonth: parsed.data.move_in_month,
+        dealDuration: parsed.data.deal_duration,
+        discount: parsed.data.discount,
+        actorId: session.userId,
+        existing,
+      });
+      return sendSuccess(res, result.lead);
+    }
 
     if (roomMode) {
       if (parsed.data.purchased_room) {
@@ -71,14 +147,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         await resolvePurchasedRoomForAdvance({
           leadId: id,
           fromStatus: existing.funnel_status,
-          toStatus: parsed.data.funnel_status,
+          toStatus: targetStatus,
         });
       }
     }
 
     const result = await updateLeadRecord(
       id,
-      { funnel_status: parsed.data.funnel_status },
+      { funnel_status: targetStatus },
       existing,
       session.userId,
       'manual',

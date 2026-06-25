@@ -6,9 +6,14 @@ import { EventEmitter } from 'events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const runWithWebhookLog = vi.fn();
+const recordTerminalWebhookLog = vi.fn();
 
 vi.mock('@/lib/webhooks/run-with-webhook-log', () => ({
   runWithWebhookLog: (...args: unknown[]) => runWithWebhookLog(...args),
+}));
+
+vi.mock('@/lib/webhooks/webhook-log', () => ({
+  recordTerminalWebhookLog: (...args: unknown[]) => recordTerminalWebhookLog(...args),
 }));
 
 vi.mock('@/lib/webhooks/process-whatsapp', () => ({
@@ -78,6 +83,10 @@ describe('whatsapp-calls POST handler', () => {
 
     expect(res.statusCode).toBe(401);
     expect(runWithWebhookLog).not.toHaveBeenCalled();
+    // Verification failures are now logged as a rejected/unauthorized outcome.
+    expect(recordTerminalWebhookLog).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'rejected', reasonCode: 'unauthorized' }),
+    );
   });
 
   it('returns 401 when signature is invalid', async () => {

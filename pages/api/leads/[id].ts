@@ -13,7 +13,11 @@ import {
   LOSS_REASONS,
   SPECIAL_STATES,
 } from '@/lib/constants';
-import { applyLossReasonUpdate } from '@/lib/leads/apply-loss-reason-update';
+import {
+  applyLossReasonUpdate,
+  getLossRecoveryFinancialTarget,
+} from '@/lib/leads/apply-loss-reason-update';
+import { executeLossRecoveryFinance } from '@/lib/finance/loss-recovery';
 import { normalizePhone } from '@/lib/leads/normalize-phone';
 import { updateLeadRecord } from '@/lib/leads/update-lead';
 import { createServerSupabase } from '@/lib/supabase/server';
@@ -34,6 +38,14 @@ const UpdateLeadSchema = z.object({
   has_moved_in: z.boolean().optional(),
   /** Human-edited display name (§1.1 / D12). Never overwrites auto_logged_name. */
   display_name: z.string().nullable().optional(),
+  /** Required when clearing loss_reason back into a financial stage (0097 §D2). */
+  purchased_room: z.string().uuid().optional(),
+  move_in_month: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'YYYY-MM formatında olmalıdır')
+    .optional(),
+  deal_duration: z.number().int().min(1).max(12).optional(),
+  discount: z.number().min(0).optional(),
 });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -114,6 +126,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const currentOrNewFunnel = updates.funnel_status ?? existing.funnel_status;
     if (updates.has_moved_in === true && currentOrNewFunnel !== 'sozlesme-imzalandi') {
       return sendError(res, 'has_moved_in can only be set when status is sozlesme-imzalandi', 400);
+    }
+
+    if (
+      updates.funnel_status &&
+      updates.funnel_status !== existing.funnel_status &&
+      (updates.funnel_status === 'kapora-alindi' || updates.funnel_status === 'sozlesme-imzalandi')
+    ) {
+      return sendError(
+        res,
+        'Finans aşamalarına geçiş için /api/leads/[id]/advance-stage kullanılmalıdır',
+        400,
+      );
+    }
+
+    const lossRecoveryTarget = getLossRecoveryFinancialTarget(existing, updates);
+    if (lossRecoveryTarget) {
+      if (!updates.move_in_month) {
+        return sendError(res, 'Kayıp geri alımında taşınma ayı (YYYY-MM) gereklidir', 400);
+      }
+
+      try {
+        await executeLossRecoveryFinance({
+          leadId: id,
+          targetStatus: lossRecoveryTarget,
+          actorId: authSession.user.id,
+          input: {
+            purchasedRoom: updates.purchased_room,
+            moveInMonth: updates.move_in_month!,
+            dealDuration: updates.deal_duration,
+            discount: updates.discount,
+          },
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Finans satırı oluşturulamadı';
+        return sendError(res, message, 400);
+      }
     }
 
     if (

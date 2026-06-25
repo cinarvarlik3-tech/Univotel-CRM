@@ -14,7 +14,6 @@ import { normalizePhone } from '@/lib/leads/normalize-phone';
 import { normalizeNetGsmPayload } from '@/lib/webhooks/normalize-netgsm-payload';
 import type { NormalizedNetGsm } from '@/lib/webhooks/normalize-netgsm-payload';
 import { verifyNetGsmToken } from '@/lib/webhooks/verify';
-import { sendTelegramToManagers } from '@/lib/telegram';
 import {
   COMPANY_PHONE_NUMBER_NORMALIZED,
   ISTANBUL_TIMEZONE,
@@ -23,6 +22,14 @@ import {
 import { NetGsmPayloadSchema } from '@/types/webhooks';
 import { createServiceClient } from '@/lib/supabase/service';
 import { updateLeadRecord } from '@/lib/leads/update-lead';
+import {
+  dropped,
+  ignored,
+  ok,
+  partial,
+  rejected,
+  type WebhookOutcome,
+} from '@/lib/webhooks/webhook-outcome';
 
 // ---------------------------------------------------------------------------
 // Lead lookup helpers
@@ -118,7 +125,7 @@ async function writeCdrToContactHistory(params: {
   direction: 'inbound' | 'outbound';
   callerNorm: string;
   calleeNorm: string;
-}): Promise<void> {
+}): Promise<boolean> {
   const duration = params.normalized.durationSeconds ?? 0;
   const callTime = new Date(); // CDR payload'da timestamp yok — webhook alım zamanı kullanılır
   const formattedText = formatCdrNote(callTime, params.direction, duration);
@@ -144,7 +151,7 @@ async function writeCdrToContactHistory(params: {
       `[netgsm] contact_history CDR insert failed lead=${params.leadUuid}:`,
       error.message,
     );
-    return;
+    return false;
   }
 
   console.info(
@@ -163,6 +170,8 @@ async function writeCdrToContactHistory(params: {
       touchError.message,
     );
   }
+
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -256,112 +265,89 @@ async function unarchiveLeadForCdr(leadUuid: string): Promise<void> {
 // Main CDR handler
 // ---------------------------------------------------------------------------
 
+/** National 10-digit core of the company line, derived from the constant (e.g. '2129095244'). */
+const COMPANY_NUMBER_CORE = COMPANY_PHONE_NUMBER_NORMALIZED.replace(/\D/g, '').replace(/^0+/, '');
+
 /**
- * CDR payload'ını işler: şirket hattı tespiti → lead bul → unarchive (gerekirse) → CDR yaz.
- * Eşleşme yoksa false döner, çağıran mevcut lead yaratma akışına devredebilir.
- * @param normalized - Normalize edilmiş NetGSM payload.
- * @returns true eğer CDR bir lead'e eşleşti ve işlendi; false ise lead bulunamadı.
+ * True when a raw phone is the company line in ANY format:
+ * '02129095244', '2129095244', '+902129095244', '+90 212 909 52 44', '0 212 909 52 44', etc.
+ * Compares the national 10-digit core after stripping non-digits, leading zeros, and a '90' country code.
+ * @param raw - Raw phone string from the CDR payload.
+ * @returns True if the number is the company line.
  */
-async function handleCdrForExistingLead(normalized: NormalizedNetGsm): Promise<boolean> {
+function isCompanyNumber(raw: string | null | undefined): boolean {
+  let core = (raw ?? '').replace(/\D/g, '').replace(/^0+/, '');
+  if (core.startsWith('90') && core.length === 12) core = core.slice(2);
+  return core === COMPANY_NUMBER_CORE;
+}
+
+/**
+ * Processes a CDR per the tracking rule: a call is recorded ONLY when the company
+ * number is the caller or the called party. The other leg is the customer — match
+ * it to an existing lead (write CDR) or create a new lead. Calls that don't involve
+ * the company number (e.g. a customer dialing a staff personal line that rides the
+ * same santral) are ignored, since there's no reliable signal they're business calls.
+ * @param normalized - Normalized NetGSM payload.
+ * @returns Structured webhook outcome.
+ */
+async function handleCdr(normalized: NormalizedNetGsm): Promise<WebhookOutcome> {
+  const callerIsCompany = isCompanyNumber(normalized.callerPhone);
+  const calleeIsCompany = isCompanyNumber(normalized.calledNumber);
+
+  if (!callerIsCompany && !calleeIsCompany) {
+    const detail = `Company number not a leg (caller=${normalized.callerPhone ?? 'n/a'} callee=${normalized.calledNumber ?? 'n/a'})`;
+    console.info(`[netgsm] CDR ignored — ${detail}`);
+    return ignored('not_company_line', detail);
+  }
+
+  // Customer = the non-company leg. Company as caller → outbound; company as callee → inbound.
+  const customerRaw = callerIsCompany ? normalized.calledNumber : normalized.callerPhone;
+  const direction: 'inbound' | 'outbound' = callerIsCompany ? 'outbound' : 'inbound';
+
+  if (!customerRaw) {
+    console.warn('[netgsm] CDR has a company leg but no customer number — skipping');
+    return dropped('missing_customer', 'CDR has a company leg but no customer number');
+  }
+
+  const customerNorm = normalizePhone(customerRaw).phone;
   const callerNorm = normalizePhone(normalized.callerPhone ?? '').phone;
   const calleeNorm = normalizePhone(normalized.calledNumber ?? '').phone;
 
-  const isCompanyCaller = callerNorm === COMPANY_PHONE_NUMBER_NORMALIZED;
-  const isCompanyCallee = calleeNorm === COMPANY_PHONE_NUMBER_NORMALIZED;
+  const lead = await findLeadByPhone(customerNorm);
 
-  if (!isCompanyCaller && !isCompanyCallee) {
-    // Şirket hattı yoksa CDR eşleştirmesi yapma, mevcut akışa bırak
-    return false;
-  }
-
-  const leadPhone = isCompanyCaller ? calleeNorm : callerNorm;
-  const direction: 'inbound' | 'outbound' = isCompanyCaller ? 'outbound' : 'inbound';
-
-  const lead = await findLeadByPhone(leadPhone);
-  if (!lead) {
-    console.info(`[netgsm] CDR: no lead for phone=${leadPhone} — falling through to lead creation`);
-    return false;
-  }
-
-  // Arşivlenmiş lead ise önce unarchive et
-  if (lead.is_archived) {
-    try {
-      await unarchiveLeadForCdr(lead.uuid);
-    } catch {
-      // unarchive başarısız olsa bile CDR'ı yazmayı dene
-      console.warn(`[netgsm] unarchive failed for lead=${lead.uuid} — continuing CDR write`);
+  if (lead) {
+    // Arşivlenmiş lead ise önce unarchive et
+    if (lead.is_archived) {
+      try {
+        await unarchiveLeadForCdr(lead.uuid);
+      } catch {
+        // unarchive başarısız olsa bile CDR'ı yazmayı dene
+        console.warn(`[netgsm] unarchive failed for lead=${lead.uuid} — continuing CDR write`);
+      }
     }
+
+    const written = await writeCdrToContactHistory({
+      leadUuid: lead.uuid,
+      normalized,
+      direction,
+      callerNorm,
+      calleeNorm,
+    });
+
+    // CDR auto-advance: forward-only stage advancement via chokepoint (D19, D20).
+    await maybeCdrAutoAdvance({
+      lead,
+      direction,
+      durationSeconds: normalized.durationSeconds ?? 0,
+    });
+
+    return written
+      ? ok('cdr_written', `${direction} call written to lead=${lead.uuid}`)
+      : partial('cdr_write_failed', `contact_history insert failed for lead=${lead.uuid}`);
   }
 
-  await writeCdrToContactHistory({
-    leadUuid: lead.uuid,
-    normalized,
-    direction,
-    callerNorm,
-    calleeNorm,
-  });
-
-  // CDR auto-advance: forward-only stage advancement via chokepoint (D19, D20).
-  await maybeCdrAutoAdvance({
-    lead,
-    direction,
-    durationSeconds: normalized.durationSeconds ?? 0,
-  });
-
-  return true;
-}
-
-// ---------------------------------------------------------------------------
-// Exports
-// ---------------------------------------------------------------------------
-
-/**
- * Processes a NetGSM webhook payload into a lead when scenario indicates a completed call.
- * @param body - Raw webhook body (unknown until validated).
- */
-export async function processNetGsm(body: unknown): Promise<void> {
-  const parsed = NetGsmPayloadSchema.safeParse(body);
-
-  if (!parsed.success) {
-    console.error('[netgsm] invalid payload:', parsed.error.flatten());
-    await sendTelegramToManagers(
-      `[CRM] NetGSM webhook validation failed.\n${parsed.error.message}`,
-    );
-    return;
-  }
-
-  const record = parsed.data as Record<string, unknown>;
-  const normalized = normalizeNetGsmPayload(record);
-
-  if (normalized.token && !verifyNetGsmToken(normalized.token)) {
-    console.error('[netgsm] token mismatch');
-    return;
-  }
-
-  if (!normalized.shouldCreateLead) {
-    console.log(
-      `[netgsm] skipped lead ingest scenario=${normalized.scenario ?? 'unknown'} id=${normalized.externalId ?? 'n/a'}`,
-    );
-    return;
-  }
-
-  if (!normalized.callerPhone) {
-    console.error('[netgsm] missing caller phone in CDR payload');
-    await sendTelegramToManagers(
-      `[CRM] NetGSM CDR missing caller phone.\nScenario: ${normalized.scenario ?? 'unknown'}`,
-    );
-    return;
-  }
-
-  // CDR: şirket hattı tespiti ve mevcut lead eşleştirmesi
-  const handled = await handleCdrForExistingLead(normalized);
-  if (handled) {
-    return; // Mevcut lead'e yazıldı — yeni lead yaratma
-  }
-
-  // Eşleşme yoksa mevcut lead yaratma akışı — dokunulmaz
+  // No matching lead → create one from the customer number.
   const externalId = normalized.externalId ?? `netgsm_${Date.now()}`;
-
   const sourceDetails = buildNetGsmSourceDetails(
     {
       externalId,
@@ -373,7 +359,7 @@ export async function processNetGsm(body: unknown): Promise<void> {
 
   await createLeadFromWebhook({
     identifierKind: 'phone',
-    rawPhone: normalized.callerPhone,
+    rawPhone: customerRaw,
     leadSource: 'netgsm_call',
     messageFrom: 'netgsm',
     sourceDetails,
@@ -383,6 +369,53 @@ export async function processNetGsm(body: unknown): Promise<void> {
       netgsm_id: externalId,
     },
   });
+
+  return ok('lead_created', `New lead from ${direction} call ${customerNorm}`);
+}
+
+// ---------------------------------------------------------------------------
+// Exports
+// ---------------------------------------------------------------------------
+
+/**
+ * Processes a NetGSM webhook payload into a lead when scenario indicates a completed call.
+ * @param body - Raw webhook body (unknown until validated).
+ */
+export async function processNetGsm(body: unknown): Promise<WebhookOutcome> {
+  const parsed = NetGsmPayloadSchema.safeParse(body);
+
+  if (!parsed.success) {
+    console.error('[netgsm] invalid payload:', parsed.error.flatten());
+    return rejected('schema_invalid', parsed.error.message);
+  }
+
+  const record = parsed.data as Record<string, unknown>;
+  const normalized = normalizeNetGsmPayload(record);
+
+  if (normalized.token && !verifyNetGsmToken(normalized.token)) {
+    console.error('[netgsm] token mismatch');
+    return rejected('token_mismatch', 'NetGSM token did not match');
+  }
+
+  if (!normalized.shouldCreateLead) {
+    console.log(
+      `[netgsm] skipped lead ingest scenario=${normalized.scenario ?? 'unknown'} id=${normalized.externalId ?? 'n/a'}`,
+    );
+    return ignored('incomplete_call', `scenario=${normalized.scenario ?? 'unknown'}`);
+  }
+
+  if (!normalized.callerPhone) {
+    console.error('[netgsm] missing caller phone in CDR payload');
+    return rejected('missing_caller', `scenario=${normalized.scenario ?? 'unknown'}`);
+  }
+
+  // CDR tracking rule: record only when the company number is a leg; the other
+  // leg is the customer (match → write CDR, no match → create lead).
+  const outcome = await handleCdr(normalized);
+  console.log(
+    `[netgsm] CDR ${outcome.status}/${outcome.reasonCode} scenario=${normalized.scenario ?? 'cdr'} id=${normalized.externalId ?? 'n/a'}`,
+  );
+  return outcome;
 }
 
 /**

@@ -1,11 +1,10 @@
 /**
- * Genel Performans metrics — all-time or range-scoped personal stats.
- * Mirrors /api/my-day/performance but supports range=all_time and passes
- * allTimeLeads: true so the Leadlerim KPI counts total portfolio (not just
- * leads claimed in the window).
+ * Performansım metrics — range-scoped personal stats (powers the My Day "Performansım" tab).
+ * Supports range=all_time and passes allTimeLeads: true so the Leadlerim KPI counts
+ * total portfolio (not just leads claimed in the window).
  *
  * Query params:
- *   range: 'this_week' | 'this_month' | 'all_time'  (default: all_time)
+ *   range: 'today' | 'this_week' | 'this_month' | 'all_time'  (default: all_time)
  *   from:  ISO date string  (custom range start, overrides range)
  *   to:    ISO date string  (custom range end,   overrides range)
  */

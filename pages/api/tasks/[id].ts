@@ -5,11 +5,15 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { z } from 'zod';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
+import { isManagerOrAbove } from '@/lib/auth/roles';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 const UpdateTaskSchema = z.object({
   is_completed: z.boolean().optional(),
+  is_cancelled: z.boolean().optional(),
+  cancel_reason: z.string().optional(),
   notes: z.string().optional(),
+  assigned_to: z.string().uuid().optional(),
 });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -34,6 +38,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const parsed = UpdateTaskSchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(res, 'Invalid input', 400, parsed.error.flatten().fieldErrors);
+    }
+
+    // Only managers/superadmins can reassign tasks.
+    if (parsed.data.assigned_to && !isManagerOrAbove(session.role)) {
+      return sendError(res, 'Forbidden: only managers can reassign tasks', 403);
+    }
+
+    // Cancellation requires a reason.
+    if (parsed.data.is_cancelled === true && !parsed.data.cancel_reason) {
+      return sendError(res, 'cancel_reason is required when cancelling a task', 400);
     }
 
     const updates: Record<string, unknown> = { ...parsed.data };

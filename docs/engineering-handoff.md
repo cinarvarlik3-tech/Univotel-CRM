@@ -1,6 +1,6 @@
 # Univotel CRM — Engineering Handoff
 
-**Last updated:** 2026-06-17  
+**Last updated:** 2026-06-19  
 **Production:** https://panel.marketinguni.app  
 **Audience:** Engineers taking over development, on-call, or deployment.
 
@@ -22,8 +22,10 @@ Univotel CRM is an internal **student housing sales operations platform** (Turke
 - Supports **live Conversation tab** on active leads (Chatwoot API cache, 15s poll)
 - Supports **hotel recommendation** workflow (Make.com) with property-level results in `lead_details.rec_hotel`
 - Provides **My Day** salesperson cockpit (`/my-day`) — counters, tasks, attention queue, personal performance
-- Provides **manager Team panel** on `/dashboard` — range-scoped KPIs, daily trends, per-salesperson comparison (`GET /api/analytics/manager-panel`)
+- Provides **manager analytics** on `/dashboard` — **Everyday**, **Marketing**, and **Loss Analysis** tabs (live-query dashboards with shared global date filter) plus an unchanged **Team panel** tab (range-scoped KPIs, daily trends, per-salesperson table)
+- Provides **FMS** (`/fms/*`) — manager finance dashboard: contracted revenue, Univotel commission, partner/property drill-down, seasonal room prices (migrations `0096`–`0098`)
 - Organizes active pipeline into **stage compartment pages** (nurture, visits, post-visit, downpayment, deal-signed, 24h-restricted, move-in, etc.) plus `/visits` and `/move-in` calendars
+- Provides **PMS** (`/pms/*`) — property management: room inventory, placements (`lead_rooms`), operator write paths (migrations `0083`–`0091`)
 
 **Not built (by design):** Phase 5 automation rules, n8n orchestration, ElevenLabs voice.
 
@@ -66,18 +68,22 @@ pages/
   api/cron/         sla-alerts, task-overdue, campaign-resume, ga4-enrichment, lead-message-notify, restriction-24h, visit/move-in/nurture crons
   api/leads/        list (expanded filters), CRUD, archive, messages, request-rec, rec-hotel, log-contact, advance-stage, activity, claim, visits
   api/my-day/       personal cockpit + performance metrics
-  api/analytics/    MV overview, manager-panel, archive-summary, dni-performance
+  api/analytics/    everyday, marketing, loss-analysis, manager-panel, team-metrics, archive-summary, dni-performance (+ legacy MV index)
+  api/fms/          dashboard, totals, lookups, partner/property drill-down, room-type-prices
+  api/pms/          properties, rooms, unplaced, place, vacate, relocate, change-room, placement-note
   api/old-leads/    read-only list + detail + messages (manager+)
   api/campaigns/    manager campaigns
   api/visits/       visit calendar CRUD
   api/dni/          public number list for GTM
   api/admin/dni-numbers/  superadmin CRUD
-  my-day.tsx, leads/* (stage compartments), visits/, move-in/, dashboard/, ...
+  my-day.tsx, leads/* (stage compartments), visits/, move-in/, dashboard/, fms/, pms/, ...
 
 lib/
   leads/            create, assign, dedupe, SLA, archive, save-rec-hotel, parse-rec-hotel, chat sync, filters
   my-day/           My Day + performance aggregations
-  analytics/        manager-panel trends + team metrics
+  analytics/        everyday, marketing, loss-analysis payloads; manager-panel; overview-range; source-buckets
+  finance/          FMS revenue rollup (`revenue.ts`), types, format helpers
+  pms/              placement ops, queries, floor display, trigger error mapping
   webhooks/         processors, verify, normalize-netgsm-payload, webhook_logs, replay
   query/            filter-builder, split-filters, composite filters, supabase-query-types
   ui/               build-*-query-string, serialize-field-filters, lead-list-query
@@ -88,7 +94,7 @@ lib/
   dni/              lookup, normalize, increment lead_count
   auth/             session, roles
 
-supabase/migrations/   0001–0073 (73 files)
+supabase/migrations/   0001–0098 (98 files)
 types/                 database.ts (generated), domain.ts, webhooks.ts
 docs/                  runbook, onboarding, this file, netgsm-integration
 ```
@@ -99,20 +105,23 @@ After any migration: `pnpm gen:types`.
 
 ## 4. Database — migration snapshot
 
-| Range     | Purpose                                                                                                                                                                                     |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0001–0018 | Core CRM: salespeople, properties, leads, tasks, campaigns, webhook_logs                                                                                                                    |
-| 0019–0032 | Analytics, archive, pg_cron, notifications                                                                                                                                                  |
-| 0033–0037 | Superadmin, ref_sessions, dni_numbers, collected_data, GA4 cron                                                                                                                             |
-| 0038–0040 | old_leads, old_lead_details, old_lead_messages                                                                                                                                              |
-| 0041      | lead_messages (live Chatwoot cache)                                                                                                                                                         |
-| 0042–0044 | Property availability, room types, physical rooms                                                                                                                                           |
-| 0045–0046 | lead_details rec fields (campus, room_category, rec_hotel jsonb); drop redundant gender column                                                                                              |
-| 0047      | `search_old_leads_ids` RPC (fuzzy search on old leads)                                                                                                                                      |
-| 0048–0060 | Lead messaging, universities, deal_awaiting, funnel stages, loss_reason trigger, Chatwoot sync                                                                                              |
-| 0061      | `budget_tier` replaces `budget_min`; derived `budget_max`; Chatwoot `butce` sync                                                                                                            |
-| 0062–0073 | Major Update — funnel consolidation (`lost`), visits, boolean flags, auto-tasks, 24h restriction cron, `claimed_at`, `lead_stage_history`, message attribution                              |
-| 0093–0095 | Partner access — `partners` table; `partner_id` FK on properties/salespeople; `partner_operator` role; `interested_property_ids` UUID[]; partner RLS policies; fix unassigned-lead RLS leak |
+| Range     | Purpose                                                                                                                                                                                            |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0001–0018 | Core CRM: salespeople, properties, leads, tasks, campaigns, webhook_logs                                                                                                                           |
+| 0019–0032 | Analytics, archive, pg_cron, notifications                                                                                                                                                         |
+| 0033–0037 | Superadmin, ref_sessions, dni_numbers, collected_data, GA4 cron                                                                                                                                    |
+| 0038–0040 | old_leads, old_lead_details, old_lead_messages                                                                                                                                                     |
+| 0041      | lead_messages (live Chatwoot cache)                                                                                                                                                                |
+| 0042–0044 | Property availability, room types, physical rooms                                                                                                                                                  |
+| 0045–0046 | lead_details rec fields (campus, room_category, rec_hotel jsonb); drop redundant gender column                                                                                                     |
+| 0047      | `search_old_leads_ids` RPC (fuzzy search on old leads)                                                                                                                                             |
+| 0048–0060 | Lead messaging, universities, deal_awaiting, funnel stages, loss_reason trigger, Chatwoot sync                                                                                                     |
+| 0061      | `budget_tier` replaces `budget_min`; derived `budget_max`; Chatwoot `butce` sync                                                                                                                   |
+| 0062–0073 | Major Update — funnel consolidation (`lost`), visits, boolean flags, auto-tasks, 24h restriction cron, `claimed_at`, `lead_stage_history`, message attribution                                     |
+| 0074–0079 | Display names, lead pins, quick search RPC, team-panel RPCs, `home_property_id` on salespeople                                                                                                     |
+| 0083–0091 | **PMS** — `room_types`, `rooms`, `lead_rooms`, placement triggers, reconcile cron, seed data; `0090` adds `operator` role + PMS RLS write policies                                                 |
+| 0093–0095 | Partner access — `partners` table; `partner_id` FK on properties/salespeople; `partner_operator` role; `interested_property_ids` UUID[]; partner RLS policies; fix unassigned-lead RLS leak        |
+| 0096–0098 | **FMS** — `lead_finance` ledger, `active_finance` view, `fms_revenue_breakdown()` / `fms_property_roomtype_breakdown()` RPCs; seasonal `room_type_prices`; auto-vacate on lost / drop-below-kapora |
 
 **Lead lifecycle states:** Active (`is_deleted=false`, `is_archived=false`) → Archived → soft-deleted.
 
@@ -120,12 +129,13 @@ After any migration: `pnpm gen:types`.
 
 ## 5. Roles and access
 
-| Role               | Access                                                                                                                                                                                                                                              |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `salesperson`      | Own + unassigned active leads; tasks; properties read; **My Day** `/my-day`; **My Leads** `/leads/mine`; stage compartment pages                                                                                                                    |
-| `manager`          | All active + archived; campaigns; webhook-logs; old-leads; dashboard (Overview + Team panel); analytics                                                                                                                                             |
-| `superadmin`       | Manager + `/admin/dni-numbers`                                                                                                                                                                                                                      |
-| `partner_operator` | Full funnel stage pages (nurture → moved-in) scoped **exclusively to their partner's properties' leads** via RLS. No Hub, archive, My Day, dashboard, or deal-awaiting. Must have `salespeople.partner_id` set — DB CHECK constraint enforces this. |
+| Role               | Access                                                                                                                                                                                                                                                                                       |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `salesperson`      | Own + unassigned active leads; tasks; properties read; **My Day** `/my-day`; **My Leads** `/leads/mine`; stage compartment pages; PMS read-only                                                                                                                                              |
+| `operator`         | Same as salesperson + **PMS write** (place, vacate, relocate, change-room); no FMS, dashboard, Hub, archive, My Day, or deal-awaiting                                                                                                                                                        |
+| `manager`          | All active + archived; campaigns; webhook-logs; old-leads; **FMS** `/fms/*`; dashboard (Everyday / Marketing / Loss Analysis / Team panel tabs)                                                                                                                                              |
+| `superadmin`       | Manager + `/admin/dni-numbers`                                                                                                                                                                                                                                                               |
+| `partner_operator` | Full funnel stage pages (nurture → moved-in) scoped **exclusively to their partner's properties' leads** via RLS; PMS write scoped to own properties. No Hub, archive, My Day, dashboard, FMS, or deal-awaiting. Must have `salespeople.partner_id` set — DB CHECK constraint enforces this. |
 
 RLS enforces row access; API routes also check session role. Auth user UUID **must** match `salespeople.id`.
 
@@ -308,15 +318,44 @@ pnpm cf:deploy     # OpenNext build + wrangler deploy
 
 ---
 
-## 15. Manager analytics & My Day
+## 15. Manager analytics, FMS & My Day
 
-| Surface                       | API                                              | Data                                                                                | Access    |
-| ----------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------- | --------- |
-| `/dashboard` → **Overview**   | `GET /api/analytics`                             | Materialized views (`mv_*`), refreshed every 5 min                                  | manager+  |
-| `/dashboard` → **Team panel** | `GET /api/analytics/manager-panel`               | Live tables — claims, contacts, visits, stage history, tasks; Istanbul daily trends | manager+  |
-| `/my-day`                     | `GET /api/my-day`, `GET /api/my-day/performance` | Self-scoped counters, tasks, attention queue, conversion funnel                     | all roles |
+### `/dashboard` (manager / superadmin)
+
+Four tabs on **one route** (`pages/dashboard/index.tsx`) — local React state only, no per-tab URLs:
+
+| Tab                    | Purpose                                                                                     | API (lazy — fetched only when tab is active) |
+| ---------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| **Everyday** (default) | Top KPI cards, funnel (snapshot pie + median time-in-stage), activity, visits               | `GET /api/analytics/everyday`                |
+| **Marketing**          | Six source-attribution cards + two pies; ad-spend placeholder section                       | `GET /api/analytics/marketing`               |
+| **Loss Analysis**      | Lost-by-reason / stages-before-loss pies, loss-over-time (rate ⇄ count), lost-by-source bar | `GET /api/analytics/loss-analysis`           |
+| **Team panel**         | Unchanged — salesperson selector, range buttons, KPIs, trend charts, team table             | `GET /api/analytics/manager-panel`           |
+
+**Container controls** (above tab content; apply to the three analytics tabs only — **not** Team panel):
+
+- **Global date filter** — `Today \| This Week \| This Month \| All Time \| Custom` (default **All Time** = pass-through to section/widget filters)
+- **Reset** — restores global to All Time
+- **Calculation notes toggle** — `localStorage` key `univotel-analytics-calc-notes` (default on)
+
+**Time-filter precedence:** global (when not All Time) → section → widget (Activity/Visits line charts). **Snapshot-exempt:** Unclaimed Leads card and Leads-by-Funnel-Stage pie always show current state.
+
+**Data layer:** all metrics computed in `lib/analytics/everyday.ts`, `marketing.ts`, `loss-analysis.ts` — **not** in React components. Shared helpers: `lib/analytics/overview-shared.ts`, `overview-range.ts`, `source-buckets.ts`.
+
+**Marketing wiring (2026-06):** NetGSM Call / WhatsApp DM / Instagram DM / Other wired from `lead_source`. **Meta Ads + Google Ads** UI ships but reads **0** until paid-source resolver lands. **DNI is scrapped** for analytics — one shared phone number; phone leads are unconditionally NetGSM Call.
+
+**Legacy:** `GET /api/analytics` (materialized views) still exists and `mv_refresh` cron still runs every 5 min — used by `archive-summary` / legacy consumers, **not** the dashboard UI.
 
 Team panel credit rules mirror My Day performance (`lib/my-day/performance.ts`): stage transitions credit `changed_by`, visits credit `created_by`, contacts credit `salesperson_id`. Operational detail: [`runbook.md` — Dashboard tabs](./runbook.md).
+
+### FMS (`/fms/*`)
+
+Manager-only finance module. Revenue from `lead_finance` / `active_finance` via Postgres RPCs. UI: `components/finance/*`, `hooks/useFms.ts`, `lib/finance/revenue.ts`. See [`runbook.md` — FMS dashboard](./runbook.md).
+
+### My Day
+
+| Surface   | API                                              | Data                                                 | Access    |
+| --------- | ------------------------------------------------ | ---------------------------------------------------- | --------- |
+| `/my-day` | `GET /api/my-day`, `GET /api/my-day/performance` | Self-scoped counters, tasks, attention queue, funnel | all staff |
 
 ---
 

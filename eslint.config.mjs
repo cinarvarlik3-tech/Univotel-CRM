@@ -41,6 +41,7 @@ const eslintConfig = [
       'lib/my-day/**',
       'lib/analytics/**',
       'lib/pms/**',
+      'lib/finance/**',
     ],
     rules: {
       'no-restricted-imports': [
@@ -50,7 +51,7 @@ const eslintConfig = [
             {
               name: '@/lib/supabase/service',
               message:
-                'Service role client may only be imported from lib/webhooks/, lib/leads/, lib/jobs/, lib/attribution/, lib/dni/, lib/ga4/, lib/ref/, lib/analytics/, lib/my-day/, and lib/pms/.',
+                'Service role client may only be imported from lib/webhooks/, lib/leads/, lib/jobs/, lib/attribution/, lib/dni/, lib/ga4/, lib/ref/, lib/analytics/, lib/my-day/, lib/pms/, and lib/finance/.',
             },
           ],
         },
@@ -58,9 +59,22 @@ const eslintConfig = [
     },
   },
   {
-    files: ['pages/api/pms/**', 'pages/api/cron/pms-sync-reconcile.ts'],
+    files: ['pages/api/pms/**', 'pages/api/cron/pms-sync-reconcile.ts', 'pages/api/fms/**'],
     rules: {
       'no-restricted-imports': 'off',
+    },
+  },
+  {
+    files: ['**/*.{ts,tsx}'],
+    ignores: ['lib/finance/create-finance-row.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.property.name='from'][arguments.0.value='lead_finance']",
+          message: "Read 'active_finance' (filters vacated rows), not 'lead_finance' directly.",
+        },
+      ],
     },
   },
 ];

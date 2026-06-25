@@ -9,6 +9,7 @@ export interface PmsRoomOccupant {
   leadRoomId: string;
   leadUuid: string;
   leadName: string | null;
+  studentGender: string | null;
   moveIn: string | null;
   actualMoveIn: string | null;
 }
@@ -76,7 +77,7 @@ export async function getRoomsWithOccupancy(propertyId: string): Promise<PmsRoom
   const { data: placements, error: placementError } = await client
     .from('lead_rooms')
     .select(
-      'id, room_id, lead_id, leads!inner(uuid, lead_name, lead_details(move_in, actual_move_in_date))',
+      'id, room_id, lead_id, leads!inner(uuid, lead_name, lead_details(move_in, actual_move_in_date, student_gender))',
     )
     .in('room_id', roomIds)
     .is('vacated_at', null);
@@ -90,7 +91,11 @@ export async function getRoomsWithOccupancy(propertyId: string): Promise<PmsRoom
     const leads = row.leads as {
       uuid: string;
       lead_name: string | null;
-      lead_details: { move_in: string | null; actual_move_in_date: string | null } | null;
+      lead_details: {
+        move_in: string | null;
+        actual_move_in_date: string | null;
+        student_gender: string | null;
+      } | null;
     } | null;
     const details = leads?.lead_details ?? null;
     const list = byRoom.get(roomId) ?? [];
@@ -98,6 +103,7 @@ export async function getRoomsWithOccupancy(propertyId: string): Promise<PmsRoom
       leadRoomId: row.id as string,
       leadUuid: leads?.uuid ?? (row.lead_id as string),
       leadName: leads?.lead_name ?? null,
+      studentGender: details?.student_gender ?? null,
       moveIn: details?.move_in ?? null,
       actualMoveIn: details?.actual_move_in_date ?? null,
     });

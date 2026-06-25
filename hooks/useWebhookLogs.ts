@@ -9,6 +9,7 @@ export interface WebhookLogListItem {
   source: string;
   event_type: string;
   status: string;
+  reason_code: string | null;
   error_message: string | null;
   retry_count: number;
   processed_at: string | null;

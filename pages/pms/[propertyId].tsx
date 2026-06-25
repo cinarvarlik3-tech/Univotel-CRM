@@ -37,6 +37,7 @@ export default function PmsPropertyPage() {
   const [viewAll, setViewAll] = useState(false);
   const [unplacedGender, setUnplacedGender] = useState('all');
   const [unplacedSchool, setUnplacedSchool] = useState('all');
+  const [unplacedRoomType, setUnplacedRoomType] = useState('all');
   const [filters, setFilters] = useState<RoomFilterState>({
     floor: 'all',
     roomTypeId: 'all',
@@ -65,6 +66,36 @@ export default function PmsPropertyPage() {
   const [actionLoading, setActionLoading] = useState(false);
 
   const filteredRooms = useMemo(() => filterRooms(rooms ?? [], filters), [rooms, filters]);
+
+  // Room-type options span both placed rooms and unplaced leads so the filter
+  // covers every type relevant to the Placed/Unplaced KPIs.
+  const roomTypeOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of rooms ?? []) map.set(r.roomTypeId, r.roomTypeName);
+    for (const l of unplaced ?? []) map.set(l.purchasedRoomTypeId, l.purchasedRoomTypeName);
+    return [...map.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [rooms, unplaced]);
+
+  const filteredUnplaced = useMemo(() => {
+    const list = unplaced ?? [];
+    if (unplacedRoomType === 'all') return list;
+    return list.filter((l) => l.purchasedRoomTypeId === unplacedRoomType);
+  }, [unplaced, unplacedRoomType]);
+
+  // Placed = active occupants matching the applied property/gender/room-type filters.
+  const placedCount = useMemo(() => {
+    let count = 0;
+    for (const room of rooms ?? []) {
+      if (unplacedRoomType !== 'all' && room.roomTypeId !== unplacedRoomType) continue;
+      for (const occ of room.occupants) {
+        if (unplacedGender !== 'all' && occ.studentGender !== unplacedGender) continue;
+        count += 1;
+      }
+    }
+    return count;
+  }, [rooms, unplacedRoomType, unplacedGender]);
 
   const refresh = useCallback(async () => {
     await Promise.all([mutateRooms(), mutateUnplaced()]);
@@ -158,7 +189,7 @@ export default function PmsPropertyPage() {
 
   return (
     <AppShell title={propertyName}>
-      <div className="flex min-h-[calc(100vh-120px)] flex-col lg:flex-row">
+      <div className="flex min-h-[calc(100vh-88px)] flex-col gap-4 lg:flex-row lg:items-start">
         <div className="min-w-0 flex-1 space-y-4 p-1">
           <RoomFilters
             rooms={rooms ?? []}
@@ -194,15 +225,20 @@ export default function PmsPropertyPage() {
         </div>
 
         <UnplacedPanel
-          leads={unplaced ?? []}
+          leads={filteredUnplaced}
           properties={properties ?? []}
           selectedPropertyId={propertyId}
           viewAll={viewAll}
           canWrite={canWrite}
           genderFilter={unplacedGender}
           schoolFilter={unplacedSchool}
+          roomTypeFilter={unplacedRoomType}
+          roomTypeOptions={roomTypeOptions}
+          placedCount={placedCount}
+          unplacedCount={filteredUnplaced.length}
           onGenderFilterChange={setUnplacedGender}
           onSchoolFilterChange={setUnplacedSchool}
+          onRoomTypeFilterChange={setUnplacedRoomType}
           onPropertyChange={(id) => {
             setViewAll(false);
             router.push(`/pms/${id}`);

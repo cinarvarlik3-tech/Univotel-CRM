@@ -5,8 +5,8 @@
  */
 import { createServiceClient } from '@/lib/supabase/service';
 import { cancelAutoTasksForLead, createAutoTasksForStage } from '@/lib/tasks/auto-tasks';
+import { advanceToKapora } from '@/lib/finance/kapora-flow';
 import { updateLeadRecord } from '@/lib/leads/update-lead';
-import { setPurchasedRoom } from '@/lib/pms/purchased-room';
 import { writeStageHistory } from '@/lib/leads/write-stage-history';
 
 const PRE_VISIT_STAGES = new Set([
@@ -176,6 +176,9 @@ export async function recordVisitOutcome(opts: {
   outcome: VisitOutcome;
   lossReason?: string;
   purchasedRoom?: string;
+  moveInMonth?: string;
+  dealDuration?: number;
+  discount?: number;
   resolvedBy: string;
   leadFunnelStatus: string;
   leadAssignedTo: string | null;
@@ -224,7 +227,16 @@ export async function recordVisitOutcome(opts: {
     if (!opts.purchasedRoom) {
       throw new Error('Kapora için oda tipi seçilmelidir');
     }
-    await setPurchasedRoom({ leadId: opts.visitLeadUuid, roomTypeId: opts.purchasedRoom });
+    await advanceToKapora({
+      leadId: opts.visitLeadUuid,
+      purchasedRoom: opts.purchasedRoom,
+      moveInMonth: opts.moveInMonth,
+      dealDuration: opts.dealDuration,
+      discount: opts.discount,
+      actorId: opts.resolvedBy,
+      existing: opts.existing,
+    });
+    return updatedVisit as Record<string, unknown>;
   }
 
   await updateLeadRecord(opts.visitLeadUuid, leadUpdates, opts.existing, opts.resolvedBy, 'manual');

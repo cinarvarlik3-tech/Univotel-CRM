@@ -6,10 +6,11 @@
  * Tab 2 "Performansım": KPI tiles + conversion + connect rate + loss reasons + stuck leads.
  *   Personal mirror of the manager Team Panel, self-scoped.
  */
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useRouter } from 'next/router';
 import { AppShell } from '@/components/layout/AppShell';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { GenelRangeSelector, type GenelPreset } from '@/components/my-day/GenelRangeSelector';
 import { useCockpit } from '@/hooks/useCockpit';
 import { NurturesCard } from '@/components/my-day/NurturesCard';
 import { CallsCard } from '@/components/my-day/CallsCard';
@@ -17,7 +18,6 @@ import { VisitsCard } from '@/components/my-day/VisitsCard';
 import { PostVisitCard } from '@/components/my-day/PostVisitCard';
 import { MoveInsCard } from '@/components/my-day/MoveInsCard';
 import { SonAramalarCard } from '@/components/my-day/SonAramalarCard';
-import { PerformanceTab } from '@/components/my-day/PerformanceTab';
 import { GenelPerformansTab } from '@/components/my-day/GenelPerformansTab';
 import { LeadDetailPanel } from '@/components/leads/LeadDetailPanel';
 import { useSalespeople } from '@/hooks/useSalespeople';
@@ -47,6 +47,13 @@ export default function MyDayPage() {
   const { data: cockpit, isLoading, error, mutate } = useCockpit();
   const { data: salespeople } = useSalespeople();
 
+  const [activeTab, setActiveTab] = useState('today');
+
+  // Genel Performans range state — lifted here so the selector can live in the page header.
+  const [genelPreset, setGenelPreset] = useState<GenelPreset>('today');
+  const [genelFrom, setGenelFrom] = useState('');
+  const [genelTo, setGenelTo] = useState('');
+
   const selectedLeadId = router.isReady ? selectedLeadFromQuery(router.query) : null;
   const panelOpen = selectedLeadId !== null;
 
@@ -69,15 +76,29 @@ export default function MyDayPage() {
   const isManager = cockpit?.user.isManager ?? false;
 
   return (
-    <AppShell title="Günüm">
-      <div className="mx-auto w-full max-w-[1400px]">
-        <Tabs defaultValue="today" className="w-full">
-          <TabsList className="mb-5">
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <AppShell
+        title="Günüm"
+        subheader={
+          <TabsList className="h-8 gap-5 border-b-0">
             <TabsTrigger value="today">Bugün</TabsTrigger>
-            <TabsTrigger value="performance">Bugünlük Performans</TabsTrigger>
-            <TabsTrigger value="genel">Genel Performans</TabsTrigger>
+            <TabsTrigger value="genel">Performansım</TabsTrigger>
           </TabsList>
-
+        }
+        actions={
+          activeTab === 'genel' ? (
+            <GenelRangeSelector
+              preset={genelPreset}
+              onPresetChange={setGenelPreset}
+              customFrom={genelFrom}
+              onCustomFromChange={setGenelFrom}
+              customTo={genelTo}
+              onCustomToChange={setGenelTo}
+            />
+          ) : undefined
+        }
+      >
+        <div className="mx-auto w-full max-w-[1400px]">
           {/* ── Tab 1: Bugün ─────────────────────────────────────────── */}
           <TabsContent value="today">
             {/* Greeting strip */}
@@ -147,25 +168,20 @@ export default function MyDayPage() {
             </div>
           </TabsContent>
 
-          {/* ── Tab 2: Bugünlük Performans ────────────────────────────── */}
-          <TabsContent value="performance">
-            <PerformanceTab />
-          </TabsContent>
-
-          {/* ── Tab 3: Genel Performans ───────────────────────────────── */}
+          {/* ── Tab 2: Performansım ───────────────────────────────────── */}
           <TabsContent value="genel">
-            <GenelPerformansTab />
+            <GenelPerformansTab preset={genelPreset} customFrom={genelFrom} customTo={genelTo} />
           </TabsContent>
-        </Tabs>
-      </div>
+        </div>
 
-      <LeadDetailPanel
-        leadId={selectedLeadId}
-        open={panelOpen}
-        onClose={closeLead}
-        isManager={isManager}
-        salespeople={salespeople}
-      />
-    </AppShell>
+        <LeadDetailPanel
+          leadId={selectedLeadId}
+          open={panelOpen}
+          onClose={closeLead}
+          isManager={isManager}
+          salespeople={salespeople}
+        />
+      </AppShell>
+    </Tabs>
   );
 }

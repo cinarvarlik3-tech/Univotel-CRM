@@ -12,6 +12,7 @@ import { FUNNEL_STATUSES, purchasedRoomAdvanceMode } from '@/lib/constants';
 import { formatEnumLabel } from '@/lib/i18n/enum-labels';
 import { cn } from '@/lib/utils';
 import { PurchasedRoomDialog } from '@/components/leads/PurchasedRoomDialog';
+import type { FinanceTermsValue } from '@/components/finance/FinanceTermsFields';
 import type { LeadDetailRow, LeadWithDetails } from '@/types/domain';
 
 /** D5 primary next-action label per stage. */
@@ -98,13 +99,20 @@ export function PanelBottomActionBar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [stagePickerOpen]);
 
-  async function advanceStage(funnelStatus: string, purchasedRoom?: string) {
+  async function advanceStage(
+    funnelStatus: string,
+    purchasedRoom?: string,
+    financeTerms?: FinanceTermsValue,
+  ) {
     const res = await fetch(`/api/leads/${leadId}/advance-stage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         funnel_status: funnelStatus,
         purchased_room: purchasedRoom,
+        move_in_month: financeTerms?.moveInMonth,
+        deal_duration: financeTerms?.dealDuration,
+        discount: financeTerms?.discount,
       }),
     });
     if (res.ok) {
@@ -288,6 +296,7 @@ export function PanelBottomActionBar({
           setRoomDialogOpen(open);
           if (!open) setPendingStage(null);
         }}
+        leadId={leadId}
         leadName={lead.lead_name ?? lead.display_name}
         mode={
           pendingStage && purchasedRoomAdvanceMode(lead.funnel_status, pendingStage) === 'confirm'
@@ -296,11 +305,11 @@ export function PanelBottomActionBar({
         }
         initialPropertyId={details?.purchased_property_id}
         initialRoomTypeId={details?.purchased_room}
-        onConfirm={async (roomTypeId) => {
+        onConfirm={async ({ roomTypeId, financeTerms }) => {
           if (!pendingStage) return;
           setAdvanceSaving(true);
           setActionError(null);
-          await advanceStage(pendingStage, roomTypeId);
+          await advanceStage(pendingStage, roomTypeId, financeTerms);
           setAdvanceSaving(false);
         }}
       />

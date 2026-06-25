@@ -5,7 +5,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { sendError, sendSuccess } from '@/lib/api-helpers';
 import { getSessionUser } from '@/lib/auth/get-session-user';
 import { isManagerOrAbove } from '@/lib/auth/roles';
-import { replayWebhookLog } from '@/lib/webhooks/replay-webhook-log';
+import { NOT_REPLAYABLE_MESSAGE, replayWebhookLog } from '@/lib/webhooks/replay-webhook-log';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getSessionUser(req, res);
@@ -28,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message === 'Webhook log not found') return sendError(res, message, 404);
-    if (message === 'Only failed webhooks can be replayed') return sendError(res, message, 400);
+    if (message === NOT_REPLAYABLE_MESSAGE) return sendError(res, message, 400);
     return sendError(res, `Replay failed: ${message}`, 500);
   }
 }

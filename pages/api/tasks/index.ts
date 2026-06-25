@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'GET') {
     // D27: server-side filters — status, kind, type, lead, assignee, due window
-    const { status, kind, task_type, lead_uuid, assignee, due_from, due_to } = req.query;
+    const { status, kind, task_type, lead_uuid, assignee, assignees, due_from, due_to } = req.query;
 
     let query = supabase
       .from('tasks')
@@ -31,7 +31,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .order('due_when', { ascending: true });
 
     if (!isManagerOrAbove(session.role)) {
+      // Non-managers always see only their own tasks.
       query = query.eq('assigned_to', session.userId);
+    } else if (typeof assignees === 'string' && assignees) {
+      // Comma-separated list of assignee IDs (multi-agent view for managers).
+      const ids = assignees.split(',').filter(Boolean);
+      if (ids.length === 1) {
+        query = query.eq('assigned_to', ids[0]);
+      } else if (ids.length > 1) {
+        query = query.in('assigned_to', ids);
+      }
     } else if (typeof assignee === 'string' && assignee) {
       query = query.eq('assigned_to', assignee);
     }

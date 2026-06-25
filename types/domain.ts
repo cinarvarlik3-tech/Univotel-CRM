@@ -174,13 +174,18 @@ export interface TaskRow {
   task_type: string;
   due_when: string;
   is_completed: boolean;
+  is_cancelled: boolean;
   is_late: boolean;
   notes: string | null;
   created_at: string;
+  completed_at: string | null;
+  cancel_reason: string | null;
   /** True for system-generated tasks (stage transitions etc.). Added in 0066. */
   is_auto_created: boolean;
   /** Identifies the auto-task scenario (e.g. 'stage_visit_scheduled'). Null for manual tasks. */
   auto_task_type: string | null;
+  /** Joined from leads table by API — present on list-view fetches. */
+  leads?: { lead_name: string | null; display_name?: string | null; lead_phone: string } | null;
 }
 
 /** Property row for inventory list. */
@@ -407,6 +412,7 @@ export interface PmsRoomOccupant {
   leadRoomId: string;
   leadUuid: string;
   leadName: string | null;
+  studentGender: string | null;
   moveIn: string | null;
   actualMoveIn: string | null;
 }

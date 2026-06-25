@@ -1,84 +1,116 @@
-/**
- * Tasks list page — create tasks, filter (D27), and mark complete.
- */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/router';
+import { IconPlus, IconUsers } from '@tabler/icons-react';
 
 import { AppShell } from '@/components/layout/AppShell';
-import { TaskCreateForm } from '@/components/tasks/TaskCreateForm';
-import { TaskListToolbar, type TaskFilters } from '@/components/tasks/TaskListToolbar';
-import { TaskTable } from '@/components/tasks/TaskTable';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { TaskTopCards } from '@/components/tasks/TaskTopCards';
+import { TaskDueTodayList } from '@/components/tasks/TaskDueTodayList';
+import { TaskOverdueList } from '@/components/tasks/TaskOverdueList';
+import { TaskAllList } from '@/components/tasks/TaskAllList';
+import { TaskCancelledList } from '@/components/tasks/TaskCancelledList';
+import { TaskCreateDialog } from '@/components/tasks/TaskCreateDialog';
+import { ViewTasksOfPanel } from '@/components/tasks/ViewTasksOfPanel';
+import { TimeFilterButton } from '@/components/tasks/TimeFilterButton';
 import { useAuth } from '@/hooks/useAuth';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useSalespeople } from '@/hooks/useSalespeople';
 import { useTasks } from '@/hooks/useTasks';
+import { useSalespeople } from '@/hooks/useSalespeople';
+import {
+  filterTasksForListView,
+  getDueTodayContext,
+  resolveTimeFilterRange,
+  EMPTY_TIME_FILTER_STATE,
+  type TimeFilterState,
+} from '@/lib/tasks/task-filters';
 import { isManagerOrAbove } from '@/lib/auth/roles';
-import { filterTasksForListView } from '@/lib/tasks/task-filters';
 
-/**
- * Reads assignee filter from router query for manager task views.
- * @param query - Next.js router query object.
- */
-function assigneeFromQuery(
-  query: Record<string, string | string[] | undefined>,
-): string | undefined {
-  const assignee = query.assignee;
-  if (typeof assignee === 'string' && assignee.length > 0) {
-    return assignee;
-  }
-  return undefined;
-}
-
-/**
- * Renders task list with creation form.
- * @returns Tasks page wrapped in AppShell.
- */
 export default function TasksPage() {
-  const router = useRouter();
   const { t } = useTranslation();
   const { user } = useAuth();
   const { data: salespeople } = useSalespeople();
-  const { data: tasks, error: tasksError, isLoading, mutate } = useTasks();
-  const [actionError, setActionError] = useState('');
 
   const isManager = isManagerOrAbove(user?.role);
-  const assigneeFilter = router.isReady && isManager ? assigneeFromQuery(router.query) : undefined;
 
-  // D27: server-side filter state
-  const [taskFilters, setTaskFilters] = useState<TaskFilters>({
-    status: 'open',
-    kind: '',
-    assigneeId: assigneeFilter ?? '',
-  });
+  // ── Separate state: agent selection (managers) + time filter (all) ───
+  const [agentIds, setAgentIds] = useState<string[]>([]);
+  const [timeState, setTimeState] = useState<TimeFilterState>(EMPTY_TIME_FILTER_STATE);
+  const [viewPanelOpen, setViewPanelOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
-  const visibleTasks = useMemo(() => {
-    if (!user || !tasks) return [];
+  const isViewingOthers = agentIds.length > 0;
+  const showAssignee = agentIds.length > 1;
 
-    let list = filterTasksForListView(tasks, {
-      isManager,
-      userId: user.userId,
-      assigneeId: taskFilters.assigneeId || undefined,
-    });
+  const { dueFrom, dueTo } = useMemo(
+    () => resolveTimeFilterRange(timeState.timeFilter, timeState.customFrom, timeState.customTo),
+    [timeState],
+  );
 
-    // Client-side secondary filters (complement the server-side ones)
-    if (taskFilters.kind === 'auto') list = list.filter((t) => t.is_auto_created);
-    else if (taskFilters.kind === 'manual') list = list.filter((t) => !t.is_auto_created);
+  // ── Main task fetch ─────────────────────────────────────────────────
+  const mainFetchOpts = useMemo(
+    () => (isViewingOthers ? { assignees: agentIds, dueFrom, dueTo } : { dueFrom, dueTo }),
+    [isViewingOthers, agentIds, dueFrom, dueTo],
+  );
 
-    return list;
-  }, [tasks, user, isManager, taskFilters]);
+  const { data: tasks, error: tasksError, isLoading, mutate } = useTasks(mainFetchOpts);
 
-  const loadTasks = useCallback(async () => {
-    await mutate();
-  }, [mutate]);
+  // ── Cancelled task fetch ────────────────────────────────────────────
+  const cancelledFetchOpts = useMemo(
+    () =>
+      isViewingOthers
+        ? { assignees: agentIds, status: 'cancelled' as const }
+        : { status: 'cancelled' as const },
+    [isViewingOthers, agentIds],
+  );
+
+  const { data: cancelledTasks, mutate: mutateCancelled } = useTasks(cancelledFetchOpts);
+
+  const [actionError, setActionError] = useState('');
 
   useEffect(() => {
-    if (tasksError) {
-      setActionError(t('tasks.failedToLoad'));
-    } else {
-      setActionError('');
-    }
+    if (tasksError) setActionError(t('tasks.failedToLoad'));
+    else setActionError('');
   }, [tasksError, t]);
+
+  const reload = useCallback(async () => {
+    await Promise.all([mutate(), mutateCancelled()]);
+  }, [mutate, mutateCancelled]);
+
+  // Salesperson id -> name map for the assignee column.
+  const salespersonMap = useMemo(() => {
+    if (!salespeople) return new Map<string, string>();
+    return new Map(salespeople.map((sp) => [sp.id, sp.full_name]));
+  }, [salespeople]);
+
+  // "Viewing tasks of" badge label.
+  const viewingLabel = useMemo(() => {
+    if (!isViewingOthers || !salespeople) return null;
+    const names = agentIds
+      .map((id) => salespeople.find((sp) => sp.id === id)?.full_name ?? id)
+      .join(', ');
+    return t('tasks.viewingTasksOf').replace('{names}', names);
+  }, [isViewingOthers, agentIds, salespeople, t]);
+
+  // While auth is still resolving (slow on cold dev start), render the app
+  // shell with a loading state rather than blanking the entire page.
+  if (!user) {
+    return (
+      <AppShell title={t('tasks.title')}>
+        <div className="flex flex-col gap-5">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-[90px] w-full rounded-[10px]" />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Skeleton className="min-h-[304px] w-full rounded-2xl" />
+            <Skeleton className="min-h-[304px] w-full rounded-2xl" />
+          </div>
+          <Skeleton className="h-[400px] w-full rounded-2xl" />
+        </div>
+      </AppShell>
+    );
+  }
 
   async function completeTask(taskId: string) {
     const res = await fetch(`/api/tasks/${taskId}`, {
@@ -86,37 +118,146 @@ export default function TasksPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_completed: true }),
     });
-
-    if (res.ok) {
-      await loadTasks();
-    }
+    if (res.ok) await reload();
   }
 
-  if (!user) {
-    return null;
-  }
+  // When viewing own tasks only, filter client-side by userId.
+  const myTasks = tasks
+    ? isViewingOthers
+      ? tasks
+      : filterTasksForListView(tasks, { isManager, userId: user.userId })
+    : [];
+
+  const myCancelledTasks = cancelledTasks
+    ? isViewingOthers
+      ? cancelledTasks
+      : filterTasksForListView(cancelledTasks, { isManager, userId: user.userId })
+    : [];
+
+  // Due Today panel context (adapts title for single-day time filter).
+  const dueTodayCtx = getDueTodayContext(
+    timeState.timeFilter,
+    timeState.customFrom,
+    timeState.customTo,
+  );
+
+  // ── Header action buttons ────────────────────────────────────────────
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      <TimeFilterButton currentState={timeState} onApply={setTimeState} />
+      {isManager && (
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => setViewPanelOpen(true)}
+          className="gap-1.5"
+        >
+          <IconUsers size={14} />
+          {t('tasks.viewTasksOf')}
+          {isViewingOthers && (
+            <span className="ml-1 rounded-full bg-brand-blue px-1.5 py-0.5 text-[10px] font-bold text-white">
+              {agentIds.length}
+            </span>
+          )}
+        </Button>
+      )}
+      <Button type="button" size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
+        <IconPlus size={14} />
+        {t('tasks.newTask')}
+      </Button>
+    </div>
+  );
 
   return (
-    <AppShell title={t('tasks.title')}>
-      {actionError && <p className="mb-4 text-sm text-brand-red">{actionError}</p>}
+    <AppShell title={t('tasks.title')} actions={headerActions}>
+      <div className="flex flex-col gap-5">
+        {actionError && <p className="text-sm text-brand-red">{actionError}</p>}
 
-      {/* D27: server-side filter toolbar visible for all users */}
-      <TaskListToolbar
-        filters={taskFilters}
-        isManager={isManager}
-        salespeople={salespeople}
-        onChange={setTaskFilters}
-      />
+        {/* "Viewing tasks of" context banner */}
+        {viewingLabel && (
+          <div className="flex items-center justify-between rounded-[10px] border border-brand-blue/30 bg-blue-50 px-4 py-2.5">
+            <p className="text-sm font-medium text-brand-blue">{viewingLabel}</p>
+            <button
+              type="button"
+              className="text-xs text-brand-blue hover:underline"
+              onClick={() => setAgentIds([])}
+            >
+              {t('tasks.clearViewFilter')}
+            </button>
+          </div>
+        )}
 
-      <TaskCreateForm onCreated={loadTasks} />
+        {/* KPI top cards */}
+        {isLoading ? (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-[90px] w-full rounded-[10px]" />
+            ))}
+          </div>
+        ) : (
+          <TaskTopCards tasks={myTasks} />
+        )}
 
-      {isLoading ? (
-        <div className="space-y-2">
-          <Skeleton className="h-[58px] w-full" />
-          <Skeleton className="h-[58px] w-full" />
-        </div>
-      ) : (
-        <TaskTable tasks={visibleTasks} onComplete={completeTask} onNotesUpdated={loadTasks} />
+        {/* Two-column lists: Due Today + Overdue */}
+        {isLoading ? (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Skeleton className="min-h-[304px] w-full rounded-2xl" />
+            <Skeleton className="min-h-[304px] w-full rounded-2xl" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <TaskDueTodayList
+              tasks={myTasks}
+              isManager={isManager}
+              showAssignee={showAssignee}
+              salespersonMap={salespersonMap}
+              singleDayOverride={dueTodayCtx.isSingleDay ? dueTodayCtx.date : undefined}
+              onComplete={completeTask}
+              onRefresh={reload}
+            />
+            <TaskOverdueList
+              tasks={myTasks}
+              isManager={isManager}
+              showAssignee={showAssignee}
+              salespersonMap={salespersonMap}
+              onComplete={completeTask}
+              onRefresh={reload}
+            />
+          </div>
+        )}
+
+        {/* Full-width all-tasks list */}
+        {isLoading ? (
+          <Skeleton className="h-[400px] w-full rounded-2xl" />
+        ) : (
+          <TaskAllList
+            tasks={myTasks}
+            isManager={isManager}
+            showAssignee={showAssignee}
+            salespersonMap={salespersonMap}
+            onComplete={completeTask}
+            onRefresh={reload}
+          />
+        )}
+
+        {/* Cancelled tasks list */}
+        <TaskCancelledList
+          tasks={myCancelledTasks}
+          showAssignee={showAssignee}
+          salespersonMap={salespersonMap}
+        />
+      </div>
+
+      {/* Dialogs */}
+      <TaskCreateDialog open={createOpen} onClose={() => setCreateOpen(false)} onCreated={reload} />
+      {isManager && (
+        <ViewTasksOfPanel
+          open={viewPanelOpen}
+          onClose={() => setViewPanelOpen(false)}
+          currentAgentIds={agentIds}
+          onApply={setAgentIds}
+        />
       )}
     </AppShell>
   );

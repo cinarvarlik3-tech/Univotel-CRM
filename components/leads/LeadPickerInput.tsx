@@ -51,6 +51,8 @@ export function LeadPickerInput({
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Monotonic request id — only the latest in-flight search may update state.
+  const reqIdRef = useRef(0);
 
   // If label changes externally (pre-fill), sync the display
   useEffect(() => {
@@ -60,16 +62,25 @@ export function LeadPickerInput({
   const search = useCallback(async (q: string) => {
     if (q.trim().length < 2) {
       setResults([]);
+      setLoading(false);
       return;
     }
+    const reqId = ++reqIdRef.current;
     setLoading(true);
-    const supabase = createBrowserSupabase();
-    const { data, error } = await supabase.rpc('search_leads_global', {
-      q: q.trim(),
-      result_limit: 8,
-    });
-    setLoading(false);
-    if (!error) setResults((data as SearchResult[]) ?? []);
+    try {
+      const supabase = createBrowserSupabase();
+      const { data, error } = await supabase.rpc('search_leads_global', {
+        q: q.trim(),
+        result_limit: 8,
+      });
+      // Drop the response if a newer search has started since.
+      if (reqId !== reqIdRef.current) return;
+      if (!error) setResults((data as SearchResult[]) ?? []);
+    } catch {
+      // Network/abort error — leave results as-is; finally clears the spinner.
+    } finally {
+      if (reqId === reqIdRef.current) setLoading(false);
+    }
   }, []);
 
   useEffect(() => {

@@ -1,9 +1,8 @@
 /**
  * Genel Performans tab — all-time or range-filtered personal stats.
- * Range selector: Bu hafta | Bu ay | Tüm zamanlar | Özel aralık (date picker).
+ * Range is controlled by the page header (GenelRangeSelector); this tab just renders data.
  * Reuses PerformancePayload from the shared getPerformancePayload() function.
  */
-import { useState } from 'react';
 import Link from 'next/link';
 import {
   IconUsers,
@@ -15,10 +14,10 @@ import {
   IconArrowUpRight,
   IconArrowDownRight,
   IconPhoneCall,
-  IconCalendar,
 } from '@tabler/icons-react';
 import { cn } from '@/lib/utils';
 import { useGenelPerformance, type GenelRange } from '@/hooks/useGenelPerformance';
+import type { GenelPreset } from '@/components/my-day/GenelRangeSelector';
 import { Skeleton } from '@/components/ui/skeleton';
 
 // ── Loss reason labels ──────────────────────────────────────────────────────
@@ -117,24 +116,20 @@ function SectionCard({
   );
 }
 
-// ── Preset button labels ──────────────────────────────────────────────────────
-
-const PRESETS = [
-  { value: 'this_week' as const, label: 'Bu hafta' },
-  { value: 'this_month' as const, label: 'Bu ay' },
-  { value: 'all_time' as const, label: 'Tüm zamanlar' },
-];
-
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function GenelPerformansTab() {
-  const [preset, setPreset] = useState<'this_week' | 'this_month' | 'all_time' | 'custom'>(
-    'all_time',
-  );
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
+interface GenelPerformansTabProps {
+  preset: GenelPreset;
+  customFrom: string;
+  customTo: string;
+}
 
+export function GenelPerformansTab({ preset, customFrom, customTo }: GenelPerformansTabProps) {
   const range: GenelRange = preset === 'custom' ? { from: customFrom, to: customTo } : preset;
+
+  // Custom range selected but dates not fully entered → no fetch; show a prompt instead of
+  // (with keepPreviousData) the previous range's stale numbers.
+  const customIncomplete = preset === 'custom' && (!customFrom || !customTo);
 
   const { data, isLoading, error } = useGenelPerformance(range);
 
@@ -146,63 +141,16 @@ export function GenelPerformansTab() {
 
   const kpi = data?.kpi;
 
-  const leadlerimLabel = preset === 'all_time' ? 'Toplam leadlerim' : 'Leadlerim';
+  const leadlerimLabel =
+    preset === 'today'
+      ? 'Bugün aldığım leadler'
+      : preset === 'all_time'
+        ? 'Toplam leadlerim'
+        : 'Leadlerim';
 
   return (
     <div className="space-y-5">
-      {/* Range selector */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex rounded-lg border border-border-default text-xs overflow-hidden">
-          {PRESETS.map((p) => (
-            <button
-              key={p.value}
-              type="button"
-              onClick={() => setPreset(p.value)}
-              className={cn(
-                'px-4 py-1.5 transition-colors',
-                preset === p.value
-                  ? 'bg-brand-blue text-white'
-                  : 'text-text-secondary hover:bg-row-hover',
-              )}
-            >
-              {p.label}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setPreset('custom')}
-            className={cn(
-              'flex items-center gap-1.5 px-4 py-1.5 transition-colors',
-              preset === 'custom'
-                ? 'bg-brand-blue text-white'
-                : 'text-text-secondary hover:bg-row-hover',
-            )}
-          >
-            <IconCalendar className="h-3.5 w-3.5" />
-            Özel
-          </button>
-        </div>
-
-        {preset === 'custom' && (
-          <div className="flex items-center gap-2 text-xs">
-            <input
-              type="date"
-              value={customFrom}
-              onChange={(e) => setCustomFrom(e.target.value)}
-              className="rounded-lg border border-border-default bg-surface-card px-2.5 py-1.5 text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-blue"
-            />
-            <span className="text-text-tertiary">—</span>
-            <input
-              type="date"
-              value={customTo}
-              onChange={(e) => setCustomTo(e.target.value)}
-              className="rounded-lg border border-border-default bg-surface-card px-2.5 py-1.5 text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-blue"
-            />
-          </div>
-        )}
-      </div>
-
-      {isLoading && (
+      {isLoading && !customIncomplete && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -230,11 +178,11 @@ export function GenelPerformansTab() {
       )}
 
       {/* Show prompt when custom mode but dates not yet filled */}
-      {!isLoading && !error && !data && preset === 'custom' && (
+      {customIncomplete && (
         <p className="text-sm text-text-tertiary">Başlangıç ve bitiş tarihlerini seçin.</p>
       )}
 
-      {data && (
+      {data && !customIncomplete && (
         <>
           {/* KPI tile row */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
