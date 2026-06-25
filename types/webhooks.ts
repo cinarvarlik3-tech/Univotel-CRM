@@ -31,6 +31,29 @@ const ChatwootMetaSchema = z
   })
   .optional();
 
+/**
+ * A single Chatwoot message object. Chatwoot delivers this in several places:
+ * message_created flattens it onto the top level AND repeats it under
+ * conversation.messages[]; conversation_created carries it in a top-level
+ * `messages` array. (There is no nested `message` object on real payloads.)
+ */
+const ChatwootMessageDetailSchema = z.object({
+  id: z.number().optional(),
+  content: z.string().nullable().optional(),
+  /** Unix timestamp (seconds). */
+  created_at: z.number().optional(),
+  /** 0 = incoming, 1 = outgoing. */
+  message_type: z.number().optional(),
+  private: z.boolean().optional(),
+  sender: z
+    .object({
+      id: z.number().optional(),
+      name: z.string().nullable().optional(),
+      type: z.string().nullable().optional(),
+    })
+    .optional(),
+});
+
 const ChatwootConversationSchema = z
   .object({
     id: z.number().optional(),
@@ -39,6 +62,8 @@ const ChatwootConversationSchema = z
         assignee: ChatwootAssigneeSchema,
       })
       .optional(),
+    /** message_created repeats the full message detail here. */
+    messages: z.array(ChatwootMessageDetailSchema).optional(),
   })
   .optional();
 
@@ -49,25 +74,17 @@ const ChatwootInboundMessageSchema = z.object({
   meta: ChatwootMetaSchema,
   contact: ChatwootPhoneHolderSchema.nullable().optional(),
   sender: ChatwootPhoneHolderSchema.nullable().optional(),
+  /** message_created flattens the message onto the top level as an "incoming"/"outgoing" string. */
   message_type: z.string().nullable().optional(),
-  message: z
-    .object({
-      id: z.number().optional(),
-      content: z.string().nullable().optional(),
-      /** Unix timestamp (seconds). */
-      created_at: z.number().optional(),
-      message_type: z.number().optional(),
-      private: z.boolean().optional(),
-      sender: z
-        .object({
-          id: z.number().optional(),
-          name: z.string().nullable().optional(),
-          type: z.string().nullable().optional(),
-        })
-        .optional(),
-    })
-    .optional(),
-  messages: z.array(z.object({ id: z.number().optional() })).optional(),
+  /** Flattened (top-level) message fields present on message_created payloads. */
+  content: z.string().nullable().optional(),
+  /** Top-level created_at is an ISO string; nested/detail created_at is unix seconds. */
+  created_at: z.union([z.number(), z.string()]).nullable().optional(),
+  private: z.boolean().optional(),
+  /** Legacy/assumed nested shape — Chatwoot does not actually send this, kept for safety. */
+  message: ChatwootMessageDetailSchema.optional(),
+  /** conversation_created carries the message(s) in a top-level array. */
+  messages: z.array(ChatwootMessageDetailSchema).optional(),
   conversation: ChatwootConversationSchema,
   additional_attributes: z.record(z.unknown()).optional(),
   inbox_id: z.number().optional(),

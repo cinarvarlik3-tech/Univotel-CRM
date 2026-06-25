@@ -222,7 +222,7 @@ export async function processChatwoot(body: unknown): Promise<WebhookOutcome> {
       const loose = ChatwootConversationCreatedSchema.safeParse(body);
       if (loose.success) {
         await handleLeadCreate(loose.data);
-        if (loose.data.message?.id) {
+        if (loose.data.message?.id ?? loose.data.messages?.[0]?.id) {
           await withRetry(
             () => handleMessageCreated(loose.data as unknown as ChatwootMessageCreated),
             'message sync',
@@ -267,7 +267,7 @@ export async function processChatwoot(body: unknown): Promise<WebhookOutcome> {
     await handleLeadCreate(payload);
     // Write the first message immediately after the conversation link is persisted.
     // Without this, message_created may arrive before the link exists and silently skip.
-    if (payload.message?.id) {
+    if (payload.message?.id ?? payload.messages?.[0]?.id) {
       await withRetry(
         () => handleMessageCreated(payload as unknown as ChatwootMessageCreated),
         'message sync',
@@ -408,16 +408,13 @@ function extractChatwootLeadName(payload: ChatwootPhonePayload): string | null {
  * @returns Message id or fallback string.
  */
 function resolveChatwootMessageId(payload: InboundChatwootPayload): number | string {
-  if (payload.message?.id != null) {
-    return payload.message.id;
-  }
-
-  const withMessages = payload as InboundChatwootPayload & {
-    messages?: { id?: number }[];
-  };
-
-  const firstId = withMessages.messages?.[0]?.id;
-  return firstId ?? 'unknown';
+  return (
+    payload.message?.id ??
+    payload.messages?.[0]?.id ??
+    payload.conversation?.messages?.[0]?.id ??
+    (payload.event === 'message_created' ? payload.id : undefined) ??
+    'unknown'
+  );
 }
 
 function inboundPayloadFromConversationUpdated(
@@ -1320,10 +1317,22 @@ const CONVERSATION_GAP_HOURS = 2;
  */
 async function handleMessageCreated(payload: ChatwootMessageCreated): Promise<WebhookOutcome> {
   const conversationId = payload.conversation?.id ?? payload.id;
-  const messageId = payload.message?.id;
+
+  // Chatwoot does not send a nested `message` object. message_created flattens the
+  // message onto the top level (payload.id, payload.content, payload.sender,
+  // payload.message_type as an "incoming"/"outgoing" string) and repeats the full
+  // detail — with the integer message_type and unix created_at — under
+  // conversation.messages[]. conversation_created instead carries the detail in a
+  // top-level `messages` array. Read whichever is present.
+  const detail =
+    payload.message ?? payload.conversation?.messages?.[0] ?? payload.messages?.[0] ?? null;
+
+  // The detail object carries the message id; on a flattened message_created payload the
+  // top-level id IS the message id (for conversation_created it is the conversation id).
+  const messageId = detail?.id ?? (payload.event === 'message_created' ? payload.id : undefined);
 
   if (!messageId) {
-    console.warn(`[chatwoot] message_created without message.id conversation=${conversationId}`);
+    console.warn(`[chatwoot] message_created without message id conversation=${conversationId}`);
     return dropped('missing_message_id', `conversation=${conversationId}`);
   }
 
@@ -1335,22 +1344,38 @@ async function handleMessageCreated(payload: ChatwootMessageCreated): Promise<We
     return dropped('no_linked_lead', `conversation=${conversationId} message=${messageId}`);
   }
 
-  const content = payload.message?.content ?? null;
-  const rawCreatedAt = payload.message?.created_at;
-  const messageTimestamp = rawCreatedAt
-    ? new Date(rawCreatedAt * 1000).toISOString()
-    : new Date().toISOString();
+  const content = detail?.content ?? payload.content ?? null;
 
-  const senderType = payload.message?.sender?.type ?? null;
-  const senderName = payload.message?.sender?.name ?? null;
-  const senderId = payload.message?.sender?.id ?? null;
-  const isPrivate = payload.message?.private ?? false;
-  const messageType = payload.message_type ?? 'incoming';
+  // Detail created_at is unix seconds; the flattened top-level created_at is an ISO string.
+  const detailCreatedAt = detail?.created_at;
+  const messageTimestamp =
+    typeof detailCreatedAt === 'number'
+      ? new Date(detailCreatedAt * 1000).toISOString()
+      : typeof payload.created_at === 'number'
+        ? new Date(payload.created_at * 1000).toISOString()
+        : typeof payload.created_at === 'string'
+          ? new Date(payload.created_at).toISOString()
+          : new Date().toISOString();
 
-  // Map Chatwoot message_type integer to direction: 0=incoming, 1=outgoing.
-  const rawMessageTypeNum = payload.message?.message_type;
-  const direction: 'incoming' | 'outgoing' | null =
+  const sender = detail?.sender ?? payload.sender ?? null;
+  const senderType = sender?.type ?? null;
+  const senderName = sender?.name ?? null;
+  const senderId = sender?.id ?? null;
+  const isPrivate = detail?.private ?? payload.private ?? false;
+
+  // Direction: prefer the integer message_type on the detail (0=incoming, 1=outgoing),
+  // falling back to the flattened top-level "incoming"/"outgoing" string.
+  const rawMessageTypeNum = detail?.message_type;
+  let direction: 'incoming' | 'outgoing' | null =
     rawMessageTypeNum === 0 ? 'incoming' : rawMessageTypeNum === 1 ? 'outgoing' : null;
+  if (
+    direction === null &&
+    (payload.message_type === 'incoming' || payload.message_type === 'outgoing')
+  ) {
+    direction = payload.message_type;
+  }
+
+  const messageType = payload.message_type ?? direction ?? 'incoming';
 
   // Capture the Chatwoot agent id only for human-agent-sent messages (senderType === 'user').
   // Campaign/bot sends have a different sender type and must NOT count toward personal metrics.

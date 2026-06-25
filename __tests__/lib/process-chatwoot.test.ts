@@ -20,6 +20,10 @@ vi.mock('@/lib/telegram', () => ({
   sendTelegramToManagers: (...args: unknown[]) => sendTelegramToManagers(...args),
 }));
 
+vi.mock('@/lib/tasks/auto-tasks', () => ({
+  completeContactTasks: vi.fn().mockResolvedValue(undefined),
+}));
+
 const { mockCreateServiceClient, mockMaybeSingle } = vi.hoisted(() => {
   const mockMaybeSingle = vi.fn();
   const mockCreateServiceClient = vi.fn();
@@ -102,6 +106,7 @@ function leadSyncMock(
         eq: () => chain,
         like: () => chain,
         limit: () => chain,
+        order: () => chain,
         maybeSingle: () => Promise.resolve(result),
       };
       return {
@@ -427,6 +432,78 @@ describe('processChatwoot', () => {
     expect(upsert?.payload).toMatchObject({
       lead_uuid: 'lead-uuid-1',
       student_gender: 'female',
+    });
+  });
+
+  it('writes an outgoing lead_messages row from a flattened message_created payload', async () => {
+    // Real Chatwoot shape: the message is flattened onto the top level (id, sender,
+    // message_type string, content, ISO created_at) and repeated under
+    // conversation.messages[] with the integer message_type + unix created_at.
+    // There is NO nested `message` object.
+    const captures: DbCapture[] = [];
+    mockCreateServiceClient.mockImplementation(leadSyncMock(leadRow(), null, captures));
+
+    await processChatwoot({
+      event: 'message_created',
+      id: 4017,
+      sender: { id: 2, name: 'Çınar Varlık', type: 'user' },
+      content: 'İncelemeye vaktiniz oldu mu efendim?',
+      message_type: 'outgoing',
+      created_at: '2026-06-25T09:27:49.012Z',
+      conversation: {
+        id: 547,
+        messages: [
+          {
+            id: 4017,
+            message_type: 1,
+            created_at: 1782379669,
+            private: false,
+            content: 'İncelemeye vaktiniz oldu mu efendim?',
+            sender: { id: 2, name: 'Çınar Varlık', type: 'user' },
+          },
+        ],
+      },
+    });
+
+    const upsert = captures.find((c) => c.op === 'upsert' && c.table === 'lead_messages');
+    expect(upsert?.payload).toMatchObject({
+      chatwoot_message_id: 4017,
+      chatwoot_conversation_id: 547,
+      direction: 'outgoing',
+      sender_agent_id: '2',
+      sender_type: 'user',
+      content: 'İncelemeye vaktiniz oldu mu efendim?',
+    });
+  });
+
+  it('writes an incoming lead_messages row from a conversation_created top-level messages[]', async () => {
+    // conversation_created carries the message in a top-level `messages` array.
+    const captures: DbCapture[] = [];
+    mockCreateServiceClient.mockImplementation(leadSyncMock(leadRow(), null, captures));
+
+    await processChatwoot({
+      event: 'conversation_created',
+      id: 556,
+      channel: 'Channel::Whatsapp',
+      meta: { sender: { id: 548, name: 'Fatih', type: 'contact', phone_number: '+905315895918' } },
+      messages: [
+        {
+          id: 4005,
+          message_type: 0,
+          created_at: 1782362673,
+          private: false,
+          content: 'Merhabalar Univotel!',
+          sender: { id: 548, name: 'Fatih', type: 'contact' },
+        },
+      ],
+    });
+
+    const upsert = captures.find((c) => c.op === 'upsert' && c.table === 'lead_messages');
+    expect(upsert?.payload).toMatchObject({
+      chatwoot_message_id: 4005,
+      direction: 'incoming',
+      sender_agent_id: null,
+      sender_type: 'contact',
     });
   });
 
