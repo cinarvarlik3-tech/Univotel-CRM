@@ -136,6 +136,9 @@ export function LeadTable({
                   {lead.deal_awaiting && (
                     <div className="text-xs font-semibold text-orange-600">Anlaşma bekliyor</div>
                   )}
+                  {lead.is_chatwoot_resolved && (
+                    <div className="text-xs text-text-tertiary">Konuşma çözüldü</div>
+                  )}
                   <div className="text-xs text-text-secondary">
                     {displayLeadContactIdentifier(lead)}
                   </div>

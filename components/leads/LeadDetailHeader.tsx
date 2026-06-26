@@ -149,7 +149,7 @@ export function LeadDetailHeader({
       </div>
 
       {/* Row 2: dwell pills (D13) */}
-      {(lastContactLabel || daysInStageLabel) && (
+      {(lastContactLabel || daysInStageLabel || lead.is_chatwoot_resolved) && (
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           {lastContactLabel && (
             <span className="inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-text-tertiary">
@@ -161,6 +161,12 @@ export function LeadDetailHeader({
             <span className="inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-text-tertiary">
               <IconCircleCheckFilled className="size-3" />
               {daysInStageLabel}
+            </span>
+          )}
+          {lead.is_chatwoot_resolved && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] text-green-700 dark:bg-green-900/30 dark:text-green-400">
+              <IconCircleCheckFilled className="size-3" />
+              Konuşma çözüldü
             </span>
           )}
         </div>

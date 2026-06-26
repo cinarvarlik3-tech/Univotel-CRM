@@ -43,6 +43,8 @@ export interface LeadRow {
   archived_at?: string | null;
   /** Chatwoot conversation ID — null for phone-only leads. */
   chatwoot_conversation_id?: number | null;
+  /** True when the Chatwoot conversation is marked resolved. SLA alerts suppressed until next inbound. */
+  is_chatwoot_resolved?: boolean;
 }
 
 /** Hotel recommendation contender from Make.com workflow. */
