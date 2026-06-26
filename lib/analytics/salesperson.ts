@@ -177,7 +177,6 @@ interface FinanceRow {
 interface TaskRow {
   id: string;
   is_completed: boolean;
-  is_late: boolean;
   completed_at: string | null;
   due_when: string;
 }
@@ -361,7 +360,7 @@ export async function getSalespersonPayload(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (client as any)
         .from('tasks')
-        .select('id, is_completed, is_late, completed_at, due_when')
+        .select('id, is_completed, completed_at, due_when')
         .eq('assigned_to', repId)
         .eq('is_cancelled', false)
         .gte('due_when', fromIso)
@@ -821,9 +820,13 @@ export async function getSalespersonPayload(
 
   // ── §5 SPEED ──────────────────────────────────────────────────────────────
 
-  // Lateness: tasks due in window that are late (is_late = true) or still open past due_when
+  // Lateness: tasks that were not completed on time, or are still open past due_when
   const lateOrOverdueTasks = repTasks.filter(
-    (t) => t.is_late || (!t.is_completed && new Date(t.due_when).getTime() < now.getTime()),
+    (t) =>
+      (!t.is_completed && new Date(t.due_when).getTime() < now.getTime()) ||
+      (t.is_completed &&
+        t.completed_at != null &&
+        new Date(t.completed_at).getTime() > new Date(t.due_when).getTime()),
   );
   const latenessRate =
     repTasks.length > 0

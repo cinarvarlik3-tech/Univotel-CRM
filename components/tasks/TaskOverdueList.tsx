@@ -47,7 +47,11 @@ export function TaskOverdueList({
 
   const now = new Date();
   const overdueTasks = tasks.filter(
-    (task) => isTaskOverdue(task, now) || (task.is_completed && task.is_late),
+    (task) =>
+      isTaskOverdue(task, now) ||
+      (task.is_completed &&
+        task.completed_at != null &&
+        new Date(task.completed_at) > new Date(task.due_when)),
   );
   const filtered = applyTaskListFilters(overdueTasks, filters, now);
 

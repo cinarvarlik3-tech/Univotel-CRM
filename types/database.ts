@@ -1539,6 +1539,57 @@ export type Database = {
         };
         Relationships: [];
       };
+      pending_notifications: {
+        Row: {
+          conversation_id: number | null;
+          created_at: string;
+          flushed_at: string | null;
+          id: string;
+          is_unclaimed: boolean;
+          lead_id: string;
+          lead_name: string;
+          message_snippet: string;
+          recipient_chat_ids: string[];
+        };
+        Insert: {
+          conversation_id?: number | null;
+          created_at?: string;
+          flushed_at?: string | null;
+          id?: string;
+          is_unclaimed?: boolean;
+          lead_id: string;
+          lead_name: string;
+          message_snippet: string;
+          recipient_chat_ids: string[];
+        };
+        Update: {
+          conversation_id?: number | null;
+          created_at?: string;
+          flushed_at?: string | null;
+          id?: string;
+          is_unclaimed?: boolean;
+          lead_id?: string;
+          lead_name?: string;
+          message_snippet?: string;
+          recipient_chat_ids?: string[];
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'pending_notifications_lead_id_fkey';
+            columns: ['lead_id'];
+            isOneToOne: false;
+            referencedRelation: 'active_leads';
+            referencedColumns: ['uuid'];
+          },
+          {
+            foreignKeyName: 'pending_notifications_lead_id_fkey';
+            columns: ['lead_id'];
+            isOneToOne: false;
+            referencedRelation: 'leads';
+            referencedColumns: ['uuid'];
+          },
+        ];
+      };
       properties: {
         Row: {
           accepts_non_students: boolean;
@@ -2002,6 +2053,7 @@ export type Database = {
         Row: {
           assigned_to: string;
           auto_task_type: string | null;
+          cancel_reason: string | null;
           completed_at: string | null;
           created_at: string;
           created_by: string;
@@ -2018,6 +2070,7 @@ export type Database = {
         Insert: {
           assigned_to: string;
           auto_task_type?: string | null;
+          cancel_reason?: string | null;
           completed_at?: string | null;
           created_at?: string;
           created_by?: string;
@@ -2034,6 +2087,7 @@ export type Database = {
         Update: {
           assigned_to?: string;
           auto_task_type?: string | null;
+          cancel_reason?: string | null;
           completed_at?: string | null;
           created_at?: string;
           created_by?: string;
@@ -2577,6 +2631,15 @@ export type Database = {
         Args: { p_move_in_month: string; p_room_type_id: string };
         Returns: number;
       };
+      fms_property_roomtype_breakdown: {
+        Args: { p_include_kapora?: boolean; p_property_id: string };
+        Returns: {
+          customer_count: number;
+          room_type_id: string;
+          room_type_name: string;
+          room_type_revenue: number;
+        }[];
+      };
       fms_record_finance_change: {
         Args: {
           p_actor_id: string;
@@ -2597,15 +2660,6 @@ export type Database = {
           property_id: string;
           property_name: string;
           property_revenue: number;
-        }[];
-      };
-      fms_property_roomtype_breakdown: {
-        Args: { p_property_id: string; p_include_kapora?: boolean };
-        Returns: {
-          room_type_id: string;
-          room_type_name: string;
-          customer_count: number;
-          room_type_revenue: number;
         }[];
       };
       fn_finance_actor: { Args: never; Returns: string };

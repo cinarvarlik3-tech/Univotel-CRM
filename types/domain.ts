@@ -175,7 +175,6 @@ export interface TaskRow {
   due_when: string;
   is_completed: boolean;
   is_cancelled: boolean;
-  is_late: boolean;
   notes: string | null;
   created_at: string;
   completed_at: string | null;
@@ -214,7 +213,11 @@ export type NotificationAlertType =
   | 'nurture_task_due'
   | 'visit_reminder'
   | 'visit_resolution_pending'
-  | 'move_in_reminder';
+  | 'move_in_reminder'
+  | 'move_in_tomorrow'
+  | 'move_in_today'
+  | 'visit_scheduled'
+  | 'deal_signed';
 
 /** Notification row for manager alert inbox. */
 export interface NotificationRow {

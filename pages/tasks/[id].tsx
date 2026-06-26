@@ -62,7 +62,15 @@ export default function TaskDetailPage() {
         items={[
           { term: t('tasks.due'), value: formatDateTime(task.due_when, locale) },
           { term: t('tasks.completed'), value: formatYesNo(task.is_completed, locale) },
-          { term: t('tasks.late'), value: formatYesNo(task.is_late, locale) },
+          {
+            term: t('tasks.late'),
+            value: formatYesNo(
+              task.is_completed
+                ? task.completed_at != null && new Date(task.completed_at) > new Date(task.due_when)
+                : new Date(task.due_when) < new Date(),
+              locale,
+            ),
+          },
           { term: t('tasks.notes'), value: task.notes ?? emDash },
           {
             term: t('tasks.lead'),

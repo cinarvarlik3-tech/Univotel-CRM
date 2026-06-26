@@ -8,7 +8,7 @@
  * dashboard. This replaces the old "no throw ⇒ success" behaviour that hid every
  * silent skip and swallowed write.
  */
-import { sendTelegramAlert } from '@/lib/telegram';
+import { notify } from '@/lib/notifications/notify';
 import {
   claimWebhookLog,
   finalizeWebhookLog,
@@ -78,18 +78,28 @@ export async function runWithWebhookLog(params: {
     await finalizeWebhookLog(logId, outcome.status, outcome.detail, outcome.reasonCode);
 
     if (ALERT_STATUSES.has(outcome.status)) {
-      await sendTelegramAlert(
-        `[CRM] Webhook ${outcome.status} (${params.source} / ${params.eventType})\n` +
-          `Reason: ${outcome.reasonCode}\nLog: ${logId}` +
-          (outcome.detail ? `\nDetail: ${outcome.detail}` : ''),
-      );
+      void notify({
+        kind: 'webhook_failure',
+        suppressible: false,
+        source: params.source,
+        status: outcome.status as 'rejected' | 'failed' | 'partial',
+        reasonCode: outcome.reasonCode ?? null,
+        errorMessage: outcome.detail ?? `${params.source}/${params.eventType}`,
+        webhookLogId: logId,
+      });
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await finalizeWebhookLog(logId, 'failed', message, 'unhandled_error');
-    await sendTelegramAlert(
-      `[CRM] Webhook failed (${params.source} / ${params.eventType})\nLog: ${logId}\nError: ${message}`,
-    );
+    void notify({
+      kind: 'webhook_failure',
+      suppressible: false,
+      source: params.source,
+      status: 'failed',
+      reasonCode: 'unhandled_error',
+      errorMessage: message,
+      webhookLogId: logId,
+    });
     throw err;
   }
 }

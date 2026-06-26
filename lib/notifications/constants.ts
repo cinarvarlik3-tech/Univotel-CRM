@@ -22,4 +22,11 @@ export const NOTIFICATION_THROTTLE_MINUTES: Record<NotificationAlertType, number
   visit_resolution_pending: 60,
   // One move-in reminder per lead per day.
   move_in_reminder: 1440,
+  // Dedup window for visit_scheduled: 60 min covers retry/double-fire scenarios.
+  visit_scheduled: 60,
+  // One deal_signed notification per lead (24h dedup).
+  deal_signed: 1440,
+  // Move-in reminders: tomorrow and today fire separately; 24h dedup per lead per kind.
+  move_in_tomorrow: 1440,
+  move_in_today: 1440,
 };

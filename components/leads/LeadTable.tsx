@@ -107,7 +107,11 @@ export function LeadTable({
               <TableRow
                 key={lead.uuid}
                 data-state={selected ? 'selected' : undefined}
-                className={cn(onRowClick && 'cursor-pointer', isPinned && 'bg-brand-blue/5')}
+                className={cn(
+                  onRowClick && 'cursor-pointer',
+                  isPinned && 'bg-brand-blue/5',
+                  !isPinned && lead.sla_status === 'breached' && 'bg-red-500/5',
+                )}
                 onClick={() => onRowClick?.(lead.uuid)}
               >
                 <TableCell>

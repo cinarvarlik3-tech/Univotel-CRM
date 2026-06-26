@@ -102,7 +102,13 @@ export function TaskTable({ tasks, onComplete, onNotesUpdated }: TaskTableProps)
                 {formatDateTime(task.due_when, locale)}
               </TableCell>
               <TableCell className="text-text-secondary">
-                {formatYesNo(task.is_late, locale)}
+                {formatYesNo(
+                  task.is_completed
+                    ? task.completed_at != null &&
+                        new Date(task.completed_at) > new Date(task.due_when)
+                    : new Date(task.due_when) < new Date(),
+                  locale,
+                )}
               </TableCell>
               <TableCell>
                 {editingId === task.id ? (

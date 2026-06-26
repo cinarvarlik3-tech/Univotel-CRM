@@ -1,221 +1,130 @@
 /**
- * Lead-message notify cron runner.
+ * Lead-message notify cron runner — flush path.
  *
- * Drains unnotified inbound Chatwoot messages and sends per-salesperson Telegram
- * pings — off the webhook hot path so an inbound surge never blocks message ingest.
- * Suppresses pings when the rep is active in Chatwoot or outside their shift, and
- * applies a per-lead cooldown. All gating decisions are made here, at delivery time.
+ * Drains unflushed rows from pending_notifications (written by the webhook
+ * enqueue path) into per-recipient Telegram digests.  Runs every 60 s so
+ * messages sent close together coalesce into one ping.
+ *
+ * Shift-window suppression is applied per recipient at flush time.
+ * Suppressed rows are marked flushed (dropped) — a 60-second-late message
+ * is fine; a 6-hour-late "you had messages" is noise.
  */
-import { loadLeadMessageNotifyConfig } from '@/lib/jobs/lead-message-config';
-import {
-  planLeadMessageNotifications,
-  type PendingLeadMessage,
-  type PlanLead,
-  type PlanSalesperson,
-} from '@/lib/notifications/lead-message-plan';
-import { insertNotificationRow } from '@/lib/notifications/record-alert';
 import { createServiceClient } from '@/lib/supabase/service';
-import { sendTelegramToSalesperson } from '@/lib/telegram';
+import { isWithinShift } from '@/lib/notifications/shift';
+import { renderNewMessageDigest } from '@/lib/notifications/render';
+import { dispatch } from '@/lib/notifications/dispatch';
 
-/** How far back the scan looks for pending messages (bounds query size). */
-const SCAN_LOOKBACK_MINUTES = 60;
-/** Hard cap on messages pulled per tick. */
-const SCAN_LIMIT = 500;
-/** Above this many eligible leads for one rep, collapse into a single digest. */
-const MAX_LEADS_PER_TICK = 8;
-
-/** Aggregate outcome of a single cron run. */
+/** Shape returned by the cron endpoint. */
 export interface LeadMessageNotifyStats {
   pending: number;
-  sent: number;
-  suppressedActive: number;
+  flushed: number;
+  recipients: number;
   suppressedShift: number;
-  dropped: number;
-  cooldownSkipped: number;
+}
+
+/** A single row from pending_notifications. */
+interface PendingRow {
+  id: string;
+  lead_id: string;
+  lead_name: string;
+  conversation_id: number | null;
+  message_snippet: string;
+  is_unclaimed: boolean;
+  recipient_chat_ids: string[];
+}
+
+/** Salesperson fields needed for shift-window check. */
+interface ShiftInfo {
+  telegram_chat_id: string;
+  shift_start: string | null;
+  shift_end: string | null;
 }
 
 /**
- * Runs one notify tick: scan -> resolve -> plan -> deliver -> record.
- * @param now - Evaluation instant; defaults to current time (injectable for tests).
+ * Runs one flush tick: read → fan-out → shift-gate → digest → send → mark flushed.
  */
 export async function runLeadMessageNotifications(
   now: Date = new Date(),
 ): Promise<LeadMessageNotifyStats> {
-  const empty: LeadMessageNotifyStats = {
-    pending: 0,
-    sent: 0,
-    suppressedActive: 0,
-    suppressedShift: 0,
-    dropped: 0,
-    cooldownSkipped: 0,
-  };
-
-  const config = await loadLeadMessageNotifyConfig();
-  if (!config.enabled) return empty;
-
   const client = createServiceClient();
-  const lookbackIso = new Date(now.getTime() - SCAN_LOOKBACK_MINUTES * 60_000).toISOString();
 
-  // 1. Pending inbound contact messages.
-  const { data: pendingRaw, error: pendingError } = await client
-    .from('lead_messages')
-    .select('id, lead_uuid, content, sender_name, created_at')
-    .is('notified_at', null)
-    .eq('message_type', 'incoming')
-    .eq('sender_type', 'contact')
-    .eq('is_private', false)
-    .gte('created_at', lookbackIso)
+  // 1. Read all unflushed rows.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: rawRows, error: readError } = await (client as any)
+    .from('pending_notifications')
+    .select(
+      'id, lead_id, lead_name, conversation_id, message_snippet, is_unclaimed, recipient_chat_ids',
+    )
+    .is('flushed_at', null)
     .order('created_at', { ascending: true })
-    .limit(SCAN_LIMIT);
+    .limit(500);
 
-  if (pendingError) {
-    throw new Error(`lead_messages scan failed: ${pendingError.message}`);
+  if (readError) throw new Error(`pending_notifications read failed: ${readError.message}`);
+  const rows: PendingRow[] = rawRows ?? [];
+  if (rows.length === 0) return { pending: 0, flushed: 0, recipients: 0, suppressedShift: 0 };
+
+  // 2. Collect all unique chat IDs across rows.
+  const allChatIds = [...new Set(rows.flatMap((r) => r.recipient_chat_ids))];
+
+  // 3. Fetch shift info for each chat ID.
+  const { data: spRows } = await client
+    .from('salespeople')
+    .select('telegram_chat_id, shift_start, shift_end')
+    .in('telegram_chat_id', allChatIds)
+    .eq('is_active', true);
+
+  const shiftByChatId = new Map<string, ShiftInfo>();
+  for (const sp of spRows ?? []) {
+    if (sp.telegram_chat_id) shiftByChatId.set(sp.telegram_chat_id, sp as ShiftInfo);
   }
 
-  const messages: PendingLeadMessage[] = (pendingRaw ?? []).map((row) => ({
-    id: row.id,
-    leadUuid: row.lead_uuid,
-    content: row.content,
-    senderName: row.sender_name,
-    createdAt: row.created_at,
-  }));
-
-  if (messages.length === 0) return empty;
-
-  // 2. Resolve the leads these messages belong to.
-  const leadUuids = [...new Set(messages.map((m) => m.leadUuid))];
-  const { data: leadRows, error: leadError } = await client
-    .from('leads')
-    .select('uuid, lead_name, lead_phone, assigned_to, source_details')
-    .in('uuid', leadUuids);
-
-  if (leadError) {
-    throw new Error(`leads lookup failed: ${leadError.message}`);
-  }
-
-  const leads = new Map<string, PlanLead>();
-  for (const row of leadRows ?? []) {
-    const details = (row.source_details ?? {}) as { chatwoot_url?: string | null };
-    leads.set(row.uuid, {
-      uuid: row.uuid,
-      leadName: row.lead_name,
-      leadPhone: row.lead_phone,
-      assignedTo: row.assigned_to,
-      chatwootUrl: typeof details.chatwoot_url === 'string' ? details.chatwoot_url : null,
-    });
-  }
-
-  // 3. Resolve assigned salespeople.
-  const salespersonIds = [
-    ...new Set(
-      [...leads.values()].map((l) => l.assignedTo).filter((id): id is string => Boolean(id)),
-    ),
-  ];
-
-  const salespeople = new Map<string, PlanSalesperson>();
-  if (salespersonIds.length > 0) {
-    const { data: spRows, error: spError } = await client
-      .from('salespeople')
-      .select('id, full_name, telegram_chat_id, chatwoot_user_id, shift_start, shift_end')
-      .in('id', salespersonIds);
-
-    if (spError) {
-      throw new Error(`salespeople lookup failed: ${spError.message}`);
-    }
-
-    for (const row of spRows ?? []) {
-      salespeople.set(row.id, {
-        id: row.id,
-        fullName: row.full_name,
-        telegramChatId: row.telegram_chat_id,
-        chatwootUserId: row.chatwoot_user_id,
-        shiftStart: row.shift_start,
-        shiftEnd: row.shift_end,
-      });
+  // 4. Fan out: recipient chat ID → list of rows for that recipient.
+  const byRecipient = new Map<string, PendingRow[]>();
+  for (const row of rows) {
+    for (const chatId of row.recipient_chat_ids) {
+      const bucket = byRecipient.get(chatId);
+      if (bucket) bucket.push(row);
+      else byRecipient.set(chatId, [row]);
     }
   }
 
-  // 4. Determine which reps are currently active in Chatwoot (recent agent messages).
-  const candidateChatwootIds = [
-    ...new Set(
-      [...salespeople.values()]
-        .map((s) => s.chatwootUserId)
-        .filter((id): id is number => id != null),
-    ),
-  ];
+  // 5. Per recipient: apply shift gate, build digest, send.
+  let recipientCount = 0;
+  let suppressedShift = 0;
 
-  const activeChatwootUserIds = new Set<number>();
-  if (candidateChatwootIds.length > 0) {
-    const activeSince = new Date(now.getTime() - config.activeWindowMinutes * 60_000).toISOString();
-    const { data: activityRows, error: activityError } = await client
-      .from('lead_messages')
-      .select('sender_id')
-      .eq('sender_type', 'user')
-      .in('sender_id', candidateChatwootIds)
-      .gte('created_at', activeSince);
-
-    if (activityError) {
-      throw new Error(`chatwoot activity lookup failed: ${activityError.message}`);
+  for (const [chatId, recipientRows] of byRecipient) {
+    const shift = shiftByChatId.get(chatId);
+    if (shift && !isWithinShift(shift.shift_start, shift.shift_end, now)) {
+      suppressedShift++;
+      continue;
     }
 
-    for (const row of activityRows ?? []) {
-      if (row.sender_id != null) activeChatwootUserIds.add(row.sender_id);
-    }
+    const digestRows = recipientRows.map((r) => ({
+      leadName: r.lead_name,
+      messageSnippet: r.message_snippet,
+      isUnclaimed: r.is_unclaimed,
+      conversationId: r.conversation_id,
+    }));
+
+    const message = renderNewMessageDigest(digestRows);
+    await dispatch([chatId], message);
+    recipientCount++;
   }
 
-  // 5. Per-lead cooldown: leads pinged within the cooldown window are skipped this tick.
-  const cooldownSince = new Date(now.getTime() - config.cooldownMinutes * 60_000).toISOString();
-  const { data: recentNotifs, error: notifError } = await client
-    .from('notifications')
-    .select('lead_uuid')
-    .eq('alert_type', 'lead_message')
-    .gte('created_at', cooldownSince)
-    .in('lead_uuid', leadUuids);
+  // 6. Mark all processed rows flushed (including shift-suppressed — drop them).
+  const processedIds = rows.map((r) => r.id);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: markError } = await (client as any)
+    .from('pending_notifications')
+    .update({ flushed_at: now.toISOString() })
+    .in('id', processedIds);
 
-  if (notifError) {
-    throw new Error(`cooldown lookup failed: ${notifError.message}`);
-  }
+  if (markError) throw new Error(`pending_notifications mark-flushed failed: ${markError.message}`);
 
-  const leadsInCooldown = new Set<string>();
-  for (const row of recentNotifs ?? []) {
-    if (row.lead_uuid) leadsInCooldown.add(row.lead_uuid);
-  }
-
-  // 6. Plan (pure).
-  const plan = planLeadMessageNotifications({
-    now,
-    messages,
-    leads,
-    salespeople,
-    activeChatwootUserIds,
-    leadsInCooldown,
-    maxLeadsPerTick: MAX_LEADS_PER_TICK,
-  });
-
-  // 7. Deliver, then record audit rows (per lead, for cooldown tracking).
-  for (const send of plan.sends) {
-    await sendTelegramToSalesperson(send.chatId, send.text);
-    for (const leadUuid of send.leadUuids) {
-      await insertNotificationRow({
-        alertType: 'lead_message',
-        message: send.text,
-        sentTo: [send.chatId],
-        leadUuid,
-      });
-    }
-  }
-
-  // 8. Stamp processed messages so they leave the pending scan.
-  if (plan.markNotifiedIds.length > 0) {
-    const { error: markError } = await client
-      .from('lead_messages')
-      .update({ notified_at: now.toISOString() })
-      .in('id', plan.markNotifiedIds);
-
-    if (markError) {
-      throw new Error(`lead_messages notified_at update failed: ${markError.message}`);
-    }
-  }
-
-  return { pending: messages.length, ...plan.stats };
+  return {
+    pending: rows.length,
+    flushed: rows.length,
+    recipients: recipientCount,
+    suppressedShift,
+  };
 }

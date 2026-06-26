@@ -72,6 +72,38 @@ export function getSlaStartTime(createdAt: Date): Date {
 }
 
 /**
+ * Returns the number of Istanbul business hours (09:00–17:00) that have elapsed
+ * since `ev`, relative to `now`. Mirrors the SQL `sla_business_hours_since` function.
+ *
+ * Cases covered:
+ * - ev during today's business window → straight wall-clock diff
+ * - ev in overnight gap (yesterday 17:00 – today 09:00) → count from today 09:00
+ * - ev during yesterday's business window → carry from yesterday + today's elapsed
+ * - ev older than yesterday 09:00 → return 99 (definitely breached)
+ *
+ * Assumes `now` is within business hours (the cron body guards this).
+ * @param ev - The event timestamp to measure from.
+ * @param now - Current time; defaults to new Date().
+ * @returns Hours of business time elapsed (may exceed 2 before the cron fires again).
+ */
+export function slaBusinessHoursSince(ev: Date, now: Date = new Date()): number {
+  const today09 = istanbulInstantWithTime(now, 9, 0);
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const yest09 = istanbulInstantWithTime(yesterday, 9, 0);
+  const yest17 = istanbulInstantWithTime(yesterday, 17, 0);
+
+  if (ev >= today09) {
+    return (now.getTime() - ev.getTime()) / 3_600_000;
+  } else if (ev >= yest17) {
+    return (now.getTime() - today09.getTime()) / 3_600_000;
+  } else if (ev >= yest09) {
+    return (yest17.getTime() - ev.getTime() + now.getTime() - today09.getTime()) / 3_600_000;
+  } else {
+    return 99;
+  }
+}
+
+/**
  * Calculates SLA deadline for a lead based on creation time and business hours.
  * SLA is 1 hour from the adjusted start time; tracking runs 09:00–17:00 Istanbul only.
  * @param _leadSource - Lead source (retained for call-site compatibility).

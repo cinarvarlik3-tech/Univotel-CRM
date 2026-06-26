@@ -8,6 +8,7 @@ import { cancelAutoTasksForLead, createAutoTasksForStage } from '@/lib/tasks/aut
 import { advanceToKapora } from '@/lib/finance/kapora-flow';
 import { updateLeadRecord } from '@/lib/leads/update-lead';
 import { writeStageHistory } from '@/lib/leads/write-stage-history';
+import { notify } from '@/lib/notifications/notify';
 
 const PRE_VISIT_STAGES = new Set([
   'yeni',
@@ -48,6 +49,26 @@ export async function scheduleVisit(opts: {
     .maybeSingle();
 
   if (visitError) throw new Error(`Failed to create visit: ${visitError.message}`);
+
+  // Fire visit_scheduled notification (fire-and-forget — must not block the response).
+  if (visit && opts.propertyId) {
+    void (async () => {
+      const [leadRow, propertyRow] = await Promise.all([
+        client.from('leads').select('lead_name').eq('uuid', opts.leadUuid).maybeSingle(),
+        client.from('properties').select('hotel_name').eq('id', opts.propertyId!).maybeSingle(),
+      ]);
+      await notify({
+        kind: 'visit_scheduled',
+        suppressible: true,
+        visitId: (visit as Record<string, unknown>).id as string,
+        leadId: opts.leadUuid,
+        leadName: leadRow.data?.lead_name ?? opts.leadUuid,
+        propertyId: opts.propertyId!,
+        propertyName: propertyRow.data?.hotel_name ?? opts.propertyId!,
+        visitAt: opts.scheduledDate,
+      });
+    })();
+  }
 
   const shouldAdvance = PRE_VISIT_STAGES.has(opts.leadFunnelStatus);
   if (shouldAdvance) {

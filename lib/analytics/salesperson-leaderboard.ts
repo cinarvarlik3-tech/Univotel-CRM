@@ -92,7 +92,6 @@ interface FinanceRow {
 interface TaskRow {
   assigned_to: string;
   is_completed: boolean;
-  is_late: boolean;
   due_when: string;
 }
 
@@ -198,7 +197,7 @@ export async function getSalespersonLeaderboard(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (client as any)
           .from('tasks')
-          .select('assigned_to, is_completed, is_late, due_when')
+          .select('assigned_to, is_completed, due_when')
           .eq('is_cancelled', false)
           .gte('due_when', fromIso)
           .lte('due_when', toIso)
@@ -292,7 +291,7 @@ export async function getSalespersonLeaderboard(
     // Tasks / lateness
     const spTasks = allTasks.filter((t) => t.assigned_to === sp.id);
     const lateTasks = spTasks.filter(
-      (t) => t.is_late || (!t.is_completed && new Date(t.due_when).getTime() < now.getTime()),
+      (t) => !t.is_completed && new Date(t.due_when).getTime() < now.getTime(),
     );
     const latenessRate =
       spTasks.length > 0 ? Math.round((lateTasks.length / spTasks.length) * 1000) / 10 : null;
@@ -376,7 +375,7 @@ export async function getSalespersonLeaderboard(
       : null;
 
   const totalLateTasks = allTasks.filter(
-    (t) => t.is_late || (!t.is_completed && new Date(t.due_when).getTime() < now.getTime()),
+    (t) => !t.is_completed && new Date(t.due_when).getTime() < now.getTime(),
   ).length;
   const teamLatenessRate =
     allTasks.length > 0 ? Math.round((totalLateTasks / allTasks.length) * 1000) / 10 : null;

@@ -71,6 +71,7 @@ import {
 import type { Database, Json } from '@/types/database';
 import { writeStageHistory } from '@/lib/leads/write-stage-history';
 import { completeContactTasks } from '@/lib/tasks/auto-tasks';
+import { notify } from '@/lib/notifications/notify';
 
 type LeadsUpdate = Database['public']['Tables']['leads']['Update'];
 
@@ -1417,6 +1418,20 @@ async function handleMessageCreated(payload: ChatwootMessageCreated): Promise<We
     senderType,
     senderName,
   });
+
+  // Enqueue new-message notification for inbound customer messages only.
+  // Fire-and-forget: notification failure must never block the webhook response.
+  if (written && direction === 'incoming' && !isPrivate) {
+    void notify({
+      kind: 'new_message',
+      suppressible: true,
+      leadId: lead.uuid,
+      leadName: senderName ?? content?.slice(0, 60) ?? lead.uuid,
+      conversationId,
+      messageBody: content ?? '',
+      isUnclaimed: false, // will be resolved inside notify() by assigneeOnly()
+    });
+  }
 
   return written
     ? ok('message_synced', `${direction ?? messageType} message lead=${lead.uuid}`)

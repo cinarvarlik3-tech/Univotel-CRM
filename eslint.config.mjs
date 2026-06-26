@@ -42,6 +42,7 @@ const eslintConfig = [
       'lib/analytics/**',
       'lib/pms/**',
       'lib/finance/**',
+      'lib/notifications/**',
     ],
     rules: {
       'no-restricted-imports': [
@@ -59,7 +60,12 @@ const eslintConfig = [
     },
   },
   {
-    files: ['pages/api/pms/**', 'pages/api/cron/pms-sync-reconcile.ts', 'pages/api/fms/**'],
+    files: [
+      'pages/api/pms/**',
+      'pages/api/cron/pms-sync-reconcile.ts',
+      'pages/api/fms/**',
+      'pages/api/notifications/**',
+    ],
     rules: {
       'no-restricted-imports': 'off',
     },

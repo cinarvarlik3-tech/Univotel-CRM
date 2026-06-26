@@ -11,6 +11,7 @@ import { cancelAutoTasksForLead, createAutoTasksForStage } from '@/lib/tasks/aut
 import { writeStageHistory, type StageHistorySource } from '@/lib/leads/write-stage-history';
 import { vacateActivePlacementForLead } from '@/lib/pms/placement-ops';
 import { createServiceClient } from '@/lib/supabase/service';
+import { notify } from '@/lib/notifications/notify';
 import type { Database } from '@/types/database';
 
 type LeadsUpdate = Database['public']['Tables']['leads']['Update'];
@@ -104,6 +105,59 @@ export async function updateLeadRecord(
         reason: 'lost',
         vacatedBy: changedBy,
       });
+    }
+
+    if (newFunnelStatus === 'sozlesme-imzalandi') {
+      // Fire-and-forget: look up room/property for the notification; never block the update.
+      void (async () => {
+        try {
+          const svcClient = createServiceClient();
+          const { data: details } = await svcClient
+            .from('lead_details')
+            .select('purchased_room')
+            .eq('lead_uuid', leadUuid)
+            .maybeSingle();
+
+          let roomTypeName = 'bilinmeyen oda';
+          let propertyName = 'bilinmeyen otel';
+
+          if (details?.purchased_room) {
+            const { data: room } = await svcClient
+              .from('rooms')
+              .select('room_type_id, property_id')
+              .eq('id', details.purchased_room)
+              .maybeSingle();
+
+            if (room) {
+              const [rtRow, propRow] = await Promise.all([
+                svcClient
+                  .from('room_types')
+                  .select('name')
+                  .eq('id', room.room_type_id)
+                  .maybeSingle(),
+                svcClient
+                  .from('properties')
+                  .select('hotel_name')
+                  .eq('id', room.property_id)
+                  .maybeSingle(),
+              ]);
+              roomTypeName = rtRow.data?.name ?? roomTypeName;
+              propertyName = propRow.data?.hotel_name ?? propertyName;
+            }
+          }
+
+          await notify({
+            kind: 'deal_signed',
+            suppressible: true,
+            leadId: leadUuid,
+            leadName: (updated.lead_name as string | null) ?? leadUuid,
+            propertyName,
+            roomType: roomTypeName,
+          });
+        } catch (err) {
+          console.error('[update-lead] deal_signed notify failed:', err);
+        }
+      })();
     }
   }
 
