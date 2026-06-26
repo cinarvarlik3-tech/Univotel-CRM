@@ -433,6 +433,21 @@ function inboundPayloadFromConversationUpdated(
 }
 
 /**
+ * Returns true when conversation_updated indicates the thread was resolved.
+ * @param changedAttributes - Chatwoot changed_attributes array.
+ */
+function conversationWasResolved(
+  changedAttributes: ChatwootConversationUpdated['changed_attributes'],
+): boolean {
+  for (const attr of changedAttributes) {
+    if (!('status' in attr)) continue;
+    const status = attr.status as { current_value?: unknown };
+    if (String(status.current_value ?? '').toLowerCase() === 'resolved') return true;
+  }
+  return false;
+}
+
+/**
  * Returns true when conversation_updated indicates the thread was reopened.
  * @param changedAttributes - Chatwoot changed_attributes array.
  */
@@ -862,6 +877,16 @@ export async function handleLeadUpdate(payload: ChatwootConversationUpdated): Pr
           );
         }
       }
+    }
+    if (conversationWasResolved(payload.changed_attributes) && existingLead) {
+      const client = createServiceClient();
+      await client
+        .from('leads')
+        .update({ is_chatwoot_resolved: true, sla_status: 'on_time' } as LeadsUpdate)
+        .eq('uuid', existingLead.uuid);
+      console.info(
+        `[chatwoot] conversation resolved — SLA alerts suppressed lead=${existingLead.uuid}`,
+      );
     }
     return;
   }
@@ -1514,7 +1539,11 @@ async function recordInboundMessageWindow(
     }
   )
     .from('leads')
-    .update({ last_inbound_message_at: messageTimestamp, is_24h_restricted: false })
+    .update({
+      last_inbound_message_at: messageTimestamp,
+      is_24h_restricted: false,
+      is_chatwoot_resolved: false,
+    })
     .eq('uuid', leadUuid);
 
   if (error) {
